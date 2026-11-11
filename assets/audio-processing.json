@@ -1,0 +1,51 @@
+[
+  {
+    "output": "ak74",
+    "start": 1.085,
+    "duration": 2.4,
+    "source_peak": 22102,
+    "note": "Last shot isolated from first automatic burst; next burst starts after 5.7 seconds."
+  },
+  {
+    "output": "m16",
+    "start": 0.5368662131519274,
+    "duration": 2.4,
+    "source_peak": 32768
+  },
+  {
+    "output": "pm",
+    "start": 0.4263673469387755,
+    "duration": 2.4,
+    "source_peak": 32768
+  },
+  {
+    "output": "m9",
+    "start": 1.073328798185941,
+    "duration": 2.4,
+    "source_peak": 32768
+  },
+  {
+    "output": "mag_in",
+    "start": 0.018226757369614512,
+    "duration": 0.23719274376417235,
+    "source_peak": 32766
+  },
+  {
+    "output": "mag_out",
+    "start": 0.06341950113378685,
+    "duration": 0.14556009070294784,
+    "source_peak": 30674
+  },
+  {
+    "output": "bolt",
+    "start": 0.1215374149659864,
+    "duration": 0.1803219954648526,
+    "source_peak": 25082
+  },
+  {
+    "output": "bolt_pull",
+    "start": 0.24462131519274377,
+    "duration": 0.28,
+    "source_peak": 32768
+  }
+]
