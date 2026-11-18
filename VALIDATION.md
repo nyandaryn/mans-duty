@@ -1,3 +1,61 @@
+# 0.25.0 validation — 2026-11-18
+
+BM-21 cab: rear-view mirrors that show what is behind, the steering wheel
+on its column, a receiver with a song, rocking under the launches, more cab
+detail.
+
+- test_grad 115 (was 82). New checks:
+  - Steering: the column leans back toward the driver; the wheel turns
+    about the column axis (not the vertical), clockwise to the right; the
+    rim leaves all six warning lamps in the driver's line of sight
+    (hub 1.80 m, 40° tilt; at 1.84 m one lamp was hidden).
+  - Mirrors: each camera sits at the driver's eye reflected in the glass;
+    the glass corners project onto the texture corners mirrored left to
+    right (0.11 / 0.08 px off); each mirror takes in its flank of the
+    launcher (97 / 82 sample points) and the road on the horizon, and
+    nothing ahead; a mirror renders only while it is on screen.
+  - Receiver: dead without the ignition, R plays «Залізна зграя»
+    (AudioStreamMP3, 71 s), the display lights, the song restarts when it
+    ends, the ignition switches it off.
+  - Salvo: roll 1.40°, pitch 0.38°, bounce 0.6 cm, package 0.57° (tubes
+    up to 1.23° off the laying); the rockets leave along the laying, so
+    the dispersion checks (Д/326, Д/278) and the 13 m centre of bursts
+    are unchanged; the rocking dies away after the salvo.
+- The off-axis PROJECTION_FRUSTUM camera was checked against a perspective
+  one in the Compatibility renderer: same sky, lighting and shadows.
+- Mirror cost at 1920×1080 (vsync off): 6.65 ms per frame with the left
+  mirror live, 6.12 ms without.
+- Renders: driver and commander views, both mirrors zoomed, the wheel at
+  0.35 right lock (turned clockwise), outside views, pedals; a rear view
+  at the two roll extremes of a salvo (−0.73° / +1.03° in 12 rockets).
+- Full source suite (51 scenarios): all pass except test_maps_perception,
+  the same timeout as since 0.15.0. test_squad_routes exits 0 with no PASS
+  line, as before.
+- «Залізна зграя» is published with the game by permission of the project
+  owner (AUDIO-CREDITS.md).
+- Exported pck (19 MB, sha256 b67fd0df…), run with the shipped kvartal.x86_64
+  via --main-pack: `--quit-after 300` exits with no ERROR lines, and all
+  pass:
+
+    | Test | Checks |
+    |---|---|
+    | grad | 115 |
+    | grad_training | 90 |
+    | user_data | 10 |
+    | infantry_training | 88 |
+    | equipment | 98 |
+    | svd_scope | 90 |
+    | wide_screen | 18 |
+    | mortar | 83 |
+    | battle | 37 |
+    | shmel | 60 |
+    | loadout_preview | 34 |
+    | campaign_flow | 34 |
+    | squad_tactics | 18 |
+
+- Installed with an atomic rename. 0.24.0 is backed up as
+  .build/backup/kvartal-0.24.0.pck.
+
 # 0.24.0 validation — 2026-11-18
 
 The game is renamed «Mans Duty», the rangefinder zooms 6–12×, the BM-21

@@ -74,3 +74,9 @@ authors. The engine loop is a real Grad engine, but of a BM-21-1 on the
 Ural-4320 diesel chassis, not the petrol ZIL-375 of the Ural-375D modelled in
 the game; its pitch follows the simulated crankshaft. The starter, gear grind,
 air valve and the distant burst thump are procedural.
+
+## BM-21 cab receiver
+
+| In-game file | Source | Usage | License |
+|---|---|---|---|
+| `audio/radio/zalizna_zgraya.mp3` | «Залізна зграя», supplied by the project owner on 2026-11-18 (file `Залізна_зграя.mp3`, MP3 192 kbit/s, 71 s) | Played unchanged by the receiver on the BM-21 dashboard (R) | Published with the game by permission of the project owner (confirmed 2026-11-18) |

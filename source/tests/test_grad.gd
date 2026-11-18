@@ -23,6 +23,92 @@ func frames(count: int) -> void:
    seen=game.blasts.detonations
    bursts.append(game.blasts.last_detonation)
 
+# The wheel turns about its own column, clockwise to the right, and its rim
+# stays below the driver's line of sight to the warning lamps.
+func check_steering(vehicle: GradVehicle) -> void:
+ var wheel: Node3D=vehicle.art.steering
+ var column: Node3D=wheel.get_parent()
+ var axis:=column.global_basis.y.normalized()
+ var up:=vehicle.global_basis.y;var back:=vehicle.global_basis.z;var right:=vehicle.global_basis.x
+ check(axis.dot(up)>0.6 and axis.dot(back)>0.5,"The steering column leans back toward the driver")
+ var top:=wheel.to_global(Vector3(0,0,-GradArt.STEERING_RADIUS))
+ vehicle.steer=0.5;vehicle.show_steering()
+ var turned:=wheel.global_basis
+ check(turned.y.normalized().dot(axis)>0.99999 and wheel.global_position.distance_to(column.global_position)<0.0001,"The wheel turns about its column, not about the vertical")
+ check((wheel.to_global(Vector3(0,0,-GradArt.STEERING_RADIUS))-top).dot(right)>0.05,"Steering right turns the wheel clockwise for the driver")
+ vehicle.steer=0.0;vehicle.show_steering()
+ var plane_normal:=Basis(Vector3.RIGHT,GradArt.STEERING_TILT)*Vector3.UP
+ var blocked:=0
+ for i in range(6):
+  var lamp:=GradArt.DASHBOARD+Vector3((452.0+(i%3)*86.0)/704.0-0.5,0.5-(196.0+(i/3)*40.0)/260.0,0)*Vector3(GradArt.DASHBOARD_SIZE.x,GradArt.DASHBOARD_SIZE.y,0)
+  var ray:=lamp-GradArt.DRIVER_EYE
+  var t:=(GradArt.STEERING_WHEEL-GradArt.DRIVER_EYE).dot(plane_normal)/ray.dot(plane_normal)
+  var hit:=GradArt.DRIVER_EYE+ray*t
+  if absf(hit.distance_to(GradArt.STEERING_WHEEL)-GradArt.STEERING_RADIUS)<0.03:blocked+=1
+ check(blocked==0,"The rim leaves all six warning lamps in the driver's view (%d hidden)" % blocked)
+
+# Each mirror renders from the eye reflected in its glass, through exactly
+# the glass, and shows the side of the vehicle and what is behind it.
+func check_mirrors(grad: GradCommand, vehicle: GradVehicle) -> void:
+ check(vehicle.mirrors.size()==2,"Two rear-view mirrors on the cab")
+ var eye:=vehicle.seat_camera.global_position
+ var forward:=-vehicle.global_basis.z
+ for i in range(2):
+  var mirror: GradMirror=vehicle.mirrors[i]
+  var side:="left" if i==0 else "right"
+  check(mirror.glass.mesh.material.albedo_texture==mirror.viewport.get_texture(),"The %s glass shows its own view" % side)
+  mirror.aim(eye)
+  var frame:=mirror.glass.global_transform
+  var n:=frame.basis.z.normalized()
+  var from:=mirror.camera.global_position
+  check(absf(((from+eye)*0.5-frame.origin).dot(n))<0.001 and (eye-from).normalized().dot(n)>0.9999,"The %s mirror looks from the driver's eye reflected in its glass" % side)
+  var size:=Vector2(GradMirror.TEXTURE)
+  var half:=GradArt.MIRROR_SIZE*0.5
+  var worst:=0.0
+  for corner in [Vector2(-1,-1),Vector2(1,-1),Vector2(-1,1),Vector2(1,1)]:
+   var at:=mirror.camera.unproject_position(frame*Vector3(corner.x*half.x,corner.y*half.y,0))
+   worst=maxf(worst,at.distance_to(Vector2(size.x*(0.5-0.5*corner.x),size.y*(0.5-0.5*corner.y))))
+  check(worst<1.5,"…and its picture covers exactly the glass, turned left to right (%.2f px off)" % worst)
+  var sign:=-1.0 if i==0 else 1.0
+  var flank:=0
+  for y in range(10,25):
+   for z in range(0,11):
+    if shows(mirror,vehicle.to_global(Vector3(sign*1.24,y*0.1,0.5+z*0.25))):flank+=1
+  check(flank>=10,"The %s mirror takes in the %s flank of the launcher (%d points)" % [side,side,flank])
+  check(shows(mirror,vehicle.to_global(Vector3(sign*3.0,2.4,200.0))),"…the road far behind on the horizon")
+  check(not shows(mirror,vehicle.to_global(Vector3(sign*1.3,1.5,-12.0))),"…and nothing ahead of the vehicle")
+ # Rendered only while it is on the screen.
+ grad.look=Vector2(0.62,0);grad.update_camera()
+ await frames(2)
+ check(vehicle.mirrors[0].live and vehicle.mirrors[0].viewport.render_target_update_mode==SubViewport.UPDATE_ALWAYS,"Turning to the left mirror makes it live")
+ grad.look=Vector2(-1.2,0);grad.update_camera()
+ await frames(2)
+ check(not vehicle.mirrors[0].live and vehicle.mirrors[0].viewport.render_target_update_mode==SubViewport.UPDATE_DISABLED,"…and it stops rendering out of view")
+ grad.look=Vector2.ZERO;grad.update_camera()
+
+func shows(mirror: GradMirror, point: Vector3) -> bool:
+ return not mirror.camera.is_position_behind(point) and Rect2(Vector2.ZERO,Vector2(GradMirror.TEXTURE)).has_point(mirror.camera.unproject_position(point))
+
+# The receiver plays the song on the ignition, starts it again when it ends
+# and goes off with the ignition.
+func check_radio(grad: GradCommand, vehicle: GradVehicle) -> void:
+ check("R ПРИЙМАЧ" in grad.hint_text(),"The driver's keys list the receiver")
+ vehicle.toggle_radio()
+ var stream: AudioStream=vehicle.radio_player.stream
+ check(vehicle.radio_on and vehicle.radio_player.playing and stream is AudioStreamMP3,"R: the receiver plays")
+ check(stream!=null and stream.resource_path=="res://assets/audio/radio/zalizna_zgraya.mp3" and stream.get_length()>60.0 and "Залізна зграя" in vehicle.notice,"…«Залізна зграя» (%.0f s)" % (stream.get_length() if stream else 0.0))
+ check(vehicle.art.radio_display.mesh.material.emission_energy_multiplier>0.0,"…with its display lit")
+ vehicle.radio_player.stop();vehicle.radio_player.finished.emit()
+ check(vehicle.radio_player.playing and vehicle.radio_track==0,"The only song starts again when it ends")
+ vehicle.toggle_ignition()
+ check(not vehicle.radio_on and not vehicle.radio_player.playing and vehicle.art.radio_display.mesh.material.emission_energy_multiplier==0.0,"Ignition off: the receiver goes silent")
+ vehicle.toggle_ignition()
+ vehicle.toggle_radio()
+ check(vehicle.radio_on,"…and plays again with the ignition back on")
+ vehicle.toggle_radio()
+ check(not vehicle.radio_on and not vehicle.radio_player.playing,"R again: off")
+ await frames(1)
+
 func place(vehicle: GradVehicle, x: float, z: float, heading_degrees: float) -> void:
  var data:=AvdiivkaData.shared()
  var spot:=Vector3(x,data.height(x,z)+0.3,z)
@@ -90,13 +176,18 @@ func run():
  Input.action_release("aim")
  check(not grad.instruments_shown(),"…gone when it is released")
  grad.set_process(false)
+ check_steering(vehicle)
+ await check_mirrors(grad,vehicle)
 
  # --- Engine and march ----------------------------------------------------
  vehicle.begin_crank()
  await frames(30)
  check(not vehicle.running,"Starter without ignition does nothing")
  vehicle.starter=false
+ vehicle.toggle_radio()
+ check(not vehicle.radio_on and "запалювання" in vehicle.notice,"The receiver is dead without the ignition")
  vehicle.toggle_ignition()
+ await check_radio(grad,vehicle)
  vehicle.begin_crank()
  await frames(120)
  vehicle.starter=false
@@ -215,12 +306,27 @@ func run():
  await frames(60)
  check(vehicle.fired==partial,"Releasing the lever stops the series")
  vehicle.set_lever(true)
- await frames(60*16)
+ # The body, the cab and the package rock through the salvo; the laying
+ # does not.
+ var peak_roll:=0.0;var peak_pitch:=0.0;var peak_bounce:=0.0;var peak_package:=0.0;var peak_off:=0.0;var laid_error:=0.0
+ for i in range(60*16):
+  await frames(1)
+  peak_roll=maxf(peak_roll,absf(vehicle.rock.z));peak_pitch=maxf(peak_pitch,absf(vehicle.rock.x))
+  peak_bounce=maxf(peak_bounce,absf(vehicle.bounce));peak_package=maxf(peak_package,vehicle.package_rock.length())
+  var shown:=-Vector3(vehicle.art.cradle.global_basis.z).normalized()
+  peak_off=maxf(peak_off,rad_to_deg(shown.angle_to(vehicle.launch_direction())))
+  laid_error=maxf(laid_error,vehicle.launch_direction().angle_to((vehicle.laid_basis()*Vector3.FORWARD).normalized()))
  vehicle.set_lever(false)
  check(vehicle.fired==40 and vehicle.remaining()==0,"Full salvo of 40 rockets")
+ print("  rocking: roll %.2f°, pitch %.2f°, bounce %.1f cm, package %.2f°" % [rad_to_deg(peak_roll),rad_to_deg(peak_pitch),peak_bounce*100.0,rad_to_deg(peak_package)])
+ check(rad_to_deg(peak_roll)>0.25 and rad_to_deg(peak_roll)<3.0 and rad_to_deg(peak_pitch)>0.1 and rad_to_deg(peak_pitch)<3.0,"The vehicle rolls and pitches under the launches (%.2f°, %.2f°)" % [rad_to_deg(peak_roll),rad_to_deg(peak_pitch)])
+ check(peak_bounce>0.003 and peak_bounce<0.05,"…bounces on its tyres (%.1f cm)" % (peak_bounce*100.0))
+ check(rad_to_deg(peak_package)>0.05 and rad_to_deg(peak_package)<1.5 and peak_off>0.2,"…and the package swings on its trunnions (%.2f°, tubes up to %.2f° off the laying)" % [rad_to_deg(peak_package),peak_off])
+ check(laid_error<0.00001,"The rockets leave along the laying: the rocking is in the dispersion")
  check(vehicle.global_basis.y.dot(Vector3.UP)>0.95,"Launcher stays on its wheels through the salvo")
  grad.set_process(true)
  await frames(60*26)
+ check(vehicle.rock.length()<0.0002 and absf(vehicle.bounce)<0.0005 and vehicle.package_rock.length()<0.0002,"The rocking dies away after the salvo")
  check(bursts.size()>=36,"Rockets burst at the target area (%d)" % bursts.size())
  var near:=0
  var mean:=Vector3.ZERO

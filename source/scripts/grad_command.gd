@@ -496,8 +496,8 @@ func instruments_shown() -> bool:
 
 func hint_text() -> String:
  match seat:
-  "driver":return "W ГАЗ  S ГАЛЬМО  A/D КЕРМО  SHIFT ЗЧЕПЛЕННЯ  Q/E ПЕРЕДАЧА  I ЗАПАЛЮВАННЯ  X СТАРТЕР  SPACE СТОЯНКОВЕ  L РОЗДАТКА\nP КВП  [ ] РУЧНИЙ ГАЗ  T ПІДКАЧКА ШИН  V ЩИТКИ  ПКМ ПРИЛАДИ  C МІСЦЕ КОМАНДИРА  F ВИЙТИ  M ПЛАНШЕТ  G РАДІО"
-  "commander":return "E ПУЛЬТ  SPACE ПУСК (утримувати)  J ДРОН СП  M ПЛАНШЕТ  G РАДІО  V ЩИТКИ  C МІСЦЕ ВОДІЯ  F ВИЙТИ"
+  "driver":return "W ГАЗ  S ГАЛЬМО  A/D КЕРМО  SHIFT ЗЧЕПЛЕННЯ  Q/E ПЕРЕДАЧА  I ЗАПАЛЮВАННЯ  X СТАРТЕР  SPACE СТОЯНКОВЕ  L РОЗДАТКА\nP КВП  [ ] РУЧНИЙ ГАЗ  T ПІДКАЧКА ШИН  V ЩИТКИ  ПКМ ПРИЛАДИ  R ПРИЙМАЧ  C МІСЦЕ КОМАНДИРА  F ВИЙТИ  M ПЛАНШЕТ  G РАДІО"
+  "commander":return "E ПУЛЬТ  SPACE ПУСК (утримувати)  J ДРОН СП  M ПЛАНШЕТ  G РАДІО  V ЩИТКИ  R ПРИЙМАЧ  C МІСЦЕ ВОДІЯ  F ВИЙТИ"
   "gunner":return "← → ПОВОРОТ ПАКЕТА  ↑ ↓ ПІДНЕСЕННЯ  CTRL РУЧНИЙ ПРИВІД  Q/E КУТОМІР  W/S ПРИЦІЛ  A/D РІВЕНЬ  (SHIFT ×10, ALT ×100)  B БУСОЛЬ  МИША — ГОЛОВКА  F ВИЙТИ"
  var station:=nearest_station()
  return station.text if not station.is_empty() else game.control_hint()
@@ -557,6 +557,8 @@ func _input(event: InputEvent) -> void:
     if seat=="commander":request_drone()
    KEY_I:
     if seat=="driver":vehicle.toggle_ignition()
+   KEY_R:
+    if seat=="driver" or seat=="commander":vehicle.toggle_radio()
    KEY_X:
     if seat=="driver":vehicle.begin_crank()
    KEY_SPACE:

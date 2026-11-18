@@ -1,4 +1,4 @@
-MANS DUTY / 0.24.0 / macOS (Apple Silicon та Intel)
+MANS DUTY / 0.25.0 / macOS (Apple Silicon та Intel)
 
 Запуск:
 1. Розпакуйте архів подвійним клацанням. «Mans Duty.app»

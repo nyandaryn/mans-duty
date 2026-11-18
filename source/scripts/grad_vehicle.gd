@@ -50,10 +50,25 @@ var wheel_nodes: Array[VehicleWheel3D]=[]
 var engine_sound: AudioStreamPlayer3D
 var catching := 0.0
 # Parked on the hand brake the body is held still (a raycast suspension
-# creeps otherwise); the rocking under the launches is a spring on the body.
+# creeps otherwise). The rocking under the launches is drawn, not simulated:
+# springs on the body (pitch, yaw, roll and a bounce), a short shudder of the
+# cab, and the package swinging on its trunnions and turntable.
 var parked_time := 0.0
 var rock := Vector3.ZERO
 var rock_rate := Vector3.ZERO
+var bounce := 0.0
+var bounce_rate := 0.0
+var shudder := Vector3.ZERO
+var shudder_rate := Vector3.ZERO
+var package_rock := Vector2.ZERO
+var package_rate := Vector2.ZERO
+var mirrors: Array[GradMirror]=[]
+# The receiver on the dashboard; runs on the ignition and plays the tracks
+# in turn.
+const RADIO_TRACKS := [["res://assets/audio/radio/zalizna_zgraya.mp3","Залізна зграя"]]
+var radio_on := false
+var radio_track := 0
+var radio_player: AudioStreamPlayer3D
 var launch_players: Array[AudioStreamPlayer3D]=[]
 var launch_index := 0
 var seat_camera: Camera3D
@@ -137,6 +152,11 @@ func setup(owner_game: Node3D) -> void:
  art=GradArt.build()
  add_child(art.root)
  dashboard=GradDashboard.new();dashboard.setup(self)
+ for i in range(GradArt.MIRRORS.size()):
+  var mirror:=GradMirror.new();mirror.setup(self,GradArt.MIRRORS[i],i);mirrors.append(mirror)
+ radio_player=AudioStreamPlayer3D.new();radio_player.name="Radio";radio_player.position=GradArt.RADIO
+ radio_player.unit_size=1.6;radio_player.max_distance=30.0;radio_player.bus=game.hearing.bus_name
+ radio_player.finished.connect(next_track);add_child(radio_player)
  for shape_data in [[Vector3(1.20,0.90,1.45),Vector3(0,1.57,-2.85)],[Vector3(2.30,1.45,1.55),Vector3(0,1.95,-1.40)],[Vector3(2.30,0.55,3.90),Vector3(0,1.15,1.35)],[Vector3(1.70,0.70,2.40),Vector3(0,2.30,1.25)]]:
   var shape:=CollisionShape3D.new();var box:=BoxShape3D.new();box.size=shape_data[0]
   shape.shape=box;shape.position=shape_data[1];add_child(shape)
@@ -188,9 +208,40 @@ func stationary() -> bool:return absf(speed())<0.4
 # --- Driver's controls ----------------------------------------------------
 func toggle_ignition() -> void:
  ignition=not ignition
+ if not ignition and radio_on:set_radio(false)
  if not ignition and running:running=false;say("Запалювання вимкнено · двигун зупинено")
  else:say("Запалювання %s" % ("увімкнено" if ignition else "вимкнено"),2)
  game.sound("click",-14)
+
+func toggle_radio() -> void:
+ game.sound("click",-14)
+ if not radio_on and not ignition:say("Приймач без живлення: увімкни запалювання (I)",2.5);return
+ set_radio(not radio_on)
+ say("Приймач: «%s»" % RADIO_TRACKS[radio_track][1] if radio_on else "Приймач вимкнено",2.5)
+
+func set_radio(on: bool) -> void:
+ radio_on=on
+ var lamp: StandardMaterial3D=art.radio_display.mesh.material
+ lamp.emission_energy_multiplier=0.45 if on else 0.0
+ if on:play_track()
+ else:radio_player.stop()
+
+func play_track() -> void:
+ radio_player.stream=load(RADIO_TRACKS[radio_track][0])
+ radio_player.volume_db=radio_volume()
+ radio_player.play()
+
+func next_track() -> void:
+ if not radio_on:return
+ radio_track=(radio_track+1)%RADIO_TRACKS.size()
+ play_track()
+
+func radio_volume() -> float:return linear_to_db(maxf(game.volume,0.0001))-3.0
+
+func update_radio() -> void:
+ if not radio_on or game==null:return
+ radio_player.stream_paused=game.paused
+ radio_player.volume_db=radio_volume()
 
 func shift(step: int) -> void:
  if clutch_engagement()>0.15:
@@ -291,8 +342,8 @@ func drive_power() -> float:
  return clampf((rpm()-650.0)/850.0,0.0,1.0)
 
 func apply_launcher() -> void:
- art.turret.rotation.y=-deg_to_rad(azimuth)
- art.cradle.rotation.x=deg_to_rad(elevation)
+ art.turret.rotation.y=-deg_to_rad(azimuth)+package_rock.y
+ art.cradle.rotation.x=deg_to_rad(elevation)+package_rock.x
  art.bracket.rotation.x=0.0 if bracket_up else -PI/2
 
 func apply_shields(instant: bool=false) -> void:
@@ -320,9 +371,14 @@ func lay(delta: float) -> void:
   elevation=clampf(next_el,0.0,maxf(elevation,ELECTRIC_TOP))
  apply_launcher()
 
-# Unit vector of the tube axes in the world.
+# Unit vector of the tube axes in the world as laid. The rocking of the body
+# and of the package under a salvo is part of the round-to-round dispersion
+# (GradBallistics), so it is left out here.
+func laid_basis() -> Basis:
+ return global_basis*Basis(Vector3.UP,-deg_to_rad(azimuth))*Basis(Vector3.RIGHT,deg_to_rad(elevation))
+
 func launch_direction() -> Vector3:
- return -Vector3(art.cradle.global_basis.z).normalized()
+ return (laid_basis()*Vector3.FORWARD).normalized()
 
 func absolute_elevation_mils() -> float:
  return GradBallistics.mils(asin(clampf(launch_direction().y,-1,1)))
@@ -340,7 +396,7 @@ func bubble_mils() -> float:
  return absolute_elevation_mils()-(sight_setting+level_setting-3000.0)
 
 func cant_degrees() -> float:
- var right:Vector3=art.turret.global_basis.x
+ var right:=global_basis*Basis(Vector3.UP,-deg_to_rad(azimuth))*Vector3.RIGHT
  return rad_to_deg(asin(clampf(right.y,-1,1)))
 
 func panorama_transform() -> Transform3D:
@@ -351,6 +407,7 @@ func panorama_transform() -> Transform3D:
 
 # --- Simulation -----------------------------------------------------------
 func _physics_process(delta: float) -> void:
+ update_radio()
  if game==null or not game.running or game.paused:return
  clock+=delta
  if notice_left>0:notice_left-=delta
@@ -434,7 +491,7 @@ func drive(delta: float) -> void:
  if input!=0.0:steer=clampf(steer+input*rate*delta,-1,1)
  else:steer=move_toward(steer,0,delta*clampf(absf(v)*0.06,0,0.8))
  steering=-steer*MAX_STEER
- art.steering.rotation.y=steer*STEER_TURNS*TAU*0.25
+ show_steering()
  var air_factor:=clampf((air-0.8)/4.0,0.15,1.0)
  var braking:=brake_pedal*235.0*air_factor
  var parking:=220.0 if handbrake else 0.0
@@ -475,16 +532,44 @@ func release_parking() -> void:
 
 func is_parked() -> bool:return freeze
 
+# The wheel turns about its column: clockwise, as the driver sees it, to
+# the right.
+func show_steering() -> void:
+ art.steering.rotation.y=-steer*STEER_TURNS*TAU*0.25
+
 func kick(rate: Vector3) -> void:rock_rate+=rate
 
+# One launch: the rocket drags the package after it along the tubes and the
+# package springs back as it leaves, so the vehicle pitches and rolls toward
+# the line of fire and back, bounces on its tyres and the cab shudders.
+# Rockets go alternately from the left and the right half of the package,
+# so the roll swings from side to side through the salvo.
+func launch_kick(index: int, direction: Vector3) -> void:
+ var local:=global_basis.inverse()*direction
+ var side:=signf(GradArt.tube_axis(index).x)
+ kick(Vector3(local.z*0.16+randf_range(-0.04,0.04),side*0.04+randf_range(-0.015,0.015),-local.x*0.21+side*0.08+randf_range(-0.04,0.04)))
+ bounce_rate-=randf_range(0.09,0.15)
+ shudder_rate+=Vector3(randf_range(-1,1),randf_range(-0.4,0.4),randf_range(-1,1))*0.5
+ package_rate+=Vector2(randf_range(0.14,0.22),side*randf_range(0.07,0.12))
+
+static func spring(value, rate, w: float, z: float, delta: float) -> Array:
+ rate+=(-value*w*w-rate*2.0*z*w)*delta
+ return [value+rate*delta,rate]
+
 func update_rock(delta: float) -> void:
- # About 2 Hz on the tyres with the rear springs locked out, lightly damped.
- var w:=TAU*(2.4 if springs_locked else 1.5)
- var z:=0.18 if springs_locked else 0.12
- rock_rate+=(-rock*w*w-rock_rate*2.0*z*w)*delta
- rock+=rock_rate*delta
+ # About 2 Hz on the tyres with the rear springs locked out, lightly damped,
+ # so the body keeps swaying through the salvo; softer on the springs.
+ var w:=TAU*(2.2 if springs_locked else 1.4)
+ var z:=0.10 if springs_locked else 0.07
+ var step:=spring(rock,rock_rate,w,z,delta);rock=step[0];rock_rate=step[1]
+ step=spring(bounce,bounce_rate,w*1.3,z*1.4,delta);bounce=step[0];bounce_rate=step[1]
+ step=spring(shudder,shudder_rate,TAU*9.0,0.22,delta);shudder=step[0];shudder_rate=step[1]
+ step=spring(package_rock,package_rate,TAU*3.2,0.07,delta);package_rock=step[0];package_rate=step[1]
  if rock.length()<0.00001 and rock_rate.length()<0.0001:rock=Vector3.ZERO;rock_rate=Vector3.ZERO
- art.root.transform=Transform3D(Basis.from_euler(rock),Vector3(0,0.0,0))
+ if absf(bounce)<0.00001 and absf(bounce_rate)<0.0001:bounce=0.0;bounce_rate=0.0
+ if shudder.length()<0.00001 and shudder_rate.length()<0.0001:shudder=Vector3.ZERO;shudder_rate=Vector3.ZERO
+ if package_rock.length()<0.00001 and package_rate.length()<0.0001:package_rock=Vector2.ZERO;package_rate=Vector2.ZERO
+ art.root.transform=Transform3D(Basis.from_euler(rock+shudder),Vector3(0,bounce,0))
 
 var road_check := 0.0
 var road_cached := true
@@ -545,10 +630,8 @@ func launch_next() -> bool:
  # The tubes are open behind, so the jet hardly pushes the launcher; the
  # rail friction, the spin-up in the helical groove and the blast on the
  # ground rock it.
- if freeze:
-  var local:=global_basis.inverse()*direction
-  kick(Vector3(local.z*0.02+randf_range(-0.008,0.008),randf_range(-0.002,0.002),-local.x*0.03+randf_range(-0.01,0.01)))
- else:
+ launch_kick(index,direction)
+ if not freeze:
   apply_impulse(-direction*220.0,rear-global_position)
   apply_torque_impulse(direction*randf_range(8.0,14.0)+Vector3(randf_range(-1,1),0,randf_range(-1,1))*90.0)
  GradEffects.launch(game,front,rear,direction)
