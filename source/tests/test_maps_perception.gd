@@ -6,7 +6,11 @@ func verify(ok: bool, message: String):
   printerr("FAIL: ",message)
   quit(1)
   assert(ok,message)
-func _initialize():call_deferred("run")
+# A script error stops run() without quitting; the watchdog turns that into
+# a failure instead of a hang until the runner's timeout.
+func _initialize():
+ call_deferred("run")
+ create_timer(240.0,true,false,true).timeout.connect(func():printerr("FAIL: test did not finish in 240 s");quit(1))
 func frames(n: int):
  for i in range(n):await physics_frame
 func run():
@@ -90,9 +94,11 @@ func run():
   for surface in range(mesh.mesh.get_surface_count()):
    if mesh.get_active_material(surface).resource_name=="uniform_urban_grey":cloth_found=true
  verify(cloth_found,"Selected uniform appears on first-person sleeves")
+ # The outfit is shown on the soldier in the loadout screen's portrait.
  game.player_outfit="ghillie_green"
  game.refresh_outfit_preview()
- verify(game.preview_actor.model.find_children("GhillieTufts","MultiMeshInstance3D",true,false).size()==5,"Ghillie adds silhouette-breaking geometry")
+ var portrait: ModelPreview=game.loadout_screen.portrait
+ verify(is_instance_valid(portrait.model) and portrait.model.find_children("GhillieTufts","MultiMeshInstance3D",true,false).size()==5,"Ghillie adds silhouette-breaking geometry")
  game.queue_free()
  await frames(4)
  print("PASS: %d map, collision, outfit and recognition checks" % checks)

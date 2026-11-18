@@ -51,7 +51,6 @@ var map_buttons: Array[Button] = []
 var player_outfit := "ua_pixel"
 var enemy_outfit := "rf_digital"
 var outfit_preview: SubViewport
-var preview_actor: Hostile
 var campaign := Campaign.new()
 var loading_panel: Control
 var launching := false
