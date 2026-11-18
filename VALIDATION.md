@@ -1,3 +1,93 @@
+# 0.23.0 validation — 2026-11-18
+
+Training for every class on the new training range, wide screens, the BM-21
+tablet that computes the firing data, the BM-21 chassis underside.
+
+- New test_infantry_training (86 checks, --fixed-fps 60; seeds 5151, 777
+  and 31337 all pass).
+  - Training screen: a tab per class, opening on the player's own class;
+    the chapters and the details follow the picked course.
+  - Rifleman, real controls:
+    - W to the line, CTRL, Z, Z, E by the block, SPACE over the wall;
+    - RMB, then three real АК bullets (Ballistics.launch) knock the 25 m
+      target down, B to single fire, three hits at 100 m;
+    - T, F6 for the magazine swap, V, I, two hits at 50 m;
+    - M, TAB, a wounded arm dressed with H;
+    - 4 for the РПО-А, F6 for the shot at the bunker.
+    Results, all 5 chapters recorded, targets cleared, the player's own
+    class, map and backpack back.
+  - Sniper, chapter 2 started alone: lying on the mat, PSO-1, PgUp twice
+    to drum 3, a real 7.62 bullet hits the 300 m figure, drum 5 for the
+    unmarked figure; only chapters 2 and 3 recorded.
+  - Mortarman, alone with the plate:
+    - N starts the deployment, F6 finishes it, ten mines in the box;
+    - map, ruler from the pit to the position (364 m vs 362 m computed);
+    - charge 0, azimuth 56-80 (needed 56-78), elevation 1103;
+    - SPACE fires from the box; F6 cannot skip the burst;
+    - the burst after 12.9–13.0 s lands 3–6 m from the position, and the
+      card reads it.
+  - A death on the range stops the course and clears the targets.
+- test_grad 76 and test_grad_training 90 pass after the BM-21 course became
+  a TrainingCourse subclass. test_grad covers the tablet's computed firing
+  data and the corrections after the observer's report.
+- New test_wide_screen (18 checks):
+  - interface frame margins for 16:9, 21:9 and 32:9;
+  - the three «Ширина інтерфейсу» settings;
+  - backdrops reaching the screen edges.
+- Found and fixed:
+  - The course card was under the 1 : 10 000 map, which dimmed it. The
+    cards are now created after the map and the inventory.
+  - Over the map the card covered the sheet's corner and legend: the UI
+    scales from 1280×720, so the 448 px card overlapped the sheet. Over
+    the map the card now narrows to the margin.
+  - F6 during the mortar's N deployment left the field work running. It
+    would have finished the deployment a second time, and the sight
+    would not open. The work is now cancelled.
+  - A finished course left its targets standing after the return to the
+    menu. stop() now always clears them.
+  - The suite runner did not isolate XDG. A relative XDG_DATA_HOME is
+    ignored by Godot, so runs fell back to the player's own user data.
+    The player's settings.cfg was checked: it is unchanged.
+- Renders (tests/render_range.gd, 1920×1080 and 1920×810 / 21:9):
+  - the training screen with the tabs;
+  - rifleman: start, line, targets, knocked-down target, bunker;
+  - sniper: mat, scope;
+  - mortarman: pit, map with the ruler, sight with the table, position.
+  All views held 60 fps (vsync) at 1920×1080. Changes after the first
+  renders: stripes on the field, a range control tower, red flags on the
+  berm, an earth mound so the bunker reads at 120 m.
+- Full source suite (50 scenarios; test_grad, test_grad_training and
+  test_infantry_training with --fixed-fps 60):
+  - all pass except test_maps_perception, the same failure as since 0.15.0;
+  - test_squad_routes exits 0 but prints no PASS line.
+- Exported pck (18 MB, sha256 8d8b8731…), run with the shipped
+  kvartal.x86_64 via --main-pack:
+  - `--quit-after 300` exits with no ERROR lines;
+  - all PASS:
+
+    | Test | Checks |
+    |---|---|
+    | infantry_training | 86 |
+    | grad_training | 90 |
+    | grad | 76 |
+    | wide_screen | 18 |
+    | battle | 37 |
+    | mortar | 83 |
+    | svd_scope | 90 |
+    | shmel | 60 |
+    | squad_tactics | 18 |
+    | loadout_preview | 34 |
+    | campaign_flow | 34 |
+    | match | all |
+
+- Installed with an atomic rename. 0.22.0 is backed up as
+  .build/backup/kvartal-0.22.0.pck.
+- Limitations:
+  - The range has no enemy, and the targets do not shoot back.
+  - The rifleman's magazine swap, the rangefinder and the РПО-А shot were
+    done with F6 in the test, not with the keys.
+  - The macOS and Windows 0.23.0 builds are not made yet.
+
 # 0.22.0 validation — 2026-11-18
 
 BM-21 training («НАВЧАННЯ») and the new front end (main menu, campaign,

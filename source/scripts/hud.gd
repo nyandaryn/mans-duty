@@ -11,14 +11,14 @@ func _draw() -> void:
 	var col := Color("f0e7cf")
 	# In the cab of the BM-21 its own instruments replace the soldier's.
 	if is_instance_valid(game.grad) and game.grad.seat!="":
-		if game.damage_flash>0:draw_rect(Rect2(Vector2.ZERO,size),Color(0.65,0.13,0.08,game.damage_flash*0.5),false,18)
+		if game.damage_flash>0:draw_rect(game.screen_rect(self),Color(0.65,0.13,0.08,game.damage_flash*0.5),false,18)
 		return
 	if not game.player.is_vaulting() and not game.player.aim and game.player.blind_mode==0 and game.player.arm_injury<0.5 and game.player.bandage_time<=0 and not game.player.field_rig.active():
 		for direction in [Vector2.UP,Vector2.DOWN,Vector2.LEFT,Vector2.RIGHT]:
 			draw_line(center+direction*5,center+direction*11,col,1)
 	if game.damage_flash>0:
 		var red := Color(0.65,0.13,0.08,game.damage_flash*0.5)
-		draw_rect(Rect2(Vector2.ZERO,size),red,false,18)
+		draw_rect(game.screen_rect(self),red,false,18)
 	# Compass, with world-relative bearing.
 	var bearing := fposmod(-rad_to_deg(game.player.rotation.y),360)
 	var font := ThemeDB.fallback_font
@@ -112,7 +112,8 @@ func draw_drone_view() -> void:
 	var font := ThemeDB.fallback_font
 	var ink := Color("d7e7cb")
 	var center := size*0.5
-	draw_rect(Rect2(Vector2.ZERO,size),Color(0.015,0.022,0.018,0.9),false,24)
+	var screen: Rect2=game.screen_rect(self)
+	draw_rect(screen,Color(0.015,0.022,0.018,0.9),false,24)
 	draw_rect(Rect2(24,24,size.x-48,52),Color(0.015,0.025,0.018,0.72))
 	draw_string(font,Vector2(40,57),"FPV / РОЗВІДКА     АКБ %d %% · ≈%d хв     ЗВ’ЯЗОК %d %%" % [roundi(drone.battery*100),floori(drone.battery*ReconDrone.FLIGHT_SECONDS/60.0),roundi(drone.signal_strength*100)],HORIZONTAL_ALIGNMENT_LEFT,-1,20,ink)
 	draw_string(font,Vector2(40,103),"НАД ЗЕМЛЕЮ %.1f м     %.1f км/год     ДО ПІЛОТА %.0f м" % [drone.floor_height,drone.velocity.length()*3.6,drone.global_position.distance_to(game.player.global_position)],HORIZONTAL_ALIGNMENT_LEFT,-1,17,ink)
@@ -125,7 +126,7 @@ func draw_drone_view() -> void:
 		var loss := 1-drone.signal_strength/0.3
 		for i in range(0,int(size.y),5):
 			var flicker := absf(sin(i*13.4+float(Time.get_ticks_msec())*0.06))
-			draw_line(Vector2(0,i),Vector2(size.x,i),Color(flicker,flicker,flicker,loss*0.55),2)
+			draw_line(Vector2(screen.position.x,i),Vector2(screen.end.x,i),Color(flicker,flicker,flicker,loss*0.55),2)
 		if drone.signal_strength<0.04:
-			draw_rect(Rect2(Vector2.ZERO,size),Color(0.04,0.05,0.04,0.96))
+			draw_rect(screen,Color(0.04,0.05,0.04,0.96))
 			draw_string(font,center-Vector2(130,0),"ВТРАТА ВІДЕОЗВ’ЯЗКУ",HORIZONTAL_ALIGNMENT_LEFT,-1,23,ink)

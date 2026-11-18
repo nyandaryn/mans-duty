@@ -20,6 +20,7 @@ func run():
  tag=OS.get_environment("WIDE_TAG")
  game=load("res://main.tscn").instantiate();game.set_meta("automated_preview",true);root.add_child(game)
  game.volume=0
+ if OS.get_environment("UI_WIDTH")!="":game.set_ui_width(int(OS.get_environment("UI_WIDTH")))
  await snap("menu-home",90)
  for id in ["campaign","battle","training","loadout","settings"]:
   game.main_menu.show_screen(id)
@@ -41,7 +42,7 @@ func run():
  game.inventory.toggle()
  await snap("inventory",20)
  game.inventory.toggle()
- game.show_result("ЗАВДАННЯ ВИКОНАНО","Статистика",[])
+ game.show_result("ЗАВДАННЯ ВИКОНАНО","Знешкоджено 10 з 10 · час 04:12 · влучань 38 %",[["ЩЕ РАЗ",func():pass],["ГОЛОВНЕ МЕНЮ",func():pass]])
  await snap("result",10)
  game.result_panel.hide()
  game.set_player_class("mortarman")

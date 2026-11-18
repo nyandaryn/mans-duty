@@ -1,7 +1,7 @@
 class_name GradTraining
-extends Control
+extends TrainingCourse
 
-# «Навчання»: the BM-21 drill taught step by step on the Avdiivka map with
+# «Навчання» for the BM-21 drill, taught step by step on the Avdiivka map with
 # nobody on the field. Each step watches the real state of the vehicle; a
 # card names the controls, a marker shows where to go, F6 does a step for the
 # player. Five chapters can be started on their own: the vehicle is put in the
@@ -45,7 +45,7 @@ const STEPS := [
   {"id":"back","title":"Повернись до пульта","text":"Дрон залишиться в повітрі й покаже розриви. J — до пульта.","keys":["J"]}],
  [
   {"id":"tablet","title":"Відкрий планшет","text":"Карта з GPS машини й позначеними цілями. Праворуч обери Ц-1: дальність Дт, дирекційний кут αц, кут місця ε і АВТОРОЗРАХУНОК установок.","keys":["M"]},
-  {"id":"read","title":"Запиши дані цілі","text":"АВТОРОЗРАХУНОК дає кутомір, приціл і рівень для Ц-1 — запам'ятай їх. Як вони рахуються вручну, підкажуть наступні кроки. Коли готовий — ENTER.","keys":["ENTER"]},
+  {"id":"read","ack":true,"title":"Запиши дані цілі","text":"АВТОРОЗРАХУНОК дає кутомір, приціл і рівень для Ц-1 — запам'ятай їх. Як вони рахуються вручну, підкажуть наступні кроки. Коли готовий — ENTER.","keys":["ENTER"]},
   {"id":"gunner","title":"Займи місце навідника","text":"Закрий планшет (M), вийди з кабіни (F) і підійди до прицілу ліворуч від пакета.","keys":["M","F"]},
   {"id":"deflection","title":"Встанови кутомір","text":"Кутомір = αц − ПБ (1-55) + 30-00; якщо вийшло понад 60-00 — відніми 60-00. Q/E — по 0-01, з SHIFT — по 0-10, з ALT — по 1-00.","keys":["Q","E"]},
   {"id":"sight","title":"Встанови приціл","text":"Приціл — з таблиці стрільби для дальності (велике кільце). W/S — по 0-00,5, з SHIFT — по 0-10, з ALT — по 1-00.","keys":["W","S"]},
@@ -62,111 +62,43 @@ const STEPS := [
   {"id":"stow","title":"Пакет у похідне положення","text":"Противник засік пуск: відповідь прилетить за 2,5–4 хв. Біля прицілу виведи пакет на 0° і 0° (шкала повороту й квадрант), застопори пакет (F, лівий борт) і кран «ПОХІД».","keys":["←","→","↑","↓","F"]},
   {"id":"leave","title":"Залиш вогневу позицію","text":"За кермо: V — підняти щитки, SHIFT + P — вимкнути КВП, [ — прибрати ручний газ. Рушай і від’їдь від ВП на 300 м.","keys":["V","SHIFT","+","P","["]}]]
 
-var game: Node3D
 var grad: GradCommand
-var running := false
-var chapter := 0
-var step := 0
-var start_chapter := 0
-var skipped := 0
-var clock := 0.0
-var step_clock := 0.0
-var preparing := 0.0
 var lay_when_ready := false
-var acked := false
-var flash := 0.0
-var done_title := ""
-# "full" at the top right; "console" without the chapter line and footer so
-# it stays above the fire control panel; "compact" (title, keys, readout) at
-# the bottom right over the tablet and the radio.
-var layout := ""
-var banner_left := 0.0
 var shot: Dictionary={}
 var salvo_from := 0
 var leave_from := Vector3.ZERO
 var auto_fire := ""
-var finished_chapters: Array[int]=[]
-var card: PanelContainer
-var card_style: StyleBoxFlat
-var head: Label
-var chapter_label: Label
-var title: Label
-var body: Label
-var keys_holder: VBoxContainer
-var readout: Label
-var progress_bar: Control
-var footer: Label
-var banner: VBoxContainer
-var banner_title: Label
-var banner_sub: Label
+
+func course_id() -> String:return "grad"
+func course_title() -> String:return "БМ-21 «ГРАД»"
+func course_role() -> String:return "КОМАНДИР ОБСЛУГИ РСЗВ"
+func chapters() -> Array:return CHAPTERS
+func steps() -> Array:return STEPS
+func loadout() -> Dictionary:return {"class":"grad","map":BattleMap.ID,"bag":[]}
+func loading_tip() -> String:return "Полігон під Авдіївкою, противника немає. Картка кроку — праворуч угорі; F6 — виконати крок автоматично."
+func death_text() -> String:return "Командир вибув. Під час пуску не стій позаду пакета: струмінь газів б’є на десятки метрів."
+func preparing_text() -> String:return "Машину ставлять на вогневу позицію й наводять на ціль."
+func ground(point: Vector3) -> Vector3:return grad.ground(point)
 
 func setup(owner_game: Node3D, ui_root: Control) -> void:
- game=owner_game;grad=game.grad
- mouse_filter=Control.MOUSE_FILTER_IGNORE
- game.place(self,ui_root,0,0,1,1)
- theme=UiKit.theme()
- card=PanelContainer.new()
- card_style=UiKit.flat(Color(0.03,0.045,0.038,0.9),UiKit.ACCENT,0,4)
- card_style.content_margin_left=20;card_style.content_margin_right=18
- card_style.content_margin_top=14;card_style.content_margin_bottom=14
- card.add_theme_stylebox_override("panel",card_style)
- card.mouse_filter=Control.MOUSE_FILTER_IGNORE
- add_child(card)
- card.anchor_left=1;card.anchor_right=1;card.anchor_top=0;card.anchor_bottom=0
- card.offset_left=-470;card.offset_right=-22;card.offset_top=22;card.offset_bottom=22
- card.grow_horizontal=Control.GROW_DIRECTION_BEGIN
- var box:=VBoxContainer.new();box.add_theme_constant_override("separation",5)
- box.custom_minimum_size.x=410;card.add_child(box)
- head=UiKit.text("",13,UiKit.ACCENT,"head");box.add_child(head)
- head.clip_text=true;head.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS;head.custom_minimum_size.x=10
- chapter_label=UiKit.text("",12,UiKit.MUTED,"head");box.add_child(chapter_label)
- title=UiKit.text("",27,UiKit.INK,"display");title.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;box.add_child(title)
- body=UiKit.wrapped("",15,UiKit.SOFT);box.add_child(body)
- keys_holder=VBoxContainer.new();box.add_child(keys_holder)
- readout=UiKit.wrapped("",16,UiKit.ACCENT);readout.add_theme_font_override("font",UiKit.font("head"));box.add_child(readout)
- progress_bar=Control.new();progress_bar.custom_minimum_size.y=12;box.add_child(progress_bar)
- progress_bar.draw.connect(draw_progress)
- footer=UiKit.text("F6 — ПРОПУСТИТИ КРОК   ·   ESC — ПАУЗА",11,UiKit.FAINT,"head");box.add_child(footer)
- banner=VBoxContainer.new();banner.alignment=BoxContainer.ALIGNMENT_CENTER
- banner.mouse_filter=Control.MOUSE_FILTER_IGNORE
- game.place(banner,self,0.1,0.36,0.9,0.56)
- banner_title=UiKit.text("",64,UiKit.INK,"display");banner_title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;banner.add_child(banner_title)
- banner_sub=UiKit.text("",18,UiKit.ACCENT,"head");banner_sub.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;banner.add_child(banner_sub)
- banner.hide()
- hide()
+ super.setup(owner_game,ui_root)
+ grad=game.grad
 
-static func completed(owner_game: Node3D) -> Array:
- return owner_game.settings.get_value("training","grad",[])
+static func completed(owner_game: Node3D) -> Array:return progress(owner_game,"grad")
 
-func record(index: int) -> void:
- var list:Array=completed(game).duplicate()
- if index not in list:list.append(index);list.sort()
- game.settings.set_value("training","grad",list)
- if not game.get_meta("automated_preview",false):game.settings.save("user://settings.cfg")
-
-# --- Course -----------------------------------------------------------------
-func begin(index: int) -> void:
- start_chapter=clampi(index,0,CHAPTERS.size()-1)
- chapter=start_chapter;step=0;skipped=0;clock=0;flash=0;banner_left=0;banner.hide()
- shot={};auto_fire="";acked=false;finished_chapters.clear()
+func on_begin() -> void:
+ shot={};auto_fire=""
  grad.training=true
- running=true
- preset(chapter)
- enter_step()
- show()
 
-func stop() -> void:
- running=false;auto_fire="";banner_left=0;banner.hide()
+func on_stop() -> void:
+ auto_fire=""
  if is_instance_valid(grad):grad.training=false;grad.lever_key=false
- hide()
 
-func current() -> Dictionary:
- return STEPS[chapter][step] if running and chapter<STEPS.size() and step<STEPS[chapter].size() else {}
+func on_finish() -> void:
+ auto_fire="";grad.lever_key=false
 
 func target_point() -> Vector3:
  return grad.strongpoints[TARGET_INDEX].point
-
-func flat_distance(a: Vector3, b: Vector3) -> float:return Vector2(a.x-b.x,a.z-b.z).length()
 
 # Firing data of the training target from where the launcher stands.
 func ideal() -> Dictionary:
@@ -223,6 +155,8 @@ func lay_package() -> void:
 func laid() -> bool:
  return absf(needle())<=2.5 and absf(grad.vehicle.bubble_mils())<=1.5
 
+func prepare(index: int) -> void:preset(index)
+
 func preset(index: int) -> void:
  var v:=grad.vehicle
  if index<=0:
@@ -245,14 +179,10 @@ func preset(index: int) -> void:
   preparing=1.6;lay_when_ready=true
 
 # --- Steps ---------------------------------------------------------------
-func enter_step() -> void:
- step_clock=0;acked=false
- var s:=current()
- if s.is_empty():return
- match s.id:
+func on_enter(id: String) -> void:
+ match id:
   "salvo":salvo_from=grad.vehicle.fired
   "leave":leave_from=shot.get("spot",grad.vehicle.global_position)
- refresh_card(true)
 
 func check(id: String) -> bool:
  var v:=grad.vehicle
@@ -331,6 +261,9 @@ func correct_text() -> String:
  if parts.is_empty():parts.append("Розриви в цілі — поправки не потрібні.")
  return " ".join(parts)+" Біля прицілу (F) внеси поправки й знову наведи по бусолі та рівню."
 
+func body_text(s: Dictionary) -> String:
+ return correct_text() if s.id=="correct" else s.text
+
 func readout_text(id: String) -> String:
  var v:=grad.vehicle
  match id:
@@ -370,6 +303,9 @@ func readout_text(id: String) -> String:
  return ""
 
 func can_skip(id: String) -> bool:return id!="report"
+
+func refuse_skip(_id: String) -> void:
+ grad.vehicle.say("Цей крок не пропускається: дочекайся доповіді СП",3)
 
 # F6: the step is done for the player.
 func auto(id: String) -> void:
@@ -434,82 +370,38 @@ func auto(id: String) -> void:
    if v.springs_locked:v.toggle_springs()
   "leave":leave_from=v.global_position+Vector3(1000,0,0)
 
-func skip() -> void:
- var s:=current()
- if s.is_empty() or preparing>0:return
- if not can_skip(s.id):
-  grad.vehicle.say("Цей крок не пропускається: дочекайся доповіді СП",3);return
- skipped+=1
- auto(s.id)
- if s.id in ["sighting","salvo"]:return
- if s.id in ["drive","move","orient"]:
+func after_auto(id: String) -> void:
+ if id in ["sighting","salvo"]:return
+ if id in ["drive","move","orient"]:
   # Driving is done all at once: on the position, oriented and stopped.
   while not current().is_empty() and current().id in ["move","drive","orient"]:advance(false)
   return
  advance(false)
 
-func advance(by_player: bool=true) -> void:
- var s:=current()
- if s.is_empty():return
- if s.id=="sighting":
+func before_advance(id: String) -> void:
+ if id=="sighting":
   var v:=grad.vehicle
   shot["sight"]=v.sight_setting;shot["deflection"]=v.deflection;shot["spot"]=v.global_position
- flash=0.9 if by_player else 0.4
- done_title=s.title
- if by_player:game.sound("click",-10)
- step+=1
- if step>=STEPS[chapter].size():
-  finished_chapters.append(chapter);record(chapter)
-  if chapter+1>=CHAPTERS.size():finish();return
-  chapter+=1;step=0;game.training_chapter=chapter
-  banner_title.text="РОЗДІЛ %d ЗАВЕРШЕНО" % chapter
-  banner_sub.text="ДАЛІ: %s" % CHAPTERS[chapter].title
-  banner_left=3.5
- enter_step()
 
-func finish() -> void:
- running=false;auto_fire="";grad.lever_key=false
+func result_lines() -> Array[String]:
  var lines: Array[String]=[]
- # "З" of the condensed head font reads as a "3" next to the digits.
- lines.append("РОЗДІЛИ  %d–%d / %d" % [start_chapter+1,CHAPTERS.size(),CHAPTERS.size()])
- lines.append("ЧАС  %02d:%02d" % [int(clock)/60,int(clock)%60])
  if not grad.burst_log.is_empty():
   var aim:=target_point();var centre:=Vector3.ZERO
   for p in grad.burst_log:centre+=p
   centre/=grad.burst_log.size()
   lines.append("РАКЕТ ВИПУЩЕНО  %d · ЦЕНТР РОЗРИВІВ ЗА %d м ВІД ЦІЛІ" % [grad.vehicle.fired,roundi(flat_distance(centre,aim))])
  lines.append("ОП-2  %s" % ("ЗНИЩЕНО" if grad.strongpoints[TARGET_INDEX].destroyed else "НЕ ЗНИЩЕНО"))
- if skipped>0:lines.append("ПРОПУЩЕНО КРОКІВ  %d" % skipped)
- hide()
- game.training_result("КУРС ЗАВЕРШЕНО" if start_chapter==0 and skipped==0 else "НАВЧАННЯ ЗАВЕРШЕНО","\n".join(lines))
+ return lines
 
 # --- Frame ---------------------------------------------------------------
-func _process(delta: float) -> void:
- visible=running and game.running and not game.paused and game.training!=""
- if not visible:return
- clock+=delta;step_clock+=delta
- flash=maxf(0,flash-delta)
- if banner_left>0:
-  banner_left-=delta
-  banner.visible=banner_left>0
-  banner.modulate.a=clampf(banner_left/0.6,0,1)*clampf((3.5-banner_left)/0.3,0,1)
- var panel_open: String=grad.hud.open_panel()
- apply_layout("full" if panel_open=="" else ("console" if panel_open=="console" else ("compact_left" if panel_open=="tablet" else "compact")))
- if preparing>0:
-  preparing-=delta
-  if preparing<=0:
-   if lay_when_ready:lay_when_ready=false;lay_on_target()
-   refresh_card(true)
-  else:refresh_card(false)
-  queue_redraw();return
+func on_prepared() -> void:
+ if lay_when_ready:lay_when_ready=false;lay_on_target()
+
+func tick(_delta: float) -> void:
  var s:=current()
- if s.is_empty():return
  if auto_fire!="":drive_auto_fire()
  if s.id=="sighting" and not shot.has("from"):shot["from"]=grad.vehicle.fired
  if s.id=="sighting" and grad.vehicle.fired>int(shot.get("from",0)) and not shot.has("time"):shot["time"]=grad.clock
- if step_clock>0.35 and check(s.id):advance(true);return
- refresh_card(false)
- queue_redraw()
 
 func drive_auto_fire() -> void:
  var v:=grad.vehicle
@@ -519,62 +411,12 @@ func drive_auto_fire() -> void:
  grad.lever_key=not done
  if done:auto_fire=""
 
-func refresh_card(rebuild: bool) -> void:
- var s:=current()
- if preparing>0:
-  head.text="НАВЧАННЯ · РОЗДІЛ %d / %d" % [chapter+1,CHAPTERS.size()]
-  chapter_label.text=CHAPTERS[chapter].title
-  title.text="Підготовка позиції…";body.text="Машину ставлять на вогневу позицію й наводять на ціль.";readout.text=""
-  return
- if s.is_empty():return
- if rebuild:
-  head.text="НАВЧАННЯ · РОЗДІЛ %d / %d · КРОК %d / %d" % [chapter+1,CHAPTERS.size(),step+1,STEPS[chapter].size()]
-  chapter_label.text=CHAPTERS[chapter].title
-  title.text=s.title
-  for child in keys_holder.get_children():child.queue_free()
-  var keys: Array=s.get("keys",[])
-  if not keys.is_empty():keys_holder.add_child(UiKit.keys_row(keys,s.get("caption","")))
-  footer.text="F6 — ПРОПУСТИТИ КРОК   ·   ESC — ПАУЗА" if can_skip(s.id) else "ESC — ПАУЗА"
- body.text=correct_text() if s.id=="correct" else s.text
- var live:=readout_text(s.id)
- readout.text=live;readout.visible=live!=""
- if flash>0:
-  head.text="ВИКОНАНО · "+done_title.to_upper();head.add_theme_color_override("font_color",UiKit.GOOD);card_style.border_color=UiKit.GOOD
- else:
-  head.text="НАВЧАННЯ · РОЗДІЛ %d / %d · КРОК %d / %d" % [chapter+1,CHAPTERS.size(),step+1,STEPS[chapter].size()]
-  head.add_theme_color_override("font_color",UiKit.ACCENT);card_style.border_color=UiKit.ACCENT
- progress_bar.queue_redraw()
+func layout_mode() -> String:
+ var panel_open: String=grad.hud.open_panel()
+ return "full" if panel_open=="" else ("console" if panel_open=="console" else ("compact_left" if panel_open=="tablet" else "compact"))
 
-func draw_progress() -> void:
- if not running:return
- var count: int=STEPS[chapter].size()
- var w:=progress_bar.size.x;var gap:=4.0
- var cell:=(w-gap*(count-1))/count
- for i in range(count):
-  var colour:=UiKit.ACCENT if i<step else (Color(UiKit.ACCENT,0.45) if i==step else Color(1,1,1,0.12))
-  progress_bar.draw_rect(Rect2(i*(cell+gap),4,cell,4),colour)
-
-func apply_layout(mode: String) -> void:
- if mode==layout:return
- layout=mode
- chapter_label.visible=mode=="full"
- footer.visible=mode=="full"
- body.visible=mode=="full" or mode=="console"
- var bottom:=mode!="full" and mode!="console"
- # Over the tablet the card sits at the bottom left, on the map: the data
- # column on the right is what the player reads.
- var left:=mode=="compact_left"
- card.anchor_left=0.0 if left else 1.0;card.anchor_right=card.anchor_left
- card.offset_left=22.0 if left else -470.0;card.offset_right=470.0 if left else -22.0
- card.grow_horizontal=Control.GROW_DIRECTION_END if left else Control.GROW_DIRECTION_BEGIN
- card.anchor_top=1.0 if bottom else 0.0;card.anchor_bottom=card.anchor_top
- card.offset_top=-22.0 if bottom else 22.0;card.offset_bottom=card.offset_top
- card.grow_vertical=Control.GROW_DIRECTION_BEGIN if bottom else Control.GROW_DIRECTION_END
- card.reset_size()
-
-# Room the card takes at the top right, for the other overlays.
-func reserved() -> float:
- return card.get_rect().end.y+16 if visible and (layout=="full" or layout=="console") else 0.0
+func markers_hidden() -> bool:
+ return grad.seat=="gunner" or grad.hud.open_panel()!=""
 
 # --- Markers on the scene --------------------------------------------------
 func marker() -> Dictionary:
@@ -601,61 +443,3 @@ func marker() -> Dictionary:
   "correct":return station.call("gunner") if grad.seat=="" else {}
   "salvo","console","sighting","arm":return station.call("commander") if grad.seat=="" else {}
  return {}
-
-func _draw() -> void:
- if not running or not visible:return
- if grad.seat=="gunner" or grad.hud.open_panel()!="":return
- var m:=marker()
- if m.is_empty():return
- var camera:=get_viewport().get_camera_3d()
- if camera==null:return
- var point: Vector3=m.point
- # Too close to the eye to project: the station is right here.
- if camera.global_position.distance_to(point)<1.2:return
- var pulse:=0.5+0.5*sin(clock*4.0)
- if m.has("ring") and not camera.is_position_behind(point):
-  var ring:=PackedVector2Array()
-  for k in range(33):
-   var a:=TAU*k/32.0
-   var p:=grad.ground(point+Vector3(cos(a),0,sin(a))*float(m.ring))+Vector3.UP*2.0
-   if camera.is_position_behind(p) or camera.global_position.distance_to(p)<1.0:ring.clear();break
-   ring.append(camera.unproject_position(p))
-  if ring.size()>1:
-   for k in range(0,ring.size()-1,2):draw_line(ring[k],ring[k+1],Color(UiKit.ACCENT,0.8),2.0)
- var margin:=48.0
- var screen:=camera.unproject_position(point)
- var behind:=camera.is_position_behind(point)
- var inside:=not behind and Rect2(Vector2(margin,margin),size-Vector2(margin,margin)*2).has_point(screen)
- var distance:=camera.global_position.distance_to(point)
- var caption:="%s · %s" % [m.caption,("%d м" % roundi(distance)) if distance<1000 else ("%.1f км" % (distance/1000.0)).replace(".",",")]
- var font:=UiKit.font("head")
- if inside:
-  var r:=11.0+pulse*3.0
-  var diamond:=PackedVector2Array([screen+Vector2(0,-r),screen+Vector2(r,0),screen+Vector2(0,r),screen+Vector2(-r,0),screen+Vector2(0,-r)])
-  draw_colored_polygon(diamond.slice(0,4),Color(UiKit.ACCENT,0.25))
-  draw_polyline(diamond,UiKit.ACCENT,2.0)
-  var w:=font.get_string_size(caption,HORIZONTAL_ALIGNMENT_LEFT,-1,14).x
-  draw_rect(Rect2(screen+Vector2(-w*0.5-8,r+6),Vector2(w+16,22)),Color(0,0,0,0.55))
-  draw_string(font,screen+Vector2(-w*0.5,r+22),caption,HORIZONTAL_ALIGNMENT_LEFT,-1,14,UiKit.INK)
-  return
- # Off screen: an arrow on the edge pointing the way.
- var centre:=size*0.5
- var direction:=(screen-centre)
- if behind:direction=-direction
- if direction.length()<1.0:direction=Vector2(0,1)
- direction=direction.normalized()
- var half:=size*0.5-Vector2(margin,margin)
- var scale:=minf(half.x/maxf(absf(direction.x),0.001),half.y/maxf(absf(direction.y),0.001))
- var at:=centre+direction*scale
- var tip:=at+direction*14.0;var side:=direction.orthogonal()*9.0
- draw_colored_polygon(PackedVector2Array([tip,at-direction*6.0+side,at-direction*6.0-side]),UiKit.ACCENT)
- var label_at:=at-direction*34.0
- var w2:=font.get_string_size(caption,HORIZONTAL_ALIGNMENT_LEFT,-1,13).x
- draw_string(font,label_at-Vector2(w2*0.5,-4),caption,HORIZONTAL_ALIGNMENT_LEFT,-1,13,UiKit.INK)
-
-func _input(event: InputEvent) -> void:
- if not running or not game.running or game.paused:return
- if event is InputEventKey and event.pressed and not event.echo:
-  if event.physical_keycode==KEY_F6:skip();get_viewport().set_input_as_handled();return
-  if event.physical_keycode in [KEY_ENTER,KEY_KP_ENTER] and current().get("id","")=="read":
-   acked=true;get_viewport().set_input_as_handled()

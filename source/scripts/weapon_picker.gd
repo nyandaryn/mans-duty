@@ -11,6 +11,7 @@ func setup(owner_game: Node3D) -> void:
  var shade := ColorRect.new()
  shade.color=Color(0.01,0.02,0.015,0.97)
  game.place(shade,self,0,0,1,1)
+ game.bleed(shade)
  game.place(game.label("АРСЕНАЛ / ОБЕРИ ЗБРОЮ",26,game.GOLD),self,0.08,0.12,0.8,0.20)
  game.place(game.button("ЗАКРИТИ ×",hide),self,0.76,0.12,0.92,0.19)
  choices=GridContainer.new();choices.columns=3

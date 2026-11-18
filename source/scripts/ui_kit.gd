@@ -205,12 +205,22 @@ static func header(game: Node3D, parent: Control, crumb: String, title: String, 
   if child is Control and child!=back_button:child.size_flags_vertical=Control.SIZE_SHRINK_CENTER
  return back_button
 
+# Ukrainian plural: 1 крок, 2 кроки, 5 кроків, 11 кроків, 21 крок.
+static func plural(n: int, one: String, few: String, many: String) -> String:
+ var tens:=n%100
+ if tens>=11 and tens<=14:return many
+ match n%10:
+  1:return one
+  2,3,4:return few
+ return many
+
 # Translucent sheet over the graded menu scene.
 static func sheet(game: Node3D, parent: Control, alpha: float=0.8) -> ColorRect:
  var shade:=ColorRect.new()
  shade.color=Color(SHEET,alpha)
  shade.mouse_filter=Control.MOUSE_FILTER_STOP
  game.place(shade,parent,0,0,1,1)
+ game.bleed(shade)
  return shade
 
 static func rule(color: Color=LINE, height: float=1.0) -> ColorRect:

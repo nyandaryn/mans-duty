@@ -85,6 +85,9 @@ var spatial_index := 0
 var orbit := 0.0
 var main_menu: MainMenu
 var grad_training: GradTraining
+# Every «Навчання» course by class, in the order of the training screen.
+const COURSE_IDS := ["rifleman","sniper","mortarman","grad"]
+var courses: Dictionary={}
 # A training session borrows the BM-21 class and gives the loadout back.
 var training := ""
 var training_chapter := 0
@@ -97,6 +100,14 @@ var pause_note: Label
 var shadows_on := true
 var fullscreen_on := false
 var settings := ConfigFile.new()
+# Wide monitors: the 3D view always fills the screen (Hor+), the interface
+# lives in a centred frame no wider than this aspect; 0 — the whole width.
+const UI_WIDTHS := [0.0,2.4,16.0/9.0]
+const UI_WIDTH_LABELS := ["На весь екран","21:9","16:9"]
+var ui_width := 1
+var ui_root: Control
+var frame_margin := 0.0
+var bleeds: Array[Control]=[]
 const CREAM = Color("e4e5d6")
 const LOADING_TIPS := [
 	"ПОРАДА: магазин міняй за укриттям — R, а повний обмін на плитоносці R + 1 / 2 / 3.",
@@ -217,10 +228,10 @@ func start_match() -> void:
 	allies.clear()
 	close_panels()
 	crew.reset()
-	grad_training.stop()
+	stop_courses()
 	grad.reset()
 	# The BM-21 fights only in the great assault.
-	if player_class=="grad":selected_map=BattleMap.ID
+	if player_class=="grad" and training=="":selected_map=BattleMap.ID
 	if district.map_id!=selected_map or selected_map in Campaign.IDS or selected_map==BattleMap.ID:
 		world_root.free()
 		build_district()
@@ -248,14 +259,13 @@ func start_match() -> void:
 	result_panel.hide()
 	hud.show()
 	running=true
-	if selected_map==BattleMap.ID:
-		if training!="":
-			# The training ground: the Avdiivka map with nobody on it.
-			grad.start()
-			grad_training.begin(training_chapter)
-		else:
-			battle.start()
-			grad.start()
+	if training!="":
+		# The training ground: nobody on the field.
+		if training=="grad":grad.start()
+		course().begin(training_chapter)
+	elif selected_map==BattleMap.ID:
+		battle.start()
+		grad.start()
 	Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
 	save_settings()
 
@@ -298,7 +308,7 @@ func to_menu(screen: String="") -> void:
 	inventory.close()
 	close_panels()
 	crew.reset()
-	grad_training.stop()
+	stop_courses()
 	grad.reset()
 	end_training()
 	running=false
@@ -311,18 +321,31 @@ func to_menu(screen: String="") -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
 	main_menu.open(screen if screen!="" else ("training" if from_training else "home"))
 
-func begin_training(chapter: int) -> void:
+func course() -> TrainingCourse:return courses.get(training,null)
+
+func stop_courses() -> void:
+	for item in courses.values():item.stop()
+
+# A course borrows its class, weapons, pack and map; end_training gives the
+# player's own loadout back. Without an id the current (or the BM-21) course.
+func begin_training(chapter: int, course_id: String="") -> void:
 	if launching:return
+	var id := course_id if course_id!="" else (training if training!="" else "grad")
+	if not courses.has(id):return
 	if training=="":
 		training_backup={"class":player_class,"primary":primary,"secondary":secondary,"bag":loadout_bag.serialize(),"map":selected_map,"allies":ally_count}
-	training="grad"
-	training_chapter=clampi(chapter,0,GradTraining.CHAPTERS.size()-1)
-	player_class="grad"
-	primary=PlayerClass.primary_for("grad",primary)
-	secondary=PlayerClass.secondary_for("grad",secondary)
+	training=id
+	var plan: Dictionary=courses[id].loadout()
+	training_chapter=clampi(chapter,0,courses[id].chapters().size()-1)
+	player_class=plan["class"]
+	primary=PlayerClass.primary_for(player_class,plan.get("primary",primary))
+	secondary=PlayerClass.secondary_for(player_class,plan.get("secondary",secondary))
 	loadout_bag=BackpackState.new()
+	loadout_bag.equipped=true
+	for kind in plan.get("bag",[]):loadout_bag.add(kind)
+	if plan.get("bag",[]).is_empty():loadout_bag=BackpackState.new()
 	ally_count=0
-	selected_map=BattleMap.ID
+	selected_map=plan["map"]
 	await begin_operation()
 
 func end_training() -> void:
@@ -372,7 +395,8 @@ func training_result(title: String, stats: String) -> void:
 	if is_instance_valid(player):player.field_rig.cancel()
 	inventory.close()
 	close_panels()
-	show_result(title,stats,[["ДО НАВЧАННЯ",func():to_menu("training")],["ПРОЙТИ КУРС ЗНОВУ",func():begin_training(0)],["ГОЛОВНЕ МЕНЮ",func():to_menu("home")]])
+	var id := training
+	show_result(title,stats,[["ДО НАВЧАННЯ",func():to_menu("training")],["ПРОЙТИ КУРС ЗНОВУ",func():begin_training(0,id)],["ГОЛОВНЕ МЕНЮ",func():to_menu("home")]])
 
 func finish(won: bool) -> void:
 	if battle.active and not battle.finished and not won and player.health<=0:
@@ -383,8 +407,10 @@ func finish(won: bool) -> void:
 	inventory.close()
 	close_panels()
 	if training!="":
-		grad_training.stop()
-		show_result("НАВЧАННЯ ПЕРЕРВАНО","Командир вибув. Під час пуску не стій позаду пакета: струмінь газів б’є на десятки метрів.",[["ПОВТОРИТИ РОЗДІЛ",func():begin_training(training_chapter)],["ДО НАВЧАННЯ",func():to_menu("training")]])
+		var id := training
+		var why: String=course().death_text()
+		stop_courses()
+		show_result("НАВЧАННЯ ПЕРЕРВАНО",why,[["ПОВТОРИТИ РОЗДІЛ",func():begin_training(training_chapter,id)],["ДО НАВЧАННЯ",func():to_menu("training")]])
 		return
 	if won and selected_map in Campaign.IDS and campaign.complete(selected_map):
 		if not get_meta("automated_preview",false):campaign.save_progress()
@@ -439,6 +465,7 @@ func _process(delta: float) -> void:
 		var w := player.current()
 		objective.text="%s\nЗачистіть локацію й поверніться до старту.\nENTER біля старту — завершити операцію." % district.map_title
 		if battle.active:objective.text=battle.status()
+		elif training!="" and training!="grad":objective.text=course().objective_text()
 		hud_text.text="%s  /  %s\n%s\nR + 1 / 2 / 3 · ОБМІН МАГАЗИНА\nI · ПАТРОННИК   T · МАГАЗИН\nT + 1 / 2 / 3 · ПІДСУМОК" % [w.data.name,w.data.caliber,w.status()]
 		health_label.text="СТАН  %03d" % ceili(player.health)
 		health_label.modulate=Color("d49a7b") if player.health<35 else CREAM
@@ -469,6 +496,8 @@ func eject_case(where: Vector3, basis: Basis, weapon_id: String="ak74", live: bo
 	debris.eject(where,basis,weapon_id,live)
 
 func impact(where: Vector3, normal: Vector3=Vector3.UP, surface: Node3D=null) -> void:
+	# Knock-down targets of the training range count their hits.
+	if surface!=null and surface.has_meta("range_target"):surface.get_meta("range_target").hit(where)
 	# A ray starting inside a collider returns no valid surface normal.
 	# Do not fabricate a horizontal decal in mid-air in that case.
 	if normal.length_squared()<0.1:return
@@ -546,6 +575,7 @@ func load_settings() -> void:
 		volume=clampf(float(settings.get_value("settings","volume",0.65)),0,1)
 		shadows_on=bool(settings.get_value("settings","shadows",true))
 		fullscreen_on=bool(settings.get_value("settings","fullscreen",false))
+		ui_width=clampi(int(settings.get_value("settings","ui_width",1)),0,UI_WIDTHS.size()-1)
 
 	if selected_map in Campaign.IDS and not campaign.unlocked(selected_map):selected_map="forest_01"
 
@@ -553,6 +583,7 @@ func save_settings() -> void:
 	if get_meta("automated_preview",false) or training!="":return
 	settings.set_value("settings","shadows",sunlight.shadow_enabled if is_instance_valid(sunlight) else shadows_on)
 	settings.set_value("settings","fullscreen",fullscreen_on)
+	settings.set_value("settings","ui_width",ui_width)
 	settings.set_value("loadout","outfit",player_outfit)
 	settings.set_value("loadout","backpack",loadout_bag.serialize())
 	settings.set_value("operation","enemy_outfit",enemy_outfit)
@@ -690,6 +721,8 @@ func setup_ui() -> void:
 	canvas.add_child(root)
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	ui_root=root
+	get_viewport().size_changed.connect(update_frame)
 	menu=Control.new()
 	place(menu,root,0,0,1,1)
 	menu.theme=UiKit.theme()
@@ -787,14 +820,19 @@ func setup_ui() -> void:
 	grad=GradCommand.new()
 	add_child(grad)
 	grad.setup(self,root)
-	grad_training=GradTraining.new()
-	grad_training.setup(self,root)
 	drone_feed=DroneFeed.new()
 	drone_feed.setup(self,root)
 	topo_map=TopoMap.new()
 	topo_map.setup(self,root)
 	inventory=CombatInventory.new()
 	inventory.setup(self,root)
+	# The step cards of «Навчання» stay above the map, the inventory and the
+	# mortar sight; pause and results hide them.
+	grad_training=GradTraining.new()
+	grad_training.setup(self,root)
+	courses={"rifleman":RiflemanTraining.new(),"sniper":SniperTraining.new(),"mortarman":MortarTraining.new()}
+	for id in courses:courses[id].setup(self,root)
+	courses["grad"]=grad_training
 	loading_panel=Control.new()
 	place(loading_panel,root,0,0,1,1)
 	var backdrop := ColorRect.new()
@@ -814,6 +852,41 @@ func setup_ui() -> void:
 	main_menu.finish_setup()
 	# Pause, results and loading always cover the field overlays.
 	for layer in [pause_panel,result_panel,loading_panel]:root.move_child(layer,-1)
+	for layer in [symptoms,concussion_overlay,backdrop,topo_map]:bleed(layer)
+	update_frame()
+
+# Side margins of the interface frame for a screen of this size.
+static func frame_margin_for(screen: Vector2, aspect: float) -> float:
+	if aspect<=0.0 or screen.x<=screen.y*aspect:return 0.0
+	return floorf((screen.x-screen.y*aspect)*0.5)
+
+func set_ui_width(index: int) -> void:
+	ui_width=clampi(index,0,UI_WIDTHS.size()-1)
+	update_frame()
+	save_settings()
+
+func update_frame() -> void:
+	if not is_instance_valid(ui_root):return
+	var screen: Vector2=get_meta("screen_override",get_viewport().get_visible_rect().size)
+	frame_margin=frame_margin_for(screen,UI_WIDTHS[ui_width])
+	ui_root.offset_left=frame_margin
+	ui_root.offset_right=-frame_margin
+	bleeds=bleeds.filter(func(node: Control):return is_instance_valid(node))
+	for node in bleeds:fit_bleed(node)
+
+# Backdrops, shades and screen effects reach past the frame to the edges.
+func bleed(node: Control, right: bool=true) -> void:
+	node.set_meta("bleed_right",right)
+	bleeds.append(node)
+	fit_bleed(node)
+
+func fit_bleed(node: Control) -> void:
+	node.offset_left=-frame_margin
+	node.offset_right=frame_margin if node.get_meta("bleed_right",true) else 0.0
+
+# The whole screen in the local coordinates of an interface control.
+static func screen_rect(node: Control) -> Rect2:
+	return Rect2(-node.get_global_rect().position,node.get_viewport_rect().size)
 
 func style_option(node: OptionButton) -> void:
 	node.custom_minimum_size.y=47
@@ -828,6 +901,7 @@ func overlay(root: Control) -> Control:
 	var shade := ColorRect.new()
 	shade.color=Color(0.02,0.03,0.026,0.84)
 	place(shade,layer,0,0,1,1)
+	bleed(shade)
 	var side := TextureRect.new()
 	var gradient := GradientTexture2D.new()
 	gradient.gradient=Gradient.new()
@@ -838,6 +912,7 @@ func overlay(root: Control) -> Control:
 	side.stretch_mode=TextureRect.STRETCH_SCALE
 	side.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	place(side,layer,0,0,0.7,1)
+	bleed(side,false)
 	return layer
 
 func center_box(parent: Control) -> VBoxContainer:
@@ -1049,9 +1124,9 @@ func begin_operation() -> void:
 	if launching:return
 	launching=true
 	if training!="":
-		loading_sub.text="НАВЧАННЯ · БМ-21 «ГРАД» · РОЗДІЛ %d" % (training_chapter+1)
-		loading_title.text=GradTraining.CHAPTERS[training_chapter].title
-		loading_tip.text="Полігон під Авдіївкою, противника немає. Картка кроку — праворуч угорі; F6 — виконати крок автоматично."
+		loading_sub.text="НАВЧАННЯ · %s · РОЗДІЛ %d" % [course().course_title(),training_chapter+1]
+		loading_title.text=course().chapters()[training_chapter].title
+		loading_tip.text=course().loading_tip()
 	else:
 		loading_sub.text="ПІДГОТОВКА ОПЕРАЦІЇ"
 		loading_title.text=operation_title()

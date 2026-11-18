@@ -44,6 +44,7 @@ func setup(owner_game: Node3D, ui_root: Control) -> void:
  var backdrop := ColorRect.new()
  backdrop.color=Color(0.02,0.035,0.03,0.80)
  game.place(backdrop,panel,0,0.42,1,1)
+ game.bleed(backdrop)
  var content := VBoxContainer.new()
  content.add_theme_constant_override("separation",9)
  game.place(content,panel,0.08,0.45,0.92,0.97)

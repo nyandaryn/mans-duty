@@ -29,6 +29,12 @@ func setup(owner_game: Node3D, owner: GradCommand) -> void:
  game.place(tablet,self,0.03,0.05,0.97,0.95)
  tablet.setup(game,command)
  tablet.hide();panels.tablet=tablet
+ resized.connect(fit_tablet)
+
+# The tablet is a device: on wide screens it stays about 2:1 and centred.
+func fit_tablet() -> void:
+ var extra:=maxf(0.0,size.x*0.94-size.y*0.9*2.05)*0.5
+ tablet.offset_left=extra;tablet.offset_right=-extra
 
 func panel(left: float, top: float, right: float, bottom: float) -> VBoxContainer:
  var sheet:=PanelContainer.new()
@@ -232,7 +238,8 @@ func draw_sight(v: GradVehicle) -> void:
  for k in range(64):
   var a0:=TAU*k/64;var a1:=TAU*(k+1)/64
   var p0:=c+Vector2(cos(a0),sin(a0))*r;var p1:=c+Vector2(cos(a1),sin(a1))*r
-  var q0:=c+Vector2(cos(a0),sin(a0))*maxf(size.x,size.y);var q1:=c+Vector2(cos(a1),sin(a1))*maxf(size.x,size.y)
+  # Far past the edges: the frame may be narrower than the screen.
+  var q0:=c+Vector2(cos(a0),sin(a0))*size.length()*3.0;var q1:=c+Vector2(cos(a1),sin(a1))*size.length()*3.0
   draw_colored_polygon(PackedVector2Array([p0,q0,q1,p1]),Color(0.01,0.01,0.01))
  draw_arc(c,r,0,TAU,96,Color(0.15,0.15,0.13),4)
  # Reticle of the PG-1M: crosshair with thousandth marks (10° field).
@@ -294,8 +301,8 @@ func draw_drone() -> void:
  draw_line(c+Vector2(0,-40),c+Vector2(0,-8),ink,2);draw_line(c+Vector2(0,8),c+Vector2(0,40),ink,2)
  draw_arc(c,3,0,TAU,12,ink,2)
  var lost:=d.signal_strength<0.04
- if lost:draw_rect(Rect2(Vector2.ZERO,size),Color(0.4,0.42,0.38,0.85))
- elif d.signal_strength<0.3:draw_rect(Rect2(Vector2.ZERO,size),Color(0.5,0.5,0.45,(0.3-d.signal_strength)*1.2*randf()))
+ if lost:draw_rect(game.screen_rect(self),Color(0.4,0.42,0.38,0.85))
+ elif d.signal_strength<0.3:draw_rect(game.screen_rect(self),Color(0.5,0.5,0.45,(0.3-d.signal_strength)*1.2*randf()))
  text(Vector2(30,40),"ДРОН СП · РЕТРАНСЛЯТОР · АКБ %d %% · ЗВ’ЯЗОК %d %%%s" % [roundi(d.battery*100),roundi(d.signal_strength*100)," · НЕМАЄ СИГНАЛУ" if lost else ""],17,ink)
  text(Vector2(30,64),"ВИСОТА %.0f м · %.0f км/год · ЗУМ %.1f× · АЗ %s" % [d.floor_height,d.velocity.length()*3.6,d.zoom,GradBallistics.mils_text(GradBallistics.bearing(-d.camera.global_basis.z))],15,ink)
  var reading:=command.rangefinder()

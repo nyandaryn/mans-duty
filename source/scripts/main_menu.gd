@@ -51,6 +51,9 @@ var continue_detail: Label
 var training_screen: Control
 var chapter_cards: Array[Button]=[]
 var chapter_pick := 0
+var course_pick := ""
+var course_tabs: Array[Button]=[]
+var chapter_list: VBoxContainer
 var chapter_title: Label
 var chapter_about: Label
 var chapter_steps: GridContainer
@@ -71,6 +74,7 @@ func setup(owner_game: Node3D, menu_root: Control) -> void:
  backdrop.material=grade
  grade.set_shader_parameter("blur",0.0);grade.set_shader_parameter("fade",0.0);grade.set_shader_parameter("shade",0.9)
  game.place(backdrop,self,0,0,1,1)
+ game.bleed(backdrop)
  home=Control.new();home.mouse_filter=Control.MOUSE_FILTER_IGNORE
  game.place(home,self,0,0,1,1)
  build_home()
@@ -103,7 +107,7 @@ func build_home() -> void:
  var entries:=[
   ["01","КАМПАНІЯ","Дві гілки, десять операцій: лісосмуги, села й міські квартали",func():show_screen("campaign"),""],
   ["02","ВЕЛИКИЙ ШТУРМ","Авдіївка: три рубежі, до 50 бійців на сторону, «Град» і міномет",func():show_screen("battle"),""],
-  ["03","НАВЧАННЯ","БМ-21 «Град»: від маршу до залпу — п’ять розділів",func():show_screen("training"),"НОВЕ"],
+  ["03","НАВЧАННЯ","Стрілець, снайпер, мінометник і «Град»: крок за кроком",func():show_screen("training"),"НОВЕ"],
   ["04","СПОРЯДЖЕННЯ","Клас, зброя, одяг і наплічник",func():show_screen("loadout"),""],
   ["05","НАЛАШТУВАННЯ","Звук, миша, екран і керування",func():show_screen("settings"),""],
   ["06","ВИЙТИ","",func():get_tree().quit(),""]]
@@ -140,8 +144,8 @@ func build_home() -> void:
  var badge_style: StyleBoxFlat=badge.get_theme_stylebox("panel");badge_style.content_margin_top=1;badge_style.content_margin_bottom=1;badge_style.content_margin_left=8;badge_style.content_margin_right=8
  badge.add_child(UiKit.text("НОВЕ",12,UiKit.DARK_TEXT,"head"));tags.add_child(badge)
  tags.add_child(UiKit.text("ВЕРСІЯ %s" % ProjectSettings.get_setting("application/config/version","—"),12,UiKit.MUTED,"head"))
- page.add_child(UiKit.text("НАВЧАННЯ: БМ-21 «ГРАД»",30,UiKit.INK,"display"))
- page.add_child(UiKit.wrapped("Командир обслуги РСЗВ крок за кроком: марш, розгортання, розвідка дроном, дані для стрільби, пуск і коректура. Підказки на екрані, маркери на місцевості, будь-який розділ окремо.",14,UiKit.SOFT))
+ page.add_child(UiKit.text("НАВЧАННЯ ДЛЯ ВСІХ КЛАСІВ",30,UiKit.INK,"display"))
+ page.add_child(UiKit.wrapped("Новий полігон: стрілець, снайпер і мінометник крок за кроком — рух, стрільба, магазини, ПСО-1, міномет від розгортання до ураження. Широкі монітори 21:9 і 32:9, авторозрахунок у планшеті «Града».",14,UiKit.SOFT))
  var go:=UiKit.ghost("ПОЧАТИ НАВЧАННЯ   →",func():show_screen("training"),15)
  go.size_flags_horizontal=Control.SIZE_SHRINK_BEGIN;page.add_child(go)
  # Footer: version and the keys of the menu.
@@ -216,18 +220,21 @@ func build_training() -> Control:
  var screen:=Control.new()
  game.place(screen,game.menu,0,0,1,1)
  UiKit.sheet(game,screen,0.78)
- UiKit.header(game,screen,"ГОЛОВНЕ МЕНЮ   /   НАВЧАННЯ","НАВЧАННЯ","БМ-21 «ГРАД» · КОМАНДИР ОБСЛУГИ РСЗВ",back)
- var list:=VBoxContainer.new();list.add_theme_constant_override("separation",8)
- game.place(list,screen,0.035,0.24,0.47,0.87)
- for i in range(GradTraining.CHAPTERS.size()):
-  var card:=ChapterCard.new()
-  card.setup(game,i,select_chapter.bind(i))
-  list.add_child(card);chapter_cards.append(card)
+ UiKit.header(game,screen,"ГОЛОВНЕ МЕНЮ   /   НАВЧАННЯ","НАВЧАННЯ","ЧОТИРИ КУРСИ · БЕЗ ПРОТИВНИКА · БУДЬ-ЯКИЙ РОЗДІЛ ОКРЕМО",back)
+ # One tab per class.
+ var tabs:=HBoxContainer.new();tabs.add_theme_constant_override("separation",8)
+ game.place(tabs,screen,0.035,0.215,0.965,0.285)
+ for id in game.COURSE_IDS:
+  var tab:=CourseTab.new()
+  tab.setup(game,id,select_course.bind(id))
+  tabs.add_child(tab);course_tabs.append(tab)
+ chapter_list=VBoxContainer.new();chapter_list.add_theme_constant_override("separation",8)
+ game.place(chapter_list,screen,0.035,0.31,0.47,0.87)
  var detail:=PanelContainer.new()
  var style:=UiKit.flat(UiKit.PANEL,UiKit.LINE,1)
  style.content_margin_left=28;style.content_margin_right=28;style.content_margin_top=22;style.content_margin_bottom=22
  detail.add_theme_stylebox_override("panel",style)
- game.place(detail,screen,0.5,0.24,0.965,0.87)
+ game.place(detail,screen,0.5,0.31,0.965,0.87)
  var page:=VBoxContainer.new();page.add_theme_constant_override("separation",10);detail.add_child(page)
  chapter_state=UiKit.text("",13,UiKit.ACCENT,"head");page.add_child(chapter_state)
  chapter_title=UiKit.text("",34,UiKit.INK,"display");chapter_title.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;page.add_child(chapter_title)
@@ -238,11 +245,11 @@ func build_training() -> Control:
  chapter_steps.add_theme_constant_override("h_separation",24);chapter_steps.add_theme_constant_override("v_separation",4)
  chapter_steps.size_flags_vertical=Control.SIZE_EXPAND_FILL;page.add_child(chapter_steps)
  var row:=HBoxContainer.new();row.add_theme_constant_override("separation",12);page.add_child(row)
- var start:=UiKit.cta("ПОЧАТИ РОЗДІЛ   →",func():game.begin_training(chapter_pick))
+ var start:=UiKit.cta("ПОЧАТИ РОЗДІЛ   →",func():game.begin_training(chapter_pick,course_pick))
  start.size_flags_horizontal=Control.SIZE_EXPAND_FILL;row.add_child(start)
- var full:=UiKit.ghost("УВЕСЬ КУРС З ПОЧАТКУ",func():game.begin_training(0),15)
+ var full:=UiKit.ghost("УВЕСЬ КУРС З ПОЧАТКУ",func():game.begin_training(0,course_pick),15)
  full.custom_minimum_size=Vector2(0,58);row.add_child(full)
- var note:=UiKit.wrapped("Полігон на карті Авдіївки без противника. Картка кроку — праворуч угорі, маркер показує, куди йти. Застряг — F6 виконає крок за тебе. ESC — пауза й вихід. Пройдені розділи зберігаються.",13,UiKit.MUTED)
+ var note:=UiKit.wrapped("Противника немає: піхота вчиться на полігоні, «Град» — у полі під Авдіївкою. Картка кроку — праворуч угорі, маркер показує, куди йти. Застряг — F6 виконає крок за тебе. ESC — пауза й вихід. Пройдені розділи зберігаються.",13,UiKit.MUTED)
  game.place(note,screen,0.035,0.9,0.965,0.98)
  return screen
 
@@ -250,18 +257,35 @@ func select_chapter(index: int) -> void:
  chapter_pick=index
  refresh_training()
 
+func picked_course() -> TrainingCourse:return game.courses[course_pick]
+
+func select_course(id: String) -> void:
+ if id==course_pick and not chapter_cards.is_empty():return
+ course_pick=id;chapter_pick=0
+ for card in chapter_cards:card.queue_free()
+ chapter_cards.clear()
+ for i in range(picked_course().chapters().size()):
+  var card:=ChapterCard.new()
+  card.setup(game,picked_course(),i,select_chapter.bind(i))
+  chapter_list.add_child(card);chapter_cards.append(card)
+ refresh_training()
+
 func refresh_training() -> void:
+ # First visit: the course of the player's own class.
+ if course_pick=="":select_course(game.player_class if game.courses.has(game.player_class) else "rifleman");return
  if chapter_cards.is_empty():return
- var done:Array=GradTraining.completed(game)
+ var course:=picked_course()
+ for tab in course_tabs:tab.selected=tab.id==course_pick;tab.queue_redraw()
+ var done:Array=course.done_chapters()
  for i in range(chapter_cards.size()):
   var card: ChapterCard=chapter_cards[i]
   card.selected=i==chapter_pick;card.done=i in done;card.queue_redraw()
- var data: Dictionary=GradTraining.CHAPTERS[chapter_pick]
- chapter_state.text="РОЗДІЛ %d / %d · ≈ %d ХВ%s" % [chapter_pick+1,GradTraining.CHAPTERS.size(),data.minutes,"  ·  ПРОЙДЕНО" if chapter_pick in done else ""]
+ var data: Dictionary=course.chapters()[chapter_pick]
+ chapter_state.text="%s · РОЗДІЛ %d / %d · ≈ %d ХВ%s" % [course.course_title(),chapter_pick+1,course.chapters().size(),data.minutes,"  ·  ПРОЙДЕНО" if chapter_pick in done else ""]
  chapter_title.text=data.title
  chapter_about.text=data.about
  for child in chapter_steps.get_children():child.queue_free()
- var steps: Array=GradTraining.STEPS[chapter_pick]
+ var steps: Array=course.steps()[chapter_pick]
  var half:=ceili(steps.size()/2.0)
  # Column-major: the first half on the left, the rest on the right.
  for row in range(half):
@@ -271,14 +295,40 @@ func refresh_training() -> void:
    cell.size_flags_horizontal=Control.SIZE_EXPAND_FILL
    chapter_steps.add_child(cell)
 
+# A class tab of the training screen: its name, its kit, chapters done.
+class CourseTab extends Button:
+ var id := ""
+ var selected := false
+ var game: Node3D
+ func setup(owner_game: Node3D, course_id: String, on_press: Callable) -> void:
+  game=owner_game;id=course_id;flat=true;text=""
+  custom_minimum_size=Vector2(0,50);size_flags_horizontal=Control.SIZE_EXPAND_FILL
+  mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
+  add_theme_stylebox_override("focus",StyleBoxEmpty.new())
+  mouse_entered.connect(queue_redraw);mouse_exited.connect(queue_redraw)
+  focus_entered.connect(queue_redraw);focus_exited.connect(queue_redraw)
+  pressed.connect(func():game.sound("click",-12);on_press.call())
+ func _draw() -> void:
+  var course: TrainingCourse=game.courses[id]
+  var hot:=is_hovered() or has_focus()
+  draw_rect(Rect2(Vector2.ZERO,size),Color(UiKit.ACCENT,0.14) if selected else (Color(1,1,1,0.07) if hot else Color(0.03,0.045,0.04,0.7)))
+  draw_rect(Rect2(0,size.y-3,size.x,3),UiKit.ACCENT if selected else UiKit.LINE)
+  draw_string(UiKit.font("head"),Vector2(16,22),course.course_title(),HORIZONTAL_ALIGNMENT_LEFT,size.x-80,19,UiKit.INK if selected or hot else UiKit.SOFT)
+  draw_string(UiKit.font("body"),Vector2(16,40),course.course_role(),HORIZONTAL_ALIGNMENT_LEFT,size.x-80,12,UiKit.MUTED)
+  var count:="%d / %d" % [course.done_chapters().size(),course.chapters().size()]
+  var font:=UiKit.font("head")
+  var w:=font.get_string_size(count,HORIZONTAL_ALIGNMENT_LEFT,-1,14).x
+  draw_string(font,Vector2(size.x-w-14,30),count,HORIZONTAL_ALIGNMENT_LEFT,-1,14,UiKit.GOOD if course.done_chapters().size()==course.chapters().size() else UiKit.FAINT)
+
 class ChapterCard extends Button:
  var index := 0
  var selected := false
  var done := false
  var game: Node3D
- func setup(owner_game: Node3D, i: int, on_press: Callable) -> void:
-  game=owner_game;index=i;flat=true;text=""
-  custom_minimum_size=Vector2(0,78)
+ var course: TrainingCourse
+ func setup(owner_game: Node3D, owner_course: TrainingCourse, i: int, on_press: Callable) -> void:
+  game=owner_game;course=owner_course;index=i;flat=true;text=""
+  custom_minimum_size=Vector2(0,72)
   size_flags_vertical=Control.SIZE_SHRINK_BEGIN
   mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
   add_theme_stylebox_override("focus",StyleBoxEmpty.new())
@@ -291,10 +341,10 @@ class ChapterCard extends Button:
   draw_rect(Rect2(Vector2.ZERO,size),bg)
   draw_rect(Rect2(Vector2.ZERO,size),UiKit.ACCENT if selected else UiKit.LINE,false,1.0)
   draw_rect(Rect2(0,0,4,size.y),UiKit.ACCENT if selected else (UiKit.GOOD if done else UiKit.FAINT))
-  var data: Dictionary=GradTraining.CHAPTERS[index]
+  var data: Dictionary=course.chapters()[index]
   draw_string(UiKit.font("display"),Vector2(24,size.y*0.5+15),"%02d" % (index+1),HORIZONTAL_ALIGNMENT_LEFT,-1,40,UiKit.ACCENT if selected else UiKit.MUTED)
   draw_string(UiKit.font("head"),Vector2(86,size.y*0.5-6),data.title,HORIZONTAL_ALIGNMENT_LEFT,size.x-220,20,UiKit.INK)
-  draw_string(UiKit.font("body"),Vector2(86,size.y*0.5+19),"%d кроків · ≈ %d хв" % [GradTraining.STEPS[index].size(),data.minutes],HORIZONTAL_ALIGNMENT_LEFT,-1,14,UiKit.MUTED)
+  draw_string(UiKit.font("body"),Vector2(86,size.y*0.5+19),"%d %s · ≈ %d хв" % [course.steps()[index].size(),UiKit.plural(course.steps()[index].size(),"крок","кроки","кроків"),data.minutes],HORIZONTAL_ALIGNMENT_LEFT,-1,14,UiKit.MUTED)
   var state:="ПРОЙДЕНО" if done else "НЕ ПРОЙДЕНО"
   var font:=UiKit.font("head")
   var w:=font.get_string_size(state,HORIZONTAL_ALIGNMENT_LEFT,-1,12).x
@@ -324,6 +374,17 @@ func build_settings() -> Control:
  shadows.button_pressed=game.sunlight.shadow_enabled
  shadows.toggled.connect(func(on: bool):game.sunlight.shadow_enabled=on;game.save_settings())
  left.add_child(shadows)
+ # Wide monitors: how far the interface reaches; the picture is always full.
+ var width_row:=HBoxContainer.new();width_row.add_theme_constant_override("separation",12)
+ var width_caption:=UiKit.text("Ширина інтерфейсу",15,UiKit.INK)
+ width_caption.size_flags_horizontal=Control.SIZE_EXPAND_FILL;width_row.add_child(width_caption)
+ var widths:=OptionButton.new()
+ for title in game.UI_WIDTH_LABELS:widths.add_item(title)
+ widths.selected=game.ui_width
+ widths.custom_minimum_size=Vector2(200,40)
+ widths.item_selected.connect(func(i: int):game.set_ui_width(i))
+ width_row.add_child(widths)
+ left.add_child(width_row)
  left.add_child(section("ПРОТИВНИК"))
  var enemies:=OptionButton.new()
  for title in Wardrobe.LABELS:enemies.add_item(title)

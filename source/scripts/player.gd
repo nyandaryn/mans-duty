@@ -386,7 +386,7 @@ func _physics_process(delta: float) -> void:
 	var view_fov := rad_to_deg(2*atan(tan(deg_to_rad(78.0)*0.5)/6.0)) if field_rig.mode=="rangefinder" else (50.0 if current().id=="svd" else 65.0) if aim else 78.0
 	if launcher.mode=="ready":view_fov=lerpf(78,60,launcher.ads)
 	camera.fov=lerpf(camera.fov,view_fov,minf(delta*12,1))
-	camera.far=4000.0 if game.player_class=="grad" and game.battle.active else 700.0 if game.battle.active else 1250.0 if field_rig.mode=="rangefinder" else (850.0 if launcher.active() else 160.0)
+	camera.far=4000.0 if game.player_class=="grad" and game.battle.active else 700.0 if game.battle.active else 1250.0 if field_rig.mode=="rangefinder" else (850.0 if launcher.active() else (900.0 if game.district.map_id==TrainingRange.ID else 160.0))
 	update_breath(delta,sprint and planar_speed>4.5)
 	recoil=move_toward(recoil,0,delta*0.12)
 	camera.rotation.x=pitch+recoil+recoil_offset.y+sin(symptom_clock*1.8)*blood_loss*0.025+sin(symptom_clock*17)*pain*0.002

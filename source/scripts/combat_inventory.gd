@@ -28,6 +28,7 @@ func setup(owner_game: Node3D, parent: Control) -> void:
  var backdrop := ColorRect.new()
  backdrop.color=Color(0.025,0.035,0.032,0.97)
  game.place(backdrop,self,0,0,1,1)
+ game.bleed(backdrop)
  game.place(game.label("ПОЛЬОВИЙ ІНВЕНТАР",30,game.GOLD),self,0.04,0.045,0.65,0.11)
  game.place(game.label("TAB / ESC · ЗАКРИТИ     БІЙ ТРИВАЄ",13,game.CREAM),self,0.64,0.065,0.97,0.11)
  game.place(game.label("01 / БОЄЦЬ",14,game.GOLD),self,0.04,0.15,0.27,0.20)

@@ -30,6 +30,8 @@ var fragments: Array[RigidBody3D] = []
 var navigation_pending := false
 var grid_limit := 47
 var canopy_centers: Array[Vector3] = []
+# Extra outlines for the 1:10 000 sheet (the training range draws its works).
+var map_marks: Array[PackedVector2Array] = []
 var map_id := "city"
 var map_title := "МІСТО / КВАРТАЛ"
 var interior_points: Array[Vector3] = []
@@ -228,6 +230,12 @@ func build(selected_map: String="city") -> void:
 	if selected_map in Campaign.IDS:
 		campaign_definition=Campaign.mission(selected_map)
 		CampaignWorld.new().build(self,campaign_definition)
+		return
+	if selected_map==TrainingRange.ID:
+		TrainingRange.build(self)
+		flush()
+		flush_details()
+		build_grid()
 		return
 	map_id=selected_map if selected_map in ["city","shelterbelt"] else "city"
 	random.seed=7003 if map_id=="city" else 23051

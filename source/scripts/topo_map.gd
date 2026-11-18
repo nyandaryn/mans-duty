@@ -109,6 +109,7 @@ func build() -> void:
    outline.append(Vector2(spec.point)+Vector2(p.x,p.z))
   buildings.append(outline)
  for point in district.canopy_centers:trees.append(Vector2(point.x,point.z))
+ for outline in district.map_marks:buildings.append(outline)
  var line := PackedVector2Array()
  for z in range(-200,201,4):line.append(Vector2(sin(z/57.0+heading)*18,z))
  if real:
@@ -122,6 +123,7 @@ func build() -> void:
    if not inside:continue
    var major:bool=road[0] in ["trunk","primary","secondary","tertiary"]
    roads.append({"points":points,"width":7.6 if major else 4.6,"fill":Color("e58c58") if major else ORANGE})
+ elif district.map_id==TrainingRange.ID:pass
  elif kind=="district":
   roads.append({"points":line,"width":7.6,"fill":Color("e58c58")})
   for z in [-70.0,30.0]:roads.append({"points":PackedVector2Array([Vector2(-200,z),Vector2(200,z)]),"width":7.6,"fill":Color("e58c58")})
