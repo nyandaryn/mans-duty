@@ -1,6 +1,9 @@
 class_name CombatInventory
 extends Control
 
+# Left edge of the gear column, a share of the width; the soldier's column is
+# left of it.
+const GEAR_LEFT := 0.31
 var game: Node3D
 var portrait: ModelPreview
 var gear_box: VBoxContainer
@@ -37,10 +40,10 @@ func setup(owner_game: Node3D, parent: Control) -> void:
  summary=game.label("",14)
  summary.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  game.place(summary,self,0.04,0.82,0.28,0.94)
- game.place(game.label("02 / СПОРЯДЖЕННЯ",14,game.GOLD),self,0.31,0.15,0.66,0.20)
+ game.place(game.label("02 / СПОРЯДЖЕННЯ",14,game.GOLD),self,GEAR_LEFT,0.15,0.66,0.20)
  gear_box=VBoxContainer.new()
  gear_box.add_theme_constant_override("separation",8)
- game.place(gear_box,self,0.31,0.22,0.66,0.71)
+ game.place(gear_box,self,GEAR_LEFT,0.22,0.66,0.71)
  # Belt pouches with the first-aid kits; an empty one takes a kit from the pack.
  belt_tiles.clear()
  for i in range(Operator.BELT_MEDKITS):

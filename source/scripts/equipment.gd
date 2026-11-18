@@ -14,7 +14,7 @@ const ITEMS = {
  "ammo_m9":{"name":"9 × 19 / 30", "short":"9×19", "weapon":"m9","rounds":30,"size":Vector2i(2,1),"mass":0.008,"color":Color("697d7a")},
  "mortar_mine":{"name":"82-мм міна О-832ДУ", "short":"МІНА 82","size":Vector2i(1,2),"mass":3.3,"color":Color("5d6450"),"description":"Осколкова міна до міномета 2Б14 · 3,1 кг\nЗ основним і додатковими зарядами в конвертах — 3,3 кг."},
  "medkit":{"name":"Універсальна аптечка", "short":"АПТЕЧКА","size":Vector2i(2,2),"mass":0.45,"color":Color("788157")},
- "rangefinder":{"name":"Лазерний далекомір", "short":"ДАЛЕКОМІР","size":Vector2i(2,2),"mass":0.32,"color":Color("606d63")},
+ "rangefinder":{"name":"Лазерний далекомір 6–12×", "short":"ДАЛЕКОМІР","size":Vector2i(2,2),"mass":0.32,"color":Color("606d63")},
  "recon_drone":{"name":"Розвіддрон / FPV", "short":"РОЗВІДДРОН","size":Vector2i(3,2),"mass":1.2,"color":Color("626e60")}
 }
 const PACK_MASS := 1.35

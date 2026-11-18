@@ -251,7 +251,7 @@ func run():
  check(t.title.text==t.current().title and t.keys_holder.get_child_count()>0,"Card shows the first step once the position is ready")
  grad.hud.toggle("tablet")
  await frames(3)
- check(t.layout=="compact_left" and t.card.get_rect().end.y>t.size.y-30 and t.card.get_rect().position.x<40 and not t.body.visible,"Over the tablet the card is compact at the bottom left, off the data column")
+ check(t.layout=="compact_left" and t.card.get_rect().end.y>t.size.y-30 and t.card.get_rect().position.x<40 and t.body.visible and not t.footer.visible,"Over the tablet the card is compact at the bottom left, off the data column, with the step's text")
  grad.hud.toggle("console")
  await frames(3)
  check(t.layout=="console" and t.card.get_rect().position.y<40 and t.body.visible,"With the fire control panel it stays on top")

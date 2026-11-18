@@ -16,6 +16,12 @@ const POUCH_TIME := 0.8
 const POUCH_STOW := 0.6
 var reading := "— — — м"
 var sample_left := 0.0
+# Optical zoom 6–12× on the wheel, as in the Maven RFZ.1 6–12×21 (≈300 g, a
+# hand rangefinder of this size). Fixed-power ones are 6× or 7×. The power
+# set stays for the next time the rangefinder comes out.
+const ZOOM_MIN := 6
+const ZOOM_MAX := 12
+var zoom := ZOOM_MIN
 var sampled_direction := Vector3.FORWARD
 var pack: Node3D
 var item_prop: Node3D
@@ -107,6 +113,13 @@ func interrupt_work(reason: String) -> void:
  if mode!="work":return
  work_notice=work_title+" "+reason;work_notice_left=4
  cancel()
+
+func step_zoom(by: int) -> void:
+ if mode!="rangefinder":return
+ zoom=clampi(zoom+by,ZOOM_MIN,ZOOM_MAX)
+
+# Camera field of view through the eyepiece: the naked eye's 78° over the power.
+func view_fov() -> float:return rad_to_deg(2*atan(tan(deg_to_rad(78.0)*0.5)/zoom))
 
 func measure() -> void:
  if mode!="rangefinder" or sample_left>0:return

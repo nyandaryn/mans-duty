@@ -22,8 +22,9 @@ var acked := false
 var flash := 0.0
 var done_title := ""
 # "full" at the top right; "console" without the chapter line and footer;
-# "compact" (title, keys, readout) at the bottom right, "compact_left" at the
-# bottom left, over panels the player has to read.
+# "compact" at the bottom right and "compact_left" at the bottom left, over
+# panels the player has to read: no chapter line or footer either, but the
+# step's text stays — it says how to close the panel and what comes next.
 var layout := ""
 var banner_left := 0.0
 var finished_chapters: Array[int]=[]
@@ -263,8 +264,9 @@ func apply_layout(mode: String) -> void:
  layout=mode
  chapter_label.visible=mode=="full"
  footer.visible=mode=="full"
- body.visible=mode=="full" or mode=="console"
  var bottom:=mode!="full" and mode!="console"
+ # Solid over a panel: its text must not show through the card.
+ card_style.bg_color.a=0.98 if bottom else 0.9
  var left:=mode=="compact_left"
  card.anchor_left=0.0 if left else 1.0;card.anchor_right=card.anchor_left
  card.offset_left=22.0 if left else -470.0;card.offset_right=470.0 if left else -22.0

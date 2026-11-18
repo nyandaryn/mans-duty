@@ -80,6 +80,15 @@ func run():
  grad.enter("driver")
  check(grad.seat=="driver" and not game.player.is_physics_processing() and game.player.collision_layer==0,"Driver seated, the operator body parked")
  check(vehicle.seat_camera.current,"View from the driver's seat")
+ var dash: GradDashboard=vehicle.dashboard
+ check(dash.screen.is_inside_tree() and dash.screen.mesh.material.albedo_texture==dash.viewport.get_texture(),"Instruments painted on the dashboard before the driver")
+ await frames(2)
+ check(dash.live and dash.viewport.render_target_update_mode==SubViewport.UPDATE_ALWAYS,"…and kept live while he sits")
+ check(not grad.instruments_shown(),"Readings large on the screen only on request")
+ Input.action_press("aim")
+ check(grad.instruments_shown(),"Right mouse button held: the readings on the screen")
+ Input.action_release("aim")
+ check(not grad.instruments_shown(),"…gone when it is released")
  grad.set_process(false)
 
  # --- Engine and march ----------------------------------------------------
@@ -96,7 +105,7 @@ func run():
  check(vehicle.gear==GradVehicle.NEUTRAL,"Gears do not engage without the clutch")
  vehicle.clutch_pedal=1.0
  vehicle.shift(1)
- check(vehicle.gear==GradVehicle.NEUTRAL+1,"First gear with the clutch down")
+ check(vehicle.gear==GradVehicle.NEUTRAL+1 and vehicle.notice=="Передача 1","First gear with the clutch down, named on the screen")
  vehicle.toggle_handbrake()
  vehicle.throttle=0.35
  for i in range(90):
@@ -302,6 +311,8 @@ func run():
  check(not game.battle.halted and grad.assault_ordered,"Assault ordered by radio")
  grad.leave()
  check(game.player.is_physics_processing() and game.player.collision_layer==2,"Commander steps out of the cab")
+ await frames(2)
+ check(not vehicle.dashboard.live and vehicle.dashboard.viewport.render_target_update_mode==SubViewport.UPDATE_ONCE,"Empty cab: the instruments keep their last readings and are not repainted")
  print("checks: %d" % checks)
  print("PASS" if not failed else "FAILED")
  quit(1 if failed else 0)

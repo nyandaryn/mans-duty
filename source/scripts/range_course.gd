@@ -73,16 +73,21 @@ func stance(lying: bool, kneeling: bool=false) -> void:
 func target_marker(id: String, caption: String) -> Dictionary:
  return {"point":TrainingRange.TARGETS[id].point+Vector3.UP*(1.9 if TrainingRange.TARGETS[id].kind=="figure" else 1.1),"caption":caption}
 
+# Over a panel the card goes to the bottom left: beside the map sheet and the
+# mortar sight, over the soldier's portrait in the inventory — its buttons
+# are on the right.
 func layout_mode() -> String:
- if game.topo_map.visible or game.crew.sight.visible:return "compact_left"
- if game.inventory_open:return "compact"
+ if game.topo_map.visible or game.crew.sight.visible or game.inventory_open:return "compact_left"
  return "full"
 
-# Over the map the card keeps to the margin left of the sheet.
+# …and narrows to the room left of the panel.
 func card_width() -> float:
- if not game.topo_map.visible:return CARD_WIDTH
- var sheet: Rect2=game.topo_map.sheet_rect()
- var room: float=game.topo_map.get_global_rect().position.x+sheet.position.x-card.get_global_rect().position.x-16.0-38.0
+ var edge := INF
+ if game.topo_map.visible:edge=game.topo_map.get_global_rect().position.x+game.topo_map.sheet_rect().position.x
+ elif game.crew.sight.visible:edge=game.crew.sight.sheet.get_global_rect().position.x
+ elif game.inventory_open:edge=game.inventory.get_global_rect().position.x+game.inventory.size.x*CombatInventory.GEAR_LEFT
+ if edge==INF:return CARD_WIDTH
+ var room: float=edge-card.get_global_rect().position.x-16.0-38.0
  return clampf(floorf(room),250.0,CARD_WIDTH)
 
 func markers_hidden() -> bool:

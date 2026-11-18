@@ -1,4 +1,4 @@
-# MANS DUTY — «КВАРТАЛ — Зачистка»
+# MANS DUTY
 
 **English** · [Українська](#українська)
 
@@ -28,7 +28,7 @@ The game is not damaged.
 - **Windows.** Extract the whole archive (right click → *Extract All*); do not run the game from
   inside the zip. Keep `kvartal.exe` and `kvartal.pck` in one folder and run `kvartal.exe`.
   If the blue «Windows protected your PC» window appears, click *More info* → *Run anyway*.
-- **macOS.** Double-click the archive and drag «КВАРТАЛ — Зачистка.app» to Applications.
+- **macOS.** Double-click the archive and drag «Mans Duty.app» to Applications.
   On macOS 14 and older, Control-click the app → *Open* → *Open*. On macOS 15 and newer, open it
   once, click *Done*, then go to System Settings → Privacy & Security → *Open Anyway*.
 - **Linux.**
@@ -90,7 +90,7 @@ Godot 4.5.1. Інтерфейс український; інтернет під 
   з архіву. `kvartal.exe` і `kvartal.pck` мають лежати в одній папці; запустіть `kvartal.exe`.
   Якщо з'явиться синє вікно «Windows захистила ваш ПК», натисніть «Докладніше» → «Усе одно
   запустити».
-- **macOS.** Розпакуйте архів подвійним клацанням і перетягніть «КВАРТАЛ — Зачистка.app»
+- **macOS.** Розпакуйте архів подвійним клацанням і перетягніть «Mans Duty.app»
   у «Програми». На macOS 14 і старших: Control-клацання по грі → «Відкрити» → «Відкрити».
   На macOS 15 і новіших: відкрийте гру, натисніть «Готово», далі Системні параметри →
   Приватність і безпека → «Усе одно відкрити».

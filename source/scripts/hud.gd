@@ -90,7 +90,7 @@ func _draw() -> void:
 			draw_line(center+Vector2(-12,0),center+Vector2(12,0),Color("d3b26d"),1)
 			draw_line(center+Vector2(0,-12),center+Vector2(0,12),Color("d3b26d"),1)
 			draw_string(font,center+Vector2(-150,80),field.reading,HORIZONTAL_ALIGNMENT_LEFT,-1,25,Color("edb962"))
-			text="ДАЛЕКОМІР · 6× · ЛКМ — ВИМІРЯТИ · K — ПРИБРАТИ"
+			text="ДАЛЕКОМІР · %d× · КОЛІЩАТКО — КРАТНІСТЬ %d–%d× · ЛКМ — ВИМІРЯТИ · K — ПРИБРАТИ" % [field.zoom,FieldRig.ZOOM_MIN,FieldRig.ZOOM_MAX]
 		elif field.mode=="work":
 			text="%s · %.1f с · РУХ — СКАСУВАТИ" % [field.work_title,maxf(0,field.work_time-field.timer)]
 			var bar := Rect2(center.x-160,size.y-118,320,8)

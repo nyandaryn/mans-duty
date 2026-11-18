@@ -184,10 +184,17 @@ func run():
  if p.field_rig.mode!="":await key(KEY_K)
  await key(KEY_M)
  check(await passes("map"),"M — the map")
- check(t.layout=="compact_left","Card goes small over the map")
+ await frames(3)
+ check(t.layout=="compact_left" and t.body.visible,"Card goes small over the map, the step's text stays")
+ # Left of the sheet where the screen leaves room; the narrowest card where not.
+ var sheet_left: float=game.topo_map.get_global_rect().position.x+game.topo_map.sheet_rect().position.x
+ var room: float=sheet_left-t.card.get_global_rect().position.x-16.0-38.0
+ check(t.card.get_global_rect().end.x<=sheet_left if room>=250.0 else is_equal_approx(t.card_box.custom_minimum_size.x,250.0),"…left of the map sheet, or as narrow as it goes (%d / %d)" % [t.card.get_global_rect().end.x,sheet_left])
  await key(KEY_M)
  await key(KEY_TAB)
  check(await passes("inventory"),"TAB — inventory")
+ await frames(3)
+ check(t.layout=="compact_left" and t.body.text.contains("TAB") and t.card.get_global_rect().end.x<=game.inventory.get_global_rect().position.x+game.inventory.size.x*CombatInventory.GEAR_LEFT,"Over the inventory the card says how to close it, left of the gear column")
  await key(KEY_TAB)
  await frames(10)
  check(step_id()=="bandage" and p.needs_bandage(),"A wounded arm to dress")
@@ -276,7 +283,7 @@ func run():
  await key(KEY_M)
  game.crew.sight.open()
  await frames(3)
- check(t.layout=="compact_left","Card goes small over the sight")
+ check(t.layout=="compact_left" and t.body.visible and t.card.get_global_rect().end.x<=game.crew.sight.sheet.get_global_rect().position.x,"Card goes small over the sight, left of the panel")
  m.mortar().set_charge(d.charge)
  check(await passes("charge"),"Charge that reaches")
  m.mortar().set_azimuth(int(d.azimuth)+2)

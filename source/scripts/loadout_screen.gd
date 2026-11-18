@@ -82,7 +82,7 @@ func setup(owner_game: Node3D, parent: Control) -> void:
   tile.tooltip_text="Аптечка на поясі. Після використання в бою на її місце можна прикріпити аптечку з наплічника (TAB)."
  var finder: Button=game.inventory_slot("rangefinder","K","",42)
  finder.mouse_filter=MOUSE_FILTER_IGNORE;belt.add_child(finder);finder.show_item("rangefinder")
- finder.tooltip_text="Лазерний далекомір у підсумку на броні: K — дістати за секунду, ще раз K — прибрати."
+ finder.tooltip_text="Лазерний далекомір 6–12× у підсумку на броні: K — дістати за секунду, коліщатко — кратність, ще раз K — прибрати."
  var outfits := ScrollContainer.new();outfits.name="ОДЯГ";tabs.add_child(outfits)
  outfits.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED
  var wardrobe := GridContainer.new();wardrobe.columns=2;wardrobe.size_flags_horizontal=SIZE_EXPAND_FILL

@@ -263,7 +263,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			game.sound("click",-18)
 			return
 	if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
-		var aim_scale := 1.0/6.0 if field_rig.mode=="rangefinder" else 0.22 if aim and current().id=="svd" else (0.65 if aim else 1.0)
+		var aim_scale := 1.0/field_rig.zoom if field_rig.mode=="rangefinder" else 0.22 if aim and current().id=="svd" else (0.65 if aim else 1.0)
 		var yaw_delta: float= -event.relative.x*sensitivity*aim_scale
 		yaw_delta=wrapf(yaw_delta,-PI,PI)
 		if not prone or prone_turn_clear(yaw_delta):rotate_y(yaw_delta)
@@ -275,6 +275,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if field_rig.active():
 		if event.is_action_pressed("fire") and field_rig.mode=="rangefinder":field_rig.measure()
+		elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
+			field_rig.step_zoom(1 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -1)
 		return
 	if event.is_action_pressed("bandage"):begin_bandage()
 	if bandage_time>0:return
@@ -383,7 +385,7 @@ func _physics_process(delta: float) -> void:
 	travelled+=planar_speed*delta
 	step_time+=delta*planar_speed*2.2
 	# Head/body transforms are resolved by update_cover, including collision limits.
-	var view_fov := rad_to_deg(2*atan(tan(deg_to_rad(78.0)*0.5)/6.0)) if field_rig.mode=="rangefinder" else (50.0 if current().id=="svd" else 65.0) if aim else 78.0
+	var view_fov := field_rig.view_fov() if field_rig.mode=="rangefinder" else (50.0 if current().id=="svd" else 65.0) if aim else 78.0
 	if launcher.mode=="ready":view_fov=lerpf(78,60,launcher.ads)
 	camera.fov=lerpf(camera.fov,view_fov,minf(delta*12,1))
 	camera.far=4000.0 if game.player_class=="grad" and game.battle.active else 700.0 if game.battle.active else 1250.0 if field_rig.mode=="rangefinder" else (850.0 if launcher.active() else (900.0 if game.district.map_id==TrainingRange.ID else 160.0))

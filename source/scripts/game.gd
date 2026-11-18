@@ -117,8 +117,27 @@ const LOADING_TIPS := [
 	"ПОРАДА: «Град» стріляє з вогневої позиції за 5 км. Після залпу — одразу зміна позиції."]
 const GOLD = Color("c8b17a")
 
+# 0.24.0 renamed the game from «КВАРТАЛ — Зачистка» to «Mans Duty», and with
+# it Godot's user folder (…/app_userdata/<name>). The settings, the campaign
+# and the saved loadouts are copied over once; the old folder stays as it was.
+const OLD_USER_DIR := "КВАРТАЛ — Зачистка"
+const USER_FILES := ["settings.cfg","campaign.cfg","loadouts.cfg"]
+
+static func migrate_user_data(old_dir: String, new_dir: String, files: Array) -> int:
+	if old_dir==new_dir or not DirAccess.dir_exists_absolute(old_dir):return 0
+	DirAccess.make_dir_recursive_absolute(new_dir)
+	var copied := 0
+	for file in files:
+		var source: String=old_dir.path_join(file)
+		var target: String=new_dir.path_join(file)
+		if FileAccess.file_exists(target) or not FileAccess.file_exists(source):continue
+		if DirAccess.copy_absolute(source,target)==OK:copied+=1
+	return copied
+
 func _ready() -> void:
-	if not get_meta("automated_preview",false):load_settings()
+	if not get_meta("automated_preview",false):
+		migrate_user_data(OS.get_user_data_dir().get_base_dir().path_join(OLD_USER_DIR),OS.get_user_data_dir(),USER_FILES)
+		load_settings()
 	else:ally_count=0
 	setup_input()
 	battle=BattleMode.new();battle.setup(self);add_child(battle)

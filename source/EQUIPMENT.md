@@ -33,7 +33,9 @@ consumption never edits the selected loadout or saved preset.
   items take 2.2 s to stow. A round is committed only at a completed transfer
   checkpoint. Interruption preserves completed rounds and the chamber.
 - Paper packets visibly open and empty; an exhausted packet is discarded.
-- **K**: retrieve/stow an equipped laser rangefinder. **Left mouse**: measure.
+- **K**: retrieve/stow an equipped laser rangefinder. **Mouse wheel**: optical
+  zoom 6–12× (as the Maven RFZ.1 6–12×21; fixed-power hand rangefinders are
+  6–7×), kept between uses. **Left mouse**: measure.
   6× view, 0.35 s sampling, 1 m display increments, 5–1200 m modeled range.
   Aim movement invalidates the sample. The first collider is measured;
   an obstructed target cannot be measured through the obstruction. Sky gives

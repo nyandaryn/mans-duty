@@ -6,6 +6,7 @@ extends Control
 # never shows where a mine lands: corrections come from watching the bursts.
 var game: Node3D
 var crew: MortarCrew
+var sheet: PanelContainer
 var settings: Label
 var details: Label
 var mines: Label
@@ -22,7 +23,7 @@ var history: Array[String]=[]
 func setup(owner_game: Node3D, owner_crew: MortarCrew) -> void:
  game=owner_game;crew=owner_crew
  mouse_filter=Control.MOUSE_FILTER_IGNORE
- var sheet := PanelContainer.new()
+ sheet=PanelContainer.new()
  sheet.add_theme_stylebox_override("panel",game.panel_style(Color(0.035,0.05,0.04,0.94),game.GOLD))
  game.place(sheet,self,0.32,0.04,0.985,0.96)
  sheet.mouse_filter=Control.MOUSE_FILTER_STOP

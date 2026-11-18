@@ -57,6 +57,7 @@ var rock_rate := Vector3.ZERO
 var launch_players: Array[AudioStreamPlayer3D]=[]
 var launch_index := 0
 var seat_camera: Camera3D
+var dashboard: GradDashboard
 # Engine and transmission.
 var ignition := false
 var running := false
@@ -135,6 +136,7 @@ func setup(owner_game: Node3D) -> void:
  set_meta("ballistic_material","steel")
  art=GradArt.build()
  add_child(art.root)
+ dashboard=GradDashboard.new();dashboard.setup(self)
  for shape_data in [[Vector3(1.20,0.90,1.45),Vector3(0,1.57,-2.85)],[Vector3(2.30,1.45,1.55),Vector3(0,1.95,-1.40)],[Vector3(2.30,0.55,3.90),Vector3(0,1.15,1.35)],[Vector3(1.70,0.70,2.40),Vector3(0,2.30,1.25)]]:
   var shape:=CollisionShape3D.new();var box:=BoxShape3D.new();box.size=shape_data[0]
   shape.shape=box;shape.position=shape_data[1];add_child(shape)
@@ -197,6 +199,8 @@ func shift(step: int) -> void:
  if next==0 and speed()>0.8:say("Задню — лише після повної зупинки",2.5);return
  if gear==0 and step>0 and speed()<-0.8:say("Спершу зупинись",2);return
  gear=next;game.sound("click",-18)
+ # The lever is felt, not seen: the gear is named on the screen for a moment.
+ say("Передача %s" % GEAR_NAMES[gear],1.5)
 
 func toggle_range() -> void:
  if not stationary() or clutch_engagement()>0.15:say("Роздавальну коробку перемикають на місці з вижатим зчепленням",3);return

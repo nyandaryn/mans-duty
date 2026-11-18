@@ -27,7 +27,11 @@ const ROWS := 4
 const COLUMNS := 10
 const DRIVER_EYE := Vector3(-0.48,2.27,-1.08)
 const COMMANDER_EYE := Vector3(0.50,2.27,-1.08)
-const STEERING_WHEEL := Vector3(-0.48,1.99,-1.62)
+# Low enough that the rim leaves the whole instrument cluster in view.
+const STEERING_WHEEL := Vector3(-0.48,1.95,-1.62)
+# Face of the instrument cluster before the driver (GradDashboard paints it).
+const DASHBOARD := Vector3(-0.48,2.03,-1.833)
+const DASHBOARD_SIZE := Vector2(0.54,0.20)
 static var shared_material: StandardMaterial3D
 
 static func material() -> StandardMaterial3D:
@@ -131,7 +135,6 @@ static func build() -> Dictionary:
  body.box(at(Vector3(0,1.40,-1.80)),Vector3(0.55,0.32,0.60),OLIVE_DARK)
  body.box(at(Vector3(0,1.99,-1.98)),Vector3(2.12,0.28,0.24),Color("2f3326"))
  body.box(at(Vector3(-0.48,2.03,-1.86)),Vector3(0.56,0.22,0.05),BLACK)
- for k in range(4):body.cylinder(Transform3D(Basis(Vector3.RIGHT,PI/2),Vector3(-0.68+k*0.135,2.03,-1.835)),0.045,0.012,12,Color("d6d3c3"),Color("101010"))
  body.cylinder(Transform3D(Basis(Vector3.RIGHT,-0.95),Vector3(-0.48,1.72,-1.78)),0.03,0.55,6,STEEL)
  for x in [-0.50,0.45]:
   var wide:=0.50 if x<0 else 0.95

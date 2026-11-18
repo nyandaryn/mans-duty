@@ -74,6 +74,18 @@ func run():
  check(not player.field_rig.busy(),"The pouch is reached on the move")
  player.field_rig.tick(0.79);check(player.field_rig.mode=="pouch","Drawing from the pouch takes 0.8 s")
  player.field_rig.tick(0.02);check(player.field_rig.mode=="rangefinder","Rangefinder at the eyes in under a second")
+ check(player.field_rig.zoom==FieldRig.ZOOM_MIN and is_equal_approx(player.field_rig.view_fov(),rad_to_deg(2*atan(tan(deg_to_rad(39.0))/6.0))),"Rangefinder starts at 6×")
+ var wheel := InputEventMouseButton.new();wheel.button_index=MOUSE_BUTTON_WHEEL_UP;wheel.pressed=true
+ player._unhandled_input(wheel)
+ check(player.field_rig.zoom==7,"Wheel up: one step of power")
+ for i in range(10):player._unhandled_input(wheel)
+ var wide_fov: float=rad_to_deg(2*atan(tan(deg_to_rad(39.0))/6.0))
+ check(player.field_rig.zoom==FieldRig.ZOOM_MAX and absf(tan(deg_to_rad(player.field_rig.view_fov()*0.5))*2.0-tan(deg_to_rad(wide_fov*0.5)))<0.0001,"Up to 12×, twice the 6× image, and no further")
+ wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN
+ for i in range(10):player._unhandled_input(wheel)
+ check(player.field_rig.zoom==FieldRig.ZOOM_MIN,"Wheel down back to 6×, and no lower")
+ for i in range(3):player._unhandled_input(wheel)
+ wheel.button_index=MOUSE_BUTTON_WHEEL_UP;player._unhandled_input(wheel);player._unhandled_input(wheel)
  var old_transform := player.transform
  player.position=Vector3(0,100,0);player.rotation=Vector3.ZERO;player.camera.rotation=Vector3.ZERO
  var wall := StaticBody3D.new()
@@ -115,7 +127,7 @@ func run():
  player.field_rig.tick(0.61)
  check(not player.field_rig.active(),"Back in the pouch in 0.6 s")
  player.field_rig.toggle_rangefinder();player.field_rig.tick(0.81)
- check(player.field_rig.mode=="rangefinder","The rangefinder is reusable")
+ check(player.field_rig.mode=="rangefinder" and player.field_rig.zoom==8,"The rangefinder is reusable and keeps the power it was set to")
  player.field_rig.toggle_rangefinder();player.field_rig.tick(0.61)
  player.bandages=0;player.health=80;player.arm_injury=0.6
  player.current().reload(0);player.current().update(0.6);player.current().cancel()

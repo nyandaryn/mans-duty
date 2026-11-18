@@ -31,12 +31,14 @@ func setup(parent: Node3D, target_id: String, spec: Dictionary) -> RangeTarget:
  body=StaticBody3D.new();body.set_meta("range_target",self);pivot.add_child(body)
  var shape:=CollisionShape3D.new();var box:=BoxShape3D.new();box.size=Vector3(size.x,size.y,0.04)
  shape.shape=box;shape.position=Vector3(0,size.y*0.5,0);body.add_child(shape)
- # Olive silhouette: head and shoulders, and the body of the full figure.
- var olive:=material(Color("495234"))
+ # Near-black silhouette: head and shoulders, and the body of the full figure.
+ # Dark against the earth berm and the grass alike — an olive one had the
+ # berm's brightness and vanished in the PSO-1 at 300–500 m.
+ var dark:=material(Color("1e2017"))
  var shoulders:=minf(size.y,0.32)
- part(body,Vector3(0,size.y-0.5+shoulders*0.5,0),Vector3(size.x,shoulders,0.03),olive)
- part(body,Vector3(0,size.y-0.09,0),Vector3(0.22,0.18,0.03),olive)
- if kind=="figure":part(body,Vector3(0,(size.y-0.5)*0.5,0),Vector3(size.x*0.86,size.y-0.5,0.03),olive)
+ part(body,Vector3(0,size.y-0.5+shoulders*0.5,0),Vector3(size.x,shoulders,0.03),dark)
+ part(body,Vector3(0,size.y-0.09,0),Vector3(0.22,0.18,0.03),dark)
+ if kind=="figure":part(body,Vector3(0,(size.y-0.5)*0.5,0),Vector3(size.x*0.86,size.y-0.5,0.03),dark)
  if str(spec.get("board",""))!="":
   var post:=Node3D.new();post.position=Vector3(size.x*0.5+0.7,0,0);add_child(post)
   part(post,Vector3(0,0.45,0),Vector3(0.05,0.9,0.05),wood)

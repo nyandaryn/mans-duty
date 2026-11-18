@@ -1,3 +1,63 @@
+# 0.24.0 validation — 2026-11-18
+
+The game is renamed «Mans Duty», the rangefinder zooms 6–12×, the BM-21
+instruments are on the cab's dashboard, the training card keeps its text
+over panels, and the range targets are dark.
+
+- Rename: `config/name` is «Mans Duty» (window title, «Mans Duty.app»), so
+  Godot's user folder moves to …/app_userdata/Mans Duty. game.gd copies
+  settings.cfg, campaign.cfg and loadouts.cfg from «КВАРТАЛ — Зачистка»
+  once, never over a file that already exists, and leaves the old folder.
+  - New test_user_data (10 checks).
+  - The exported pck started with only the old folder holding a
+    settings.cfg: the new folder got the same file, byte for byte.
+  - main.tscn has no children, so nothing reads user:// before the copy.
+- Rangefinder: 6–12× wheel zoom, after the Maven RFZ.1 6–12×21. Other
+  units checked: Vectronix Vector 21 7×, Vector X 8× and 12×, fixed 6–7×
+  hunting units, Pulsar Accolade 2 LRF XP50 Pro 2.5–20× (digital).
+  test_equipment 98 (zoom limits, field of view, aim speed, zoom kept).
+- BM-21 dashboard: GradDashboard paints the speedometer, tachometer, air
+  and tyre gauges and six lamps into a SubViewport on the cab's face.
+  UPDATE_ALWAYS with someone in the cab, UPDATE_ONCE outside. RMB (held)
+  in the driver's seat shows the old overlay. The steering wheel is 4 cm
+  lower so its rim no longer hides the lamps. test_grad 82.
+- Training card: over the map, the inventory, the mortar sight and the
+  Grad tablet it keeps the step's text and narrows to the room left of
+  the panel; its background is 0.98 opaque there.
+  test_infantry_training 88, test_grad_training 90.
+- Range targets: the silhouette is #1e2017. The olive one matched the
+  berm's brightness in the PSO-1 at 300–500 m. Renders at 300 and 500 m.
+- Full source suite (51 scenarios): all pass except test_maps_perception,
+  the same timeout as since 0.15.0. test_squad_routes exits 0 with no PASS
+  line, as before.
+- Exported pck (18 MB, sha256 27af4491…), run with the shipped kvartal.x86_64 via
+  --main-pack: `--quit-after 300` exits with no ERROR lines, and
+  all pass:
+
+    | Test | Checks |
+    |---|---|
+    | user_data | 10 |
+    | infantry_training | 88 |
+    | grad_training | 90 |
+    | grad | 82 |
+    | equipment | 98 |
+    | svd_scope | 90 |
+    | wide_screen | 18 |
+    | mortar | 83 |
+    | battle | 37 |
+    | shmel | 60 |
+    | loadout_preview | 34 |
+    | campaign_flow | 34 |
+    | squad_tactics | 18 |
+
+- Installed with an atomic rename. 0.23.0 is backed up as
+  .build/backup/kvartal-0.23.0.pck.
+- Limitations:
+  - The kvartal.* file names, the archive names and the macOS bundle id
+    org.kvartal.zachystka stay as they were.
+  - The main menu still shows «КВАРТАЛ — ЗАЧИСТКА» as a tagline under the
+    MANS DUTY logo.
+
 # 0.23.0 validation — 2026-11-18
 
 Training for every class on the new training range, wide screens, the BM-21

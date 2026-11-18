@@ -195,8 +195,16 @@ func lamp(at: Vector2, on: bool, title: String, color: Color=GREEN) -> void:
  draw_circle(at,7,color if on else Color(0.2,0.2,0.18))
  text(at+Vector2(12,5),title,12,INK if on else DIM)
 
+# The readings of the dashboard large on the screen, while the right mouse
+# button is held; the warnings below are shown always.
 func draw_dashboard(v: GradVehicle) -> void:
  var base:=Vector2(size.x*0.5,size.y-120)
+ if command.instruments_shown():draw_instruments(v,base)
+ if not v.running and v.ignition:text(base+Vector2(-470,-110),"Двигун не працює: X — стартер (нейтраль або вижате зчеплення)",14,AMBER)
+ if v.travel_lock==false or v.springs_locked or not v.cover_on and v.speed()>2.0:
+  if absf(v.speed())>1.0 and (not v.travel_lock or v.springs_locked):text(base+Vector2(-470,-130),"РУХ У БОЙОВОМУ ПОЛОЖЕННІ ЗАБОРОНЕНО: застопори пакет і постав кран у «ПОХІД»",14,RED)
+
+func draw_instruments(v: GradVehicle, base: Vector2) -> void:
  draw_rect(Rect2(base-Vector2(470,92),Vector2(940,175)),Color(0.05,0.055,0.045,0.82))
  gauge(base+Vector2(-370,0),62,absf(v.speed())*3.6,0,90,"км/год","%d" % roundi(absf(v.speed())*3.6))
  gauge(base+Vector2(-215,0),62,v.rpm(),0,4000,"об/хв","%d" % roundi(v.rpm()),3200)
@@ -214,9 +222,6 @@ func draw_dashboard(v: GradVehicle) -> void:
  lamp(base+Vector2(410,52),v.springs_locked,"БОЙОВЕ",AMBER)
  lamp(base+Vector2(160,74),v.air<4.5,"ТИСК ПОВІТРЯ",RED)
  lamp(base+Vector2(290,74),v.shields_down,"ЩИТКИ")
- if not v.running and v.ignition:text(base+Vector2(-470,-110),"Двигун не працює: X — стартер (нейтраль або вижате зчеплення)",14,AMBER)
- if v.travel_lock==false or v.springs_locked or not v.cover_on and v.speed()>2.0:
-  if absf(v.speed())>1.0 and (not v.travel_lock or v.springs_locked):text(base+Vector2(-470,-130),"РУХ У БОЙОВОМУ ПОЛОЖЕННІ ЗАБОРОНЕНО: застопори пакет і постав кран у «ПОХІД»",14,RED)
 
 func draw_commander(v: GradVehicle) -> void:
  draw_checklist(v,Vector2(size.x-430,top()))

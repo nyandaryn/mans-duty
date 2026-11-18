@@ -489,9 +489,14 @@ func read_controls(delta: float) -> void:
   vehicle.set_lever(held)
  else:vehicle.set_lever(false)
 
+# The instruments are on the dashboard; the right mouse button held in the
+# driver's seat shows their readings large on the screen.
+func instruments_shown() -> bool:
+ return seat=="driver" and not piloting and hud.open_panel()=="" and Input.is_action_pressed("aim")
+
 func hint_text() -> String:
  match seat:
-  "driver":return "W ГАЗ  S ГАЛЬМО  A/D КЕРМО  SHIFT ЗЧЕПЛЕННЯ  Q/E ПЕРЕДАЧА  I ЗАПАЛЮВАННЯ  X СТАРТЕР  SPACE СТОЯНКОВЕ  L РОЗДАТКА\nP КВП  [ ] РУЧНИЙ ГАЗ  T ПІДКАЧКА ШИН  V ЩИТКИ  C МІСЦЕ КОМАНДИРА  F ВИЙТИ  M ПЛАНШЕТ  G РАДІО"
+  "driver":return "W ГАЗ  S ГАЛЬМО  A/D КЕРМО  SHIFT ЗЧЕПЛЕННЯ  Q/E ПЕРЕДАЧА  I ЗАПАЛЮВАННЯ  X СТАРТЕР  SPACE СТОЯНКОВЕ  L РОЗДАТКА\nP КВП  [ ] РУЧНИЙ ГАЗ  T ПІДКАЧКА ШИН  V ЩИТКИ  ПКМ ПРИЛАДИ  C МІСЦЕ КОМАНДИРА  F ВИЙТИ  M ПЛАНШЕТ  G РАДІО"
   "commander":return "E ПУЛЬТ  SPACE ПУСК (утримувати)  J ДРОН СП  M ПЛАНШЕТ  G РАДІО  V ЩИТКИ  C МІСЦЕ ВОДІЯ  F ВИЙТИ"
   "gunner":return "← → ПОВОРОТ ПАКЕТА  ↑ ↓ ПІДНЕСЕННЯ  CTRL РУЧНИЙ ПРИВІД  Q/E КУТОМІР  W/S ПРИЦІЛ  A/D РІВЕНЬ  (SHIFT ×10, ALT ×100)  B БУСОЛЬ  МИША — ГОЛОВКА  F ВИЙТИ"
  var station:=nearest_station()
