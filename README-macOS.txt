@@ -1,4 +1,4 @@
-MANS DUTY / 0.22.0 / macOS (Apple Silicon та Intel)
+MANS DUTY / 0.23.0 / macOS (Apple Silicon та Intel)
 
 Запуск:
 1. Розпакуйте архів подвійним клацанням. «КВАРТАЛ — Зачистка.app»
