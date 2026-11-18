@@ -1,0 +1,70 @@
+[
+ {
+  "name": "ak74",
+  "url": "https://raw.githubusercontent.com/petroulacl/fps-asset-kit/main/sfx/firearm_sfx/Prepared%20SFX%20Library/AK-47/C_27P.wav",
+  "blob_sha": "af34e80c4908fedc0df1d2d5fef6179003102f24",
+  "bytes": 5729424
+ },
+ {
+  "name": "m16",
+  "url": "https://raw.githubusercontent.com/petroulacl/fps-asset-kit/main/sfx/firearm_sfx/Prepared%20SFX%20Library/AR-15/D_24P.wav",
+  "blob_sha": "55eb554a1a1ba81f98af6d2b94bc34547b6cce34",
+  "bytes": 3739958
+ },
+ {
+  "name": "pm",
+  "url": "https://raw.githubusercontent.com/petroulacl/fps-asset-kit/main/sfx/firearm_sfx/Prepared%20SFX%20Library/Bersa/F_41P.wav",
+  "blob_sha": "bf1242804b3449d2b7b49640965e46a894b6e3c8",
+  "bytes": 4824608
+ },
+ {
+  "name": "m9",
+  "url": "https://raw.githubusercontent.com/petroulacl/fps-asset-kit/main/sfx/firearm_sfx/Prepared%20SFX%20Library/Walther%20PPQ/X_31P.wav",
+  "blob_sha": "c39860e7dded0ab94d730a1401562266217e1491",
+  "bytes": 5461338
+ },
+ {
+  "name": "reload_rifle",
+  "url": "https://opengameart.org/sites/default/files/assaultriflereload1_0.wav"
+ },
+ {
+  "name": "reload_pistol",
+  "url": "https://opengameart.org/sites/default/files/gunreload1.wav"
+ },
+ {
+  "name": "mag_in",
+  "url": "https://opengameart.org/sites/default/files/clipload1.wav"
+ },
+ {
+  "name": "mag_out",
+  "url": "https://opengameart.org/sites/default/files/clipload2.wav"
+ },
+ {
+  "name": "bolt",
+  "url": "https://opengameart.org/sites/default/files/singlebullet1.wav"
+ },
+ {
+  "name": "grad_dvids_516356",
+  "url": "https://d34w7g4gy10iej.cloudfront.net/video/1703/DOD_104221970/DOD_104221970-1024x576-1769k.mp4",
+  "page": "https://www.dvidshub.net/video/516356/jmtg-u-ukrainian-bm-21-rocket-launcher-b-roll",
+  "sha256": "d6272b6f5a12278ff70ca6874d54de2ceafb43f3a551f693981a9760cb673575",
+  "bytes": 25879784,
+  "license": "public domain (US government work)"
+ },
+ {
+  "name": "grad_commons_ukr_firing",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e1/Ukr_bm-21_hrad_firing.webm",
+  "page": "https://commons.wikimedia.org/wiki/File:Ukr_bm-21_hrad_firing.webm",
+  "sha256": "2c1712f4778eade961c3f32fd7e7fd1099761ce22f90983296278922e14229e3",
+  "bytes": 11330410,
+  "license": "CC BY 4.0, Operational Command West"
+ },
+ {
+  "name": "grad_commons_bm21_1",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/89/BM-21-1_Grad_MLRS.webm",
+  "page": "https://commons.wikimedia.org/wiki/File:BM-21-1_Grad_MLRS.webm",
+  "sha256": "720b88d2ef97e9a9de6edca75955ea93f917356748de8e03943ff7ba508b4f4a",
+  "bytes": 10182011,
+  "license": "CC BY 4.0, Ministry of Defence of the Russian Federation"
+ }
+]

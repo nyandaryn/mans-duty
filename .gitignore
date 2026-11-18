@@ -1,2 +1,24 @@
-.godot/
-*.tmp
+# The repository root doubles as the installed game: kvartal.x86_64,
+# kvartal.pck, dist/, .build/, SHA256SUMS and copies of the docs from source/
+# live here too. So the root is a whitelist: anything new at the top level
+# stays out of git until it is listed below.
+/*
+!/.gitignore
+!/.gitattributes
+!/.claude/
+!/README.md
+!/README.txt
+!/README-macOS.txt
+!/README-Windows.txt
+!/GODOT-LICENSE.txt
+!/GODOT-COPYRIGHT.txt
+!/VALIDATION.md
+!/play.sh
+!/source/
+!/tools/
+
+# Claude Code: the skills are shared, local settings and worktrees are not.
+/.claude/*
+!/.claude/skills/
+
+__pycache__/

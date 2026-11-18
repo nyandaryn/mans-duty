@@ -1,0 +1,4 @@
+.godot/
+*.tmp
+# Left behind by an export with a renamed editor; not part of the project.
+*.gdc.uid

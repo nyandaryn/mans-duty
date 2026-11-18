@@ -1,0 +1,4 @@
+# Store every file byte for byte, with no line-ending conversion on any OS:
+# some shipped texts keep CRLF on purpose (README-Windows.txt, the OFL font
+# license), and the exported pack must not depend on who cloned the repo.
+* -text
