@@ -2,6 +2,20 @@ extends Control
 
 var game: Node3D
 
+# Compass, with world-relative bearing.
+func draw_compass(bearing: float, col: Color) -> void:
+	var center := size/2
+	for i in range(-5,6):
+		var x := center.x+i*42
+		draw_line(Vector2(x,28),Vector2(x,34 if i%2 else 39),Color(0.8,0.82,0.72,0.65),1)
+	draw_string(ThemeDB.fallback_font,Vector2(center.x-27,60),"%03d°" % (int(bearing)%360),HORIZONTAL_ALIGNMENT_LEFT,-1,18,col)
+
+# Bearing of a camera's line of sight, clockwise from north (−Z).
+static func view_bearing(camera: Camera3D) -> float:
+	var forward := -camera.global_basis.z
+	if Vector2(forward.x,forward.z).length()<0.1:forward=camera.global_basis.y
+	return fposmod(rad_to_deg(atan2(forward.x,-forward.z)),360.0)
+
 func _draw() -> void:
 	if not game.running: return
 	if game.player.field_rig.mode=="drone":
@@ -10,8 +24,11 @@ func _draw() -> void:
 	var center := size/2
 	var col := Color("f0e7cf")
 	# In the cab of the BM-21 its own instruments replace the soldier's.
-	if is_instance_valid(game.grad) and game.grad.seat!="":
+	if (is_instance_valid(game.grad) and game.grad.seat!="") or (is_instance_valid(game.bmp) and game.bmp.seat!="" and not game.bmp.head_out):
 		if game.damage_flash>0:draw_rect(game.screen_rect(self),Color(0.65,0.13,0.08,game.damage_flash*0.5),false,18)
+		# The compass stays at any seat: the bearing the view from it faces.
+		var seat_camera := get_viewport().get_camera_3d()
+		if seat_camera!=null:draw_compass(view_bearing(seat_camera),col)
 		return
 	if not game.player.is_vaulting() and not game.player.aim and game.player.blind_mode==0 and game.player.arm_injury<0.5 and game.player.bandage_time<=0 and not game.player.field_rig.active():
 		for direction in [Vector2.UP,Vector2.DOWN,Vector2.LEFT,Vector2.RIGHT]:
@@ -19,13 +36,8 @@ func _draw() -> void:
 	if game.damage_flash>0:
 		var red := Color(0.65,0.13,0.08,game.damage_flash*0.5)
 		draw_rect(game.screen_rect(self),red,false,18)
-	# Compass, with world-relative bearing.
-	var bearing := fposmod(-rad_to_deg(game.player.rotation.y),360)
+	draw_compass(fposmod(-rad_to_deg(game.player.rotation.y),360),col)
 	var font := ThemeDB.fallback_font
-	for i in range(-5,6):
-		var x := center.x+i*42
-		draw_line(Vector2(x,28),Vector2(x,34 if i%2 else 39),Color(0.8,0.82,0.72,0.65),1)
-	draw_string(font,Vector2(center.x-27,60),"%03d°" % int(bearing),HORIZONTAL_ALIGNMENT_LEFT,-1,18,col)
 	if game.debug_invulnerable:draw_string(font,Vector2(24,100),"DEBUG · БЕЗСМЕРТЯ / ПОПОВНЕННЯ МАГАЗИНІВ · F8",HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("e4bf68"))
 	if game.player.current().id=="svd" and game.player.aim:
 		var w: WeaponState=game.player.current()

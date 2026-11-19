@@ -332,7 +332,7 @@ func coordinate() -> void:
  var eligible: Array[Hostile]=[]
  for actor in game.allies:
   actor.auto_cover=false
-  if actor.dead or actor.order not in ["follow","move","assault"] or not actor.fire_at_will or actor.collapse>0.1 or actor.weapon.phase!="" or actor.weapon.ammunition_total()==0:continue
+  if actor.dead or actor.vehicle!=null or actor.order not in ["follow","move","assault"] or not actor.fire_at_will or actor.collapse>0.1 or actor.weapon.phase!="" or actor.weapon.ammunition_total()==0:continue
   if actor.order=="assault" and not actor.assault_arrived and actor.cover_dwell>6.5 and not actor.get_meta("battle_managed",false):continue
   if actor.contact_age>12 and actor.suppress_age>8:continue
   if actor.has_cover and actor.global_position.distance_to(actor.cover_point)<1.1:eligible.append(actor)
@@ -379,7 +379,7 @@ func separate(actor: Hostile, direction: Vector3) -> Vector3:
  if direction.length()<0.1:return direction
  var push := Vector3.ZERO
  for other in [game.player]+game.allies:
-  if other==actor or not is_instance_valid(other) or (other is Hostile and other.dead):continue
+  if other==actor or not is_instance_valid(other) or (other is Hostile and (other.dead or other.vehicle!=null)):continue
   var away: Vector3=actor.global_position-other.global_position
   away.y=0
   if away.length()>0.01 and away.length()<1.1:push+=away.normalized()*(1.1-away.length())*1.2

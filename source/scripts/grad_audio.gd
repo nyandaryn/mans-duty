@@ -11,14 +11,17 @@ static func clip(id: String) -> AudioStream:
  if not cache.has(id):cache[id]=load("res://assets/audio/grad/%s.wav" % id)
  return cache[id]
 
-static func engine() -> AudioStreamWAV:
- if cache.has("engine_loop"):return cache.engine_loop
- var source: AudioStreamWAV=clip("engine_idle")
+static func engine() -> AudioStreamWAV:return looped("engine_loop","res://assets/audio/grad/engine_idle.wav")
+
+# A recorded engine as an endless loop (the files are cut to loop cleanly).
+static func looped(key: String, path: String) -> AudioStreamWAV:
+ if cache.has(key):return cache[key]
+ var source: AudioStreamWAV=load(path)
  var sample: AudioStreamWAV=source.duplicate()
  sample.loop_mode=AudioStreamWAV.LOOP_FORWARD
  sample.loop_begin=0
  sample.loop_end=int(sample.get_length()*sample.mix_rate)-1
- cache.engine_loop=sample
+ cache[key]=sample
  return sample
 
 # Short synthesised cab noises: the starter, the gear clash, the air valve,

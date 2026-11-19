@@ -984,19 +984,19 @@ func rebuild_campaign_grid() -> void:
 			var local_bounds: AABB=AABB(-collision.shape.size/2,collision.shape.size) if collision.shape is BoxShape3D else collision.shape.get_debug_mesh().get_aabb()
 			var bounds: AABB=collision.global_transform*local_bounds
 			var inverse: Transform3D=collision.global_transform.affine_inverse()
-			for z in range(maxi(-limit,floori((bounds.position.z-0.4)*navigation_scale)),mini(limit,ceili((bounds.end.z+0.4)*navigation_scale))+1):
-				for x in range(maxi(-limit,floori((bounds.position.x-0.4)*navigation_scale)),mini(limit,ceili((bounds.end.x+0.4)*navigation_scale))+1):
+			for z in range(maxi(-limit,floori((bounds.position.z-0.6)*navigation_scale)),mini(limit,ceili((bounds.end.z+0.6)*navigation_scale))+1):
+				for x in range(maxi(-limit,floori((bounds.position.x-0.6)*navigation_scale)),mini(limit,ceili((bounds.end.x+0.6)*navigation_scale))+1):
 					var h := terrain.height_at(Vector2(x,z)/navigation_scale)
 					if bounds.end.y<h+0.22 or bounds.position.y>h+1.8:continue
 					var local: Vector3=inverse*Vector3(x/navigation_scale,clampf(h+0.8,bounds.position.y,bounds.end.y),z/navigation_scale)
-					if local.x>=local_bounds.position.x-0.37 and local.x<=local_bounds.end.x+0.37 and local.z>=local_bounds.position.z-0.37 and local.z<=local_bounds.end.z+0.37:grid.set_point_solid(Vector2i(x,z),true)
+					if NavigationObstacles.inside(local,local_bounds,navigation_scale):grid.set_point_solid(Vector2i(x,z),true)
 	navigation_obstacles.build(self)
 	navigation_regions.build(grid)
 	navigation_last_cells=width*width
 
 func navigation_rect(bounds: AABB) -> Rect2i:
-	var low := Vector2i(floori((bounds.position.x-0.4)*navigation_scale),floori((bounds.position.z-0.4)*navigation_scale))
-	var high := Vector2i(ceili((bounds.end.x+0.4)*navigation_scale),ceili((bounds.end.z+0.4)*navigation_scale))
+	var low := Vector2i(floori((bounds.position.x-0.6)*navigation_scale),floori((bounds.position.z-0.6)*navigation_scale))
+	var high := Vector2i(ceili((bounds.end.x+0.6)*navigation_scale),ceili((bounds.end.z+0.6)*navigation_scale))
 	return Rect2i(low,high-low+Vector2i.ONE).intersection(grid.region)
 
 func refresh_campaign_cells() -> void:

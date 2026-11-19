@@ -77,6 +77,8 @@ var dashboard: GradDashboard
 var ignition := false
 var running := false
 var omega := 0.0
+var heard_rpm := 0.0
+var heard_open := 0.0
 var starter := false
 var crank_left := 0.0
 var throttle := 0.0
@@ -193,6 +195,9 @@ func say(text: String, seconds: float=4.0) -> void:
 func speed() -> float:return linear_velocity.dot(-global_basis.z)
 
 func rpm() -> float:return omega*60.0/TAU
+# The engine speed as heard and as the tachometer shows it: smoothed like a
+# flywheel, not every bounce of the axles locked to the crankshaft.
+func steady_rpm() -> float:return heard_rpm
 
 func gear_ratio() -> float:return float(GEARS[gear])*float(TRANSFER[1 if low_range else 0])*FINAL
 
@@ -408,6 +413,7 @@ func panorama_transform() -> Transform3D:
 # --- Simulation -----------------------------------------------------------
 func _physics_process(delta: float) -> void:
  update_radio()
+ if game!=null and is_instance_valid(engine_sound):engine_sound.stream_paused=game.paused or not game.running
  if game==null or not game.running or game.paused:return
  clock+=delta
  if notice_left>0:notice_left-=delta
@@ -466,8 +472,10 @@ func simulate_engine(delta: float) -> void:
  # The engine sound follows the crankshaft.
  if (running or (starter and ignition)) and not engine_sound.playing:engine_sound.play()
  elif not running and not starter and engine_sound.playing and rpm()<80:engine_sound.stop()
- engine_sound.pitch_scale=clampf(maxf(rpm(),180.0)/700.0,0.35,3.6)
- engine_sound.volume_db=linear_to_db(maxf(game.volume,0.0001))+lerpf(-8.0,2.0,clampf(open,0,1))-(10.0 if not running else 0.0)
+ heard_rpm=lerpf(heard_rpm,rpm(),1.0-exp(-delta*5.0))
+ engine_sound.pitch_scale=clampf(maxf(heard_rpm,180.0)/700.0,0.35,3.6)
+ heard_open=lerpf(heard_open,clampf(open,0,1),1.0-exp(-delta*4.0))
+ engine_sound.volume_db=linear_to_db(maxf(game.volume,0.0001))+lerpf(-8.0,2.0,heard_open)-(10.0 if not running else 0.0)
 
 func begin_crank() -> void:
  if starter:return

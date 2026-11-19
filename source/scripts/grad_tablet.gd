@@ -186,12 +186,12 @@ func draw_overlay() -> void:
  for place in data.meta.get("places",[]):
   var p:=world_to_screen(Vector2(float(place[1]),float(place[2])))
   overlay.draw_string(font,p,str(place[0]),HORIZONTAL_ALIGNMENT_LEFT,-1,15 if place[3]=="town" else 13,ink)
- # The three lines of the assault and the observation post.
+ # The three strongpoints of the enemy and the observation post.
  for i in range(3):
   var c:Vector2=BattleMap.CENTERS[i]
   var p:=world_to_screen(c)
-  overlay.draw_arc(p,maxf(4,30*zoom),0,TAU,24,Color(0.75,0.1,0.1),2)
-  overlay.draw_string(font,p+Vector2(6,-6),["А","Б","В"][i],HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color(0.75,0.1,0.1))
+  overlay.draw_arc(p,maxf(4,45*zoom),0,TAU,24,Color(0.75,0.1,0.1),2)
+  overlay.draw_string(font,p+Vector2(6,-6),"ОП-%d" % (i+1),HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color(0.75,0.1,0.1))
  var post:=world_to_screen(Vector2(command.post.x,command.post.z))
  overlay.draw_rect(Rect2(post-Vector2(5,5),Vector2(10,10)),Color(0.1,0.3,0.7),false,2)
  overlay.draw_string(font,post+Vector2(8,4),"СП",HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color(0.1,0.3,0.7))
@@ -251,7 +251,7 @@ const HELP := """ВЕРСІЯ ДЛЯ ОДНОГО: ти командир, нав
 
 9. ЗМІНА ПОЗИЦІЇ. Після залпу противник за 2–4 хв накриє ВП контрбатарейним вогнем. Пакет у похідне, кран «ПОХІД» — і геть.
 
-10. ШТУРМ. G — радіо. Коли більшість опорних пунктів (ОП) знищено, віддай команду штурмовим групам. Під час штурму не бий по рубежах, де вже свої."""
+10. ШТУРМ. G — радіо. Коли більшість опорних пунктів (ОП) знищено, віддай команду штурмовим групам. ОП займає три двори: знищений — коли уражено дві його позиції або вибуло дві третини гарнізону. Під час штурму не бий по ОП, де вже свої."""
 
 class MapLayer extends Node2D:
  # The whole 12 × 12 km sheet in a dozen draw calls: one mesh for the houses,

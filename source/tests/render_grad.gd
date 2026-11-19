@@ -26,7 +26,7 @@ func run():
  await process_frame
  game.volume=0
  game.set_player_class("grad")
- game.battle_size=12
+ game.battle_size=18
  game.start_match()
  for actor in game.allies+game.bots:actor.set_physics_process(false)
  var grad: GradCommand=game.grad

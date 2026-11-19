@@ -5,7 +5,8 @@ extends Node
 # kilometres south-west of the battle; recon from the observation post's
 # drone, a salvo from an open firing position, the move away before the
 # counter-battery fire arrives, and the order to storm once most strongpoints
-# are destroyed. The player alone does the crew's work: drives, brings the
+# are destroyed. A strongpoint spreads over three yards: it is destroyed when
+# two of its firing positions are hit or two thirds of its garrison are out. The player alone does the crew's work: drives, brings the
 # launcher into action around the vehicle, lays at the sight and fires from
 # the cab.
 const START := Vector3(-2253,0,4388)
@@ -92,14 +93,13 @@ func start() -> void:
  main_direction=snappedf(GradBallistics.bearing(battle_center-FIRING_AREA),50.0)
  for item in BattleMap.strongpoints():
   var p: Vector2=item.point
-  strongpoints.append({"title":item.title,"sector":item.sector,"point":Vector3(p.x,game.district.ground_height(Vector3(p.x,0,p.y)),p.y),"garrison":[],"start":0,"hit":false,"destroyed":false})
+  var spots: Array[Vector3]=[]
+  for q: Vector2 in item.positions:spots.append(Vector3(q.x,game.district.ground_height(Vector3(q.x,0,q.y)),q.y))
+  strongpoints.append({"title":item.title,"sector":item.sector,"point":Vector3(p.x,game.district.ground_height(Vector3(p.x,0,p.y)),p.y),"positions":spots,"hits":{},"garrison":[],"start":0,"hit":false,"destroyed":false})
+ # The pairs on the posts between the strongpoints belong to none of them.
  for bot in game.bots:
-  var best:=-1;var best_distance:=INF
-  for i in range(strongpoints.size()):
-   if strongpoints[i].sector!=int(bot.get_meta("battle_sector",0)):continue
-   var d:=Vector2(bot.global_position.x-strongpoints[i].point.x,bot.global_position.z-strongpoints[i].point.z).length()
-   if d<best_distance:best=i;best_distance=d
-  if best>=0:strongpoints[best].garrison.append(bot);bot.set_meta("strongpoint",best)
+  var index:int=bot.get_meta("battle_sector",-1)
+  if index>=0 and index<strongpoints.size():strongpoints[index].garrison.append(bot);bot.set_meta("strongpoint",index)
  for item in strongpoints:item.start=item.garrison.size()
  if game.training!="":
   radio("КЕРІВНИК НАВЧАННЯ","Полігон: противника немає, опорні пункти — навчальні цілі. Вогнева позиція — квадрат %s. ПБ %s." % [square_text(FIRING_AREA),GradBallistics.mils_text(GradVehicle.BOUSSOLE_CORRECTION)])
@@ -338,10 +338,14 @@ func impact(where: Vector3) -> void:
   impacts.append(where);last_impact=clock
  for item in strongpoints:
   if item.destroyed:continue
+  if int(item.start)>0:
+   for j in range(item.positions.size()):
+    if where.distance_to(item.positions[j])<10.0:item.hits[j]=true
+   continue
+  # An empty training strongpoint falls to a hit or three bursts within 25 m.
   var d:=where.distance_to(item.point)
   if d<7.0:item.hit=true
-  # An empty training strongpoint falls to three bursts within 25 m.
-  elif d<25.0 and int(item.start)==0:item.near=int(item.get("near",0))+1
+  elif d<25.0:item.near=int(item.get("near",0))+1
 
 func update_strongpoints() -> void:
  for item in strongpoints:
@@ -349,7 +353,7 @@ func update_strongpoints() -> void:
   var living:=0
   for actor in item.garrison:
    if game.battle.operational(actor):living+=1
-  if item.hit or int(item.get("near",0))>=3 or (item.start>0 and living<=int(item.start)/3):
+  if item.hit or int(item.get("near",0))>=3 or item.hits.size()>=2 or (item.start>0 and living<=int(item.start)/3):
    item.destroyed=true;destroyed+=1
    radio("СП","%s знищено. Знищено %d з %d опорних пунктів." % [item.title,destroyed,strongpoints.size()])
 
@@ -414,7 +418,7 @@ func order_assault(go: bool) -> void:
  if go:
   if destroyed<ceili(strongpoints.size()*0.5):radio("КОМБАТ","Прийняв. Знищено лише %d з %d ОП — штурм буде важким." % [destroyed,strongpoints.size()])
   game.battle.set_halt(false);assault_ordered=true
-  radio("КОМБАТ","Штурмовим групам — вперед! Вогонь по рубежах В і Б лише за моєю командою, по своїх не бити.")
+  radio("КОМБАТ","Штурмовим групам — вперед! Вогонь по опорних пунктах лише за моєю командою, по своїх не бити.")
  else:
   game.battle.set_halt(true)
   radio("КОМБАТ","Групам закріпитися на досягнутих рубежах.")
@@ -424,7 +428,7 @@ func status_text() -> String:
  var lines:="БМ-21 «ГРАД» · ОП ЗНИЩЕНО %d/%d · РАКЕТ %d/40" % [destroyed,strongpoints.size(),vehicle.remaining()]
  if game.battle.awaiting:lines+="\nШТУРМ ОЧІКУЄ КОМАНДИ · G — РАДІО"
  elif game.battle.halted:lines+="\nШТУРМ ПРИЗУПИНЕНО · G — РАДІО"
- else:lines+="\nШТУРМ ТРИВАЄ · %s · СИЛИ %d : %d" % [BattleMap.TITLES[mini(game.battle.sector,2)],game.battle.living(true),game.battle.living(false)]
+ else:lines+="\nШТУРМ ТРИВАЄ · %s · СИЛИ %d : %d" % [game.battle.objective_title(),game.battle.living(true),game.battle.living(false)]
  return lines
 
 # --- Frame ------------------------------------------------------------------

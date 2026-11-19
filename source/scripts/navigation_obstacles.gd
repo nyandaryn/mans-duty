@@ -9,8 +9,8 @@ var navigation_scale := 1.0
 
 func tiles(bounds: AABB) -> Array[Vector2i]:
  var result: Array[Vector2i]=[]
- for z in range(floori((bounds.position.z-0.4)/TILE_SIZE),floori((bounds.end.z+0.4)/TILE_SIZE)+1):
-  for x in range(floori((bounds.position.x-0.4)/TILE_SIZE),floori((bounds.end.x+0.4)/TILE_SIZE)+1):result.append(Vector2i(x,z))
+ for z in range(floori((bounds.position.z-0.6)/TILE_SIZE),floori((bounds.end.z+0.6)/TILE_SIZE)+1):
+  for x in range(floori((bounds.position.x-0.6)/TILE_SIZE),floori((bounds.end.x+0.6)/TILE_SIZE)+1):result.append(Vector2i(x,z))
  return result
 
 func remove_body(id: int) -> void:
@@ -32,9 +32,9 @@ func add_body(body: StaticBody3D) -> void:
   var bounds: AABB=collision.global_transform*local
   var key: int=collision.get_instance_id()
   var occupied := tiles(bounds)
-  var low := Vector2i(floori((bounds.position.x-0.4)*navigation_scale),floori((bounds.position.z-0.4)*navigation_scale))
-  var high := Vector2i(ceili((bounds.end.x+0.4)*navigation_scale),ceili((bounds.end.z+0.4)*navigation_scale))
-  shapes[key]={"local":local,"bounds":bounds,"cells":Rect2i(low,high-low+Vector2i.ONE),"inverse":collision.global_transform.affine_inverse(),"tiles":occupied}
+  var low := Vector2i(floori((bounds.position.x-0.6)*navigation_scale),floori((bounds.position.z-0.6)*navigation_scale))
+  var high := Vector2i(ceili((bounds.end.x+0.6)*navigation_scale),ceili((bounds.end.z+0.6)*navigation_scale))
+  shapes[key]={"local":local,"bounds":bounds,"cells":Rect2i(low,high-low+Vector2i.ONE),"inverse":collision.global_transform.affine_inverse(),"tiles":occupied,"cell":1.0/navigation_scale}
   keys.append(key)
   for tile in occupied:
    if not buckets.has(tile):buckets[tile]={}
@@ -60,5 +60,14 @@ static func blocks(record: Dictionary, point: Vector3, cell: Vector2i) -> bool:
  var bounds: AABB=record.bounds
  if bounds.end.y<point.y+0.22 or bounds.position.y>point.y+1.8:return false
  var local: Vector3=record.inverse*Vector3(point.x,clampf(point.y+0.8,bounds.position.y,bounds.end.y),point.z)
- var box: AABB=record.local
- return local.x>=box.position.x-0.37 and local.x<=box.end.x+0.37 and local.z>=box.position.z-0.37 and local.z<=box.end.z+0.37
+ return inside(local,record.local,1.0/float(record.get("cell",1.0)))
+
+# Whether a cell centre (in the shape's frame) is blocked by a box: the box
+# grown by the soldier's radius. A thin panel (a fence board, a sheet) is
+# grown to at least one cell across, so a slanted fence never rasterizes
+# with gaps a path could slip through between its cells.
+static func inside(local: Vector3, box: AABB, scale: float) -> bool:
+ var reach:=0.51/scale
+ var pad_x:=maxf(0.37,reach-box.size.x*0.5)
+ var pad_z:=maxf(0.37,reach-box.size.z*0.5)
+ return local.x>=box.position.x-pad_x and local.x<=box.end.x+pad_x and local.z>=box.position.z-pad_z and local.z<=box.end.z+pad_z

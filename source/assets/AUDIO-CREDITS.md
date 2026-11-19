@@ -80,3 +80,17 @@ air valve and the distant burst thump are procedural.
 | In-game file | Source | Usage | License |
 |---|---|---|---|
 | `audio/radio/zalizna_zgraya.mp3` | «Залізна зграя», supplied by the project owner on 2026-11-18 (file `Залізна_зграя.mp3`, MP3 192 kbit/s, 71 s) | Played unchanged by the receiver on the BM-21 dashboard (R) | Published with the game by permission of the project owner (confirmed 2026-11-18) |
+| `audio/radio/radio_200.mp3` | «200», supplied by the project owner on 2026-11-19 (file `200.mp3`, MP3 126 kbit/s, 48 kHz, 2:37, no title tag) | Played unchanged by the receiver of the BMP-2 driver (R) | Published with the game by permission of the project owner (confirmed 2026-11-19) |
+
+## BMP-2 engine (0.26)
+
+| In-game file | Source | Range | License and author |
+|---|---|---|---|
+| `audio/bmp/engine.wav` | DVIDS 589068 «Section Blank Fire» — https://www.dvidshub.net/video/589068/section-blank-fire | 468.00–473.96 s (crossfade material to 474.76 s), crossfaded 0.8 s loop | Public domain (https://www.dvidshub.net/about/copyright). 1st Lt. Derrick Garner, New York Army National Guard, Yavoriv, 2018-03-09; a Ukrainian BMP-1 of the 3-14th Mechanized Brigade, camera mounted on the moving vehicle |
+
+The appearance of U.S. Department of War (DoW) visual information does not
+imply or constitute DoW endorsement. The recording is the UTD-20 diesel of a
+BMP-1, the same engine as in the BMP-2, at a steady ≈1190 rpm: high-passed at
+30 Hz, resampled to mono 44.1 kHz 16-bit, normalized to −3 dBFS. Its pitch
+follows the simulated crankshaft (smoothed like the flywheel). No recording
+of the starter was found: while cranking the same loop plays slowed down.

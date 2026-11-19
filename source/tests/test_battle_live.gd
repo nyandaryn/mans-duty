@@ -9,7 +9,9 @@ func run():
   await RenderingServer.frame_post_draw
   root.get_texture().get_image().save_png(OS.get_environment("KVARTAL_PREVIEW_DIR")+"/battle-menu.png")
   game.battle.panel.hide()
- game.volume=0;game.ally_count=3;game.battle_size=20;game.selected_map=BattleMap.ID;game.start_match()
+ game.volume=0;game.ally_count=3;game.battle_size=27;game.selected_map=BattleMap.ID;game.start_match()
+ # The fight in the village: the column has arrived and the squads are out.
+ game.battle.skip_approach()
  game.player.set_physics_process(false)
  game.player.position=Vector3(130,game.district.ground_height(Vector3(130,0,130))+.1,130)
  game.player.camera.far=700
@@ -31,7 +33,7 @@ func run():
   count+=1
   if Time.get_ticks_msec()-started>maxf(180000,duration*3000):printerr("FAIL: battle run timeout");quit(1);return
  times.sort()
- print("BATTLE LIVE actors=",max_actors," fire_frames=",shots," allied_travel=",travel," sectors=",game.battle.sector," progress=",game.battle.progress," casualties=",game.killed," p95_ms=",times[int(times.size()*.95)]," worst_ms=",times[-1]," cover_budget=",game.battle.peak_cover_queries," path_budget=",game.battle.peak_path_queries)
+ print("BATTLE LIVE actors=",max_actors," fire_frames=",shots," allied_travel=",travel," target=",game.battle.sector," cleared=",game.battle.cleared_count()," casualties=",game.killed," p95_ms=",times[int(times.size()*.95)]," worst_ms=",times[-1]," cover_budget=",game.battle.peak_cover_queries," path_budget=",game.battle.peak_path_queries)
  for team in [game.allies,game.bots]:
   var alive:=0;var nearest:=INF;var rounds:=0
   for actor in team:

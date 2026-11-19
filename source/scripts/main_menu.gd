@@ -106,8 +106,8 @@ func build_home() -> void:
  game.place(nav,home,0.035,0.37,0.42,0.93)
  var entries:=[
   ["01","КАМПАНІЯ","Дві гілки, десять операцій: лісосмуги, села й міські квартали",func():show_screen("campaign"),""],
-  ["02","ВЕЛИКИЙ ШТУРМ","Авдіївка: три рубежі, до 50 бійців на сторону, «Град» і міномет",func():show_screen("battle"),""],
-  ["03","НАВЧАННЯ","Стрілець, снайпер, мінометник і «Град»: крок за кроком",func():show_screen("training"),"НОВЕ"],
+  ["02","ВЕЛИКИЙ ШТУРМ","Авдіївка: БМП-2 з десантом, зачистка села, три ОП, до 54 бійців на сторону",func():show_screen("battle"),""],
+  ["03","НАВЧАННЯ","Стрілець, снайпер, мінометник, «Град» і БМП: крок за кроком",func():show_screen("training"),"НОВЕ"],
   ["04","СПОРЯДЖЕННЯ","Клас, зброя, одяг і наплічник",func():show_screen("loadout"),""],
   ["05","НАЛАШТУВАННЯ","Звук, миша, екран і керування",func():show_screen("settings"),""],
   ["06","ВИЙТИ","",func():get_tree().quit(),""]]
@@ -220,7 +220,7 @@ func build_training() -> Control:
  var screen:=Control.new()
  game.place(screen,game.menu,0,0,1,1)
  UiKit.sheet(game,screen,0.78)
- UiKit.header(game,screen,"ГОЛОВНЕ МЕНЮ   /   НАВЧАННЯ","НАВЧАННЯ","ЧОТИРИ КУРСИ · БЕЗ ПРОТИВНИКА · БУДЬ-ЯКИЙ РОЗДІЛ ОКРЕМО",back)
+ UiKit.header(game,screen,"ГОЛОВНЕ МЕНЮ   /   НАВЧАННЯ","НАВЧАННЯ","П’ЯТЬ КУРСІВ · БЕЗ ПРОТИВНИКА · БУДЬ-ЯКИЙ РОЗДІЛ ОКРЕМО",back)
  # One tab per class.
  var tabs:=HBoxContainer.new();tabs.add_theme_constant_override("separation",8)
  game.place(tabs,screen,0.035,0.215,0.965,0.285)
@@ -249,7 +249,7 @@ func build_training() -> Control:
  start.size_flags_horizontal=Control.SIZE_EXPAND_FILL;row.add_child(start)
  var full:=UiKit.ghost("УВЕСЬ КУРС З ПОЧАТКУ",func():game.begin_training(0,course_pick),15)
  full.custom_minimum_size=Vector2(0,58);row.add_child(full)
- var note:=UiKit.wrapped("Противника немає: піхота вчиться на полігоні, «Град» — у полі під Авдіївкою. Картка кроку — праворуч угорі, маркер показує, куди йти. Застряг — F6 виконає крок за тебе. ESC — пауза й вихід. Пройдені розділи зберігаються.",13,UiKit.MUTED)
+ var note:=UiKit.wrapped("Противника немає: піхота вчиться на полігоні, «Град» — у полі під Авдіївкою, БМП — на маршруті колони. Картка кроку — праворуч угорі, маркер показує, куди йти. Застряг — F6 виконає крок за тебе. ESC — пауза й вихід. Пройдені розділи зберігаються.",13,UiKit.MUTED)
  game.place(note,screen,0.035,0.9,0.965,0.98)
  return screen
 

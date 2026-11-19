@@ -77,6 +77,10 @@ var breath_recovery := 0.0
 var holding_breath := false
 var scope_fatigue := 0.0
 var scope_adjust_time := 0.0
+# Standing in a vehicle's hatch: returns the world point where the eyes must
+# be. The operator neither walks nor falls nor changes posture there; he
+# looks, aims and shoots.
+var anchor := Callable()
 
 func setup(owner_game: Node3D, primary: String, secondary: String) -> void:
 	game = owner_game
@@ -221,7 +225,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_vaulting():return
 	if concussion.blackout_left>0 or concussion.incapacitated():return
 	# In the drone Ctrl descends; it never changes the operator's stance there.
-	if field_rig.mode!="drone" and not event.is_echo():
+	if field_rig.mode!="drone" and not event.is_echo() and not anchor.is_valid():
 		if event.is_action_pressed("crouch"):
 			# From prone the press brings the operator up to a crouch.
 			if prone_requested:
@@ -283,7 +287,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("reload") and not event.is_echo() and current().inspection_in_hand():
 		if arm_injury<0.5 and injury_time<=0 and current().reload(current().inspection_slot if current().inspection_slot>=0 else 0):burst=0
 		return
-	if event.is_action_pressed("prone") and not event.is_echo():prone_requested=not prone_requested
+	if event.is_action_pressed("prone") and not event.is_echo() and not anchor.is_valid():prone_requested=not prone_requested
 	if event.is_action_pressed("inspect_mag") and not event.is_echo():inspection_combo=false
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode in [KEY_1,KEY_2,KEY_3]:
 		var pouch := int(event.physical_keycode)-KEY_1
@@ -347,7 +351,7 @@ func _physics_process(delta: float) -> void:
 		update_pose(delta)
 		return
 	update_cover(delta)
-	if Input.is_action_just_pressed("jump") and vault.try_start():
+	if not anchor.is_valid() and Input.is_action_just_pressed("jump") and vault.try_start():
 		vault.tick(delta)
 		update_pose(delta)
 		return
@@ -361,7 +365,7 @@ func _physics_process(delta: float) -> void:
 	var aiming_weapon := aim or (launcher.mode=="ready" and Input.is_action_pressed("aim") and concussion.can_aim())
 	var sprint := Input.is_action_pressed("sprint") and not aiming_weapon and not crouch and arm_injury<0.5 and leg_injury<0.5 and pain<0.5
 	if concussion.active():sprint=false
-	var input := Vector2.ZERO if (game.commands_open or game.inventory_open) else Input.get_vector("left","right","forward","back")
+	var input := Vector2.ZERO if (game.commands_open or game.inventory_open or anchor.is_valid()) else Input.get_vector("left","right","forward","back")
 	# Stepping away calls off hands-on work (deploying, packing, lifting the mortar).
 	if field_rig.mode=="work" and input.length()>0.2:field_rig.interrupt_work("СКАСОВАНО")
 	var direction := (transform.basis*Vector3(input.x,0,input.y)).normalized()
@@ -376,10 +380,12 @@ func _physics_process(delta: float) -> void:
 	if injury_time>0:speed*=0.45
 	velocity.x=move_toward(velocity.x,direction.x*speed,delta*22)
 	velocity.z=move_toward(velocity.z,direction.z*speed,delta*22)
-	if not is_on_floor(): velocity.y-=19*delta
+	if anchor.is_valid():velocity=Vector3.ZERO
+	elif not is_on_floor(): velocity.y-=19*delta
 	elif not (game.commands_open or game.inventory_open) and Input.is_action_just_pressed("jump") and not prone and leg_injury<0.5 and injury_time<=0 and bandage_time<=0 and not field_rig.active() and not concussion.active(): velocity.y=5.2
 	else: velocity.y=-0.3
-	move_and_slide()
+	if anchor.is_valid():global_position+=anchor.call()-camera.global_position
+	else:move_and_slide()
 	if position.y < (game.district.terrain.minimum-15 if game.district.terrain!=null else -5): take_damage(100)
 	var planar_speed := Vector2(velocity.x,velocity.z).length()
 	travelled+=planar_speed*delta

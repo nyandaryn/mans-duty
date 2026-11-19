@@ -135,7 +135,7 @@ func run():
  game.selected_map="training"
  game.set_player_class("grad")
  check(game.player_class=="grad" and game.selected_map==BattleMap.ID,"Choosing the BM-21 selects the great assault")
- game.battle_size=12
+ game.battle_size=18
  game.start_match()
  for actor in game.allies+game.bots:actor.set_physics_process(false)
  game.squad.set_physics_process(false)
@@ -143,10 +143,11 @@ func run():
  var vehicle: GradVehicle=grad.vehicle
  check(grad.active() and is_instance_valid(vehicle),"The launcher stands at its waiting position")
  check(Vector2(vehicle.global_position.x-GradCommand.START.x,vehicle.global_position.z-GradCommand.START.z).length()<3,"Vehicle spawned at the tree line south-west of the battle")
- check(grad.strongpoints.size()==9,"Nine strongpoints tracked")
+ check(grad.strongpoints.size()==3,"Three strongpoints tracked")
  var garrisoned:=0
  for item in grad.strongpoints:garrisoned+=item.garrison.size()
- check(garrisoned==game.bots.size(),"Every defender belongs to a strongpoint (%d/%d)" % [garrisoned,game.bots.size()])
+ var posted: int=game.bots.filter(func(a):return a.get_meta("battle_sector",-1)<0).size()
+ check(garrisoned+posted==game.bots.size() and garrisoned==BattleMode.defence_counts(18).slice(0,3).reduce(func(a,b):return a+b),"Every defender of a strongpoint is in its garrison, the posts in none (%d + %d / %d)" % [garrisoned,posted,game.bots.size()])
  check(game.battle.awaiting and game.battle.halted,"The assault waits for the commander's order")
  check(vehicle.remaining()==40 and vehicle.cover_on and vehicle.travel_lock and not vehicle.springs_locked,"Loaded, covered and locked for the march")
  check(game.player.global_position.distance_to(vehicle.global_position)<6,"Commander stands next to the vehicle")

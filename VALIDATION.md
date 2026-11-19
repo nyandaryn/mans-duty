@@ -1,3 +1,64 @@
+# 0.26.0 validation — 2026-11-19
+
+The great assault mechanized: three enemy strongpoints in the village, the
+attackers in BMP-2 squads. The BMP-2 itself, its driver's seat and panel, the
+passenger in the commander's hatch, a real UTD-20 engine sound, the route
+sheet of the map and a BMP training course.
+
+- New test_bmp (42 checks, --fixed-fps 60):
+  - gear speeds at 2600 rpm within 1 km/h of the manual (10.6 / 19.6 /
+    29.1 / 43.3 / 65.0); battle sizes are whole crews;
+  - the column of 27: three BMPs, each 1.5–2 km out under the tree belt
+    with the driver, the gunner and seven men; the march at 46 km/h, at
+    most 3.7 m off the road, column interval over 25 m, troops aboard;
+  - the passenger sees through the TKN-3B inside the armour, the radio
+    plays with a bot driving; V puts him in the hatch with the rifle,
+    exposed, the eyes pinned within 5 cm at over 20 km/h; V again back in;
+  - a village fence rammed at 15 km/h falls: no collider, panels gone from
+    the merged mesh;
+  - the player-driver: hatch open / shut views, the panel readings
+    (generator 27.6 V, oil pressure), the recorded engine loop, the radio
+    on the battery switch, no neutral turn, the first-stage radius ≈7 m,
+    the four squad commands, getting out and back in.
+- New test_bmp_training (29 checks, --fixed-fps 60): start-up, moving off
+  and the closed hatch with the real keys, the drives with F6, «Десант» and
+  «По місцях» with all seven men; chapter 3 on its own; the loadout back.
+- test_infantry_training: the tab count follows the course list (five).
+- Engine sound: the drivetrain still swings ±70–90 rpm from frame to frame
+  under load; the heard rpm (pitch and tachometers, BMP and BM-21) is
+  smoothed like a flywheel: 84.7 → 4.5 rpm per frame in first gear at half
+  throttle, the trend of the acceleration kept.
+- Renders: the driver's prisms and panel (small and RMB), the open hatch,
+  the commander inside, the TKN-3B ×5, the hatch with the rifle, the course
+  card over the prisms, the training menu with five tabs, the route sheet.
+- Full source suite (53 scenarios; test_grad, test_grad_training,
+  test_infantry_training, test_bmp and test_bmp_training with --fixed-fps
+  60): all pass. test_squad_routes exits 0 with no PASS line, as before.
+- «200» is published with the game by permission of the project owner; the
+  BMP engine is DVIDS 589068, public domain (AUDIO-CREDITS.md).
+- Exported pck (23 MB, sha256 923dd116…), run with the shipped kvartal.x86_64
+  via --main-pack: `--quit-after 300` exits with no ERROR lines, and all
+  pass:
+
+    | Test | Checks |
+    |---|---|
+    | bmp | 42 |
+    | bmp_training | 29 |
+    | grad | 115 |
+    | grad_training | 90 |
+    | infantry_training | 88 |
+    | battle | 43 |
+    | mortar | 83 |
+    | equipment | 98 |
+    | loadout_preview | 34 |
+    | campaign_flow | 34 |
+    | squad_tactics | 18 |
+    | wide_screen | 18 |
+    | user_data | 10 |
+
+- The installed game gets this pck by an atomic rename; 0.25.0 is backed up
+  as .build/backup/kvartal-0.25.0.pck.
+
 # 0.25.0 validation — 2026-11-18
 
 BM-21 cab: rear-view mirrors that show what is behind, the steering wheel

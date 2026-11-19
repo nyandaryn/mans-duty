@@ -15,7 +15,7 @@ var player: Operator
 var bots: Array[Hostile] = []
 var allies: Array[Hostile] = []
 var ally_count := 0
-var battle_size := 20
+var battle_size := 27
 var battle: BattleMode
 var commands_open := false
 var inventory_open := false
@@ -23,6 +23,7 @@ var inventory: CombatInventory
 var squad: AssaultSquad
 var crew: MortarCrew
 var grad: GradCommand
+var bmp: BmpCommand
 var topo_map: TopoMap
 var drone_feed: DroneFeed
 var player_class := "rifleman"
@@ -85,7 +86,7 @@ var orbit := 0.0
 var main_menu: MainMenu
 var grad_training: GradTraining
 # Every «Навчання» course by class, in the order of the training screen.
-const COURSE_IDS := ["rifleman","sniper","mortarman","grad"]
+const COURSE_IDS := ["rifleman","sniper","mortarman","grad","bmp"]
 var courses: Dictionary={}
 # A training session borrows the BM-21 class and gives the loadout back.
 var training := ""
@@ -248,6 +249,7 @@ func start_match() -> void:
 	crew.reset()
 	stop_courses()
 	grad.reset()
+	bmp.reset()
 	# The BM-21 fights only in the great assault.
 	if player_class=="grad" and training=="":selected_map=BattleMap.ID
 	if district.map_id!=selected_map or selected_map in Campaign.IDS or selected_map==BattleMap.ID:
@@ -271,6 +273,7 @@ func start_match() -> void:
 		bots.append(bot)
 	squad.spawn()
 	crew.start()
+	bmp.start()
 	soldier_controls.text=control_hint()
 	menu.hide()
 	pause_panel.hide()
@@ -328,6 +331,7 @@ func to_menu(screen: String="") -> void:
 	crew.reset()
 	stop_courses()
 	grad.reset()
+	bmp.reset()
 	end_training()
 	running=false
 	paused=false
@@ -362,7 +366,8 @@ func begin_training(chapter: int, course_id: String="") -> void:
 	loadout_bag.equipped=true
 	for kind in plan.get("bag",[]):loadout_bag.add(kind)
 	if plan.get("bag",[]).is_empty():loadout_bag=BackpackState.new()
-	ally_count=0
+	# A course with a squad (the BMP's troop compartment) brings its men.
+	ally_count=int(plan.get("allies",0))
 	selected_map=plan["map"]
 	await begin_operation()
 
@@ -437,8 +442,8 @@ func finish(won: bool) -> void:
 	var accuracy := roundi(float(player.hits)/maxi(1,player.shots)*100)
 	var stats := "НЕЙТРАЛІЗОВАНО     %02d / %02d\nЧАС ОПЕРАЦІЇ         %02d:%02d\nПОСТРІЛІВ             %d\nВЛУЧНІСТЬ              %d %%" % [killed,bots.size(),int(elapsed)/60,int(elapsed)%60,player.shots,accuracy]
 	if battle.active:
-		title="РУБЕЖІ ЗАХОПЛЕНО" if won else "ШТУРМ ЗУПИНЕНО"
-		stats="%s\nРУБЕЖІ %d / 3 · ЧАС %02d:%02d" % [battle.result_reason,mini(battle.sector,3),int(elapsed)/60,int(elapsed)%60]
+		title="СЕЛО ЗАЧИЩЕНО" if won else "ШТУРМ ЗУПИНЕНО"
+		stats="%s\nОП ЗНИЩЕНО %d / 3 · ПРОТИВНИКА ВИВЕДЕНО З ЛАДУ %d / %d · ЧАС %02d:%02d" % [battle.result_reason,battle.cleared_count(),battle.enemy_total-battle.living(false),battle.enemy_total,int(elapsed)/60,int(elapsed)%60]
 	show_result(title,stats,[["ЩЕ ОДНА ОПЕРАЦІЯ",begin_operation],["ДО СПОРЯДЖЕННЯ",func():to_menu("loadout")],["ГОЛОВНЕ МЕНЮ",func():to_menu("home")]])
 
 func bot_down() -> void:
@@ -575,8 +580,13 @@ func load_settings() -> void:
 	if settings.load("user://settings.cfg")==OK:
 		loadout_bag=BackpackState.restore(settings.get_value("loadout","backpack",{}))
 		player_outfit=Wardrobe.valid(str(settings.get_value("loadout","outfit","ua_pixel")))
-		battle_size=int(settings.get_value("operation","battle_size",20))
-		if battle_size not in BattleMode.SIZES:battle_size=20
+		battle_size=int(settings.get_value("operation","battle_size",27))
+		# Sizes before the BMPs (12, 20, 28, 50) are not whole crews: the nearest one.
+		if battle_size not in BattleMode.SIZES:
+			var nearest:int=BattleMode.SIZES[0]
+			for size in BattleMode.SIZES:
+				if absi(size-battle_size)<absi(nearest-battle_size):nearest=size
+			battle_size=nearest
 		enemy_outfit=Wardrobe.valid(str(settings.get_value("operation","enemy_outfit","rf_digital")))
 		selected_map=str(settings.get_value("operation","map","city"))
 		if selected_map not in Campaign.IDS and selected_map!=BattleMap.ID:selected_map="forest_01"
@@ -838,6 +848,9 @@ func setup_ui() -> void:
 	grad=GradCommand.new()
 	add_child(grad)
 	grad.setup(self,root)
+	bmp=BmpCommand.new()
+	add_child(bmp)
+	bmp.setup(self,root)
 	drone_feed=DroneFeed.new()
 	drone_feed.setup(self,root)
 	topo_map=TopoMap.new()
@@ -848,7 +861,7 @@ func setup_ui() -> void:
 	# mortar sight; pause and results hide them.
 	grad_training=GradTraining.new()
 	grad_training.setup(self,root)
-	courses={"rifleman":RiflemanTraining.new(),"sniper":SniperTraining.new(),"mortarman":MortarTraining.new()}
+	courses={"rifleman":RiflemanTraining.new(),"sniper":SniperTraining.new(),"mortarman":MortarTraining.new(),"bmp":BmpTraining.new()}
 	for id in courses:courses[id].setup(self,root)
 	courses["grad"]=grad_training
 	loading_panel=Control.new()
@@ -967,7 +980,7 @@ func select_map(index: int) -> void:
 func update_map_description() -> void:
 	if not is_instance_valid(map_description):return
 	if selected_map==BattleMap.ID:
-		map_description.text="Великий штурм · %d × %d · три рубежі" % [battle_size,battle_size]
+		map_description.text="Великий штурм · %d × %d · зачистка села" % [battle_size,battle_size]
 		return
 	if selected_map in Campaign.IDS:
 		var mission := Campaign.mission(selected_map)
@@ -1048,14 +1061,14 @@ func _exit_tree() -> void:
 func coordinate_squad() -> void:
 	var assigned: Array[Hostile]=[]
 	for bot in bots:
-		if bot.dead or assigned.has(bot):continue
+		if bot.dead or bot.vehicle!=null or assigned.has(bot):continue
 		if not bot.alerted or bot.arm_wound>=0.5 or bot.collapse>0.01 or bot.treatment_time>0:
 			bot.assign_squad("",null)
 			continue
 		var buddy: Hostile
 		var nearest := 45.0
 		for ally in bots:
-			if ally==bot or ally.dead or assigned.has(ally) or not ally.alerted or ally.arm_wound>=0.5 or ally.collapse>0.01 or ally.treatment_time>0:continue
+			if ally==bot or ally.dead or ally.vehicle!=null or assigned.has(ally) or not ally.alerted or ally.arm_wound>=0.5 or ally.collapse>0.01 or ally.treatment_time>0:continue
 			var distance: float=bot.global_position.distance_to(ally.global_position)
 			if distance<nearest:
 				nearest=distance
@@ -1156,7 +1169,16 @@ func begin_operation() -> void:
 	loading_panel.hide()
 	launching=false
 
-func alert_opponents(shooter: Hostile, where: Vector3) -> void:
+# The vehicle the player sits in, if any.
+func player_vehicle() -> BmpVehicle:
+	if is_instance_valid(bmp) and bmp.seat!="" and is_instance_valid(bmp.vehicle):return bmp.vehicle
+	return null
+
+# Inside the armour: out of sight and reach. Head and shoulders out of the
+# hatch with a rifle the operator is a target like any other.
+func player_sheltered() -> bool:return player_vehicle()!=null and not bmp.head_out
+
+func alert_opponents(shooter: Node3D, where: Vector3) -> void:
 	for actor in (bots if shooter.friendly else allies):actor.hear(where)
 
 func _input(event: InputEvent) -> void:
@@ -1172,6 +1194,8 @@ func _input(event: InputEvent) -> void:
 		elif event.physical_keycode==KEY_G:
 			# The BM-21 commander has the radio and the tablet instead (GradCommand).
 			if is_instance_valid(grad) and grad.active():return
+			# The BMP driver commands his squad (BmpCommand).
+			if is_instance_valid(bmp) and bmp.active() and player_class=="bmp":return
 			if player.field_rig.mode=="drone" or player.is_vaulting() or player.launcher.active():return
 			if topo_map.visible or crew.sight.visible:return
 			inventory.close()
@@ -1194,12 +1218,14 @@ func close_panels() -> void:
 		crew.sight.close()
 	if is_instance_valid(topo_map):topo_map.close()
 	if is_instance_valid(grad):grad.close_panels()
+	if is_instance_valid(bmp):bmp.close_panels()
 	commands_open=false
 
 func control_hint() -> String:
 	var text := "SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    Q / E  НАХИЛ    C  ВИГЛЯНУТИ    ALT  ЛИШЕ ЗБРОЯ    H  АПТЕЧКА\nV  ЗАТВОР    M  КАРТА    K  ДАЛЕКОМІР    J  ДРОН    U  ЕКРАН ДРОНА"
 	if player_class=="rifleman":text+="    4  РПО-А"
 	if player_class=="mortarman":text+="    G  РОЗРАХУНОК    N  МІНОМЕТ    F  ПРИЦІЛ / ЯЩИК"
+	if player_class=="bmp":text+="\nG  КОМАНДИ ВІДДІЛЕННЮ    F  БІЛЯ ЛЮКА — МІСЦЕ МЕХАНІКА-ВОДІЯ"
 	if player_class=="grad":text="SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    H  АПТЕЧКА    F  БІЛЯ МАШИНИ — ДІЯ / КАБІНА / ПРИЦІЛ    M  ПЛАНШЕТ    G  РАДІО"
 	return text
 

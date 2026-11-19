@@ -133,6 +133,19 @@ func _process(delta: float) -> void:
 			entries.remove_at(index)
 			continue
 		var actor: Hostile=entry.actor
+		# A soldier inside a vehicle is drawn by nobody: hide his instance
+		# and keep his detailed meshes out of the tree until he steps out.
+		if actor.vehicle!=null:
+			if not entry.get("aboard",false):
+				entry.aboard=true
+				if not entry.far:
+					entry.far=true
+					set_far(entry,true)
+				hide_slot(entry.team,entry.slot)
+			continue
+		if entry.get("aboard",false):
+			entry.aboard=false
+			entry.serial=-1
 		var position := actor.global_position
 		var distance := origin.distance_to(position)
 		var limit: float=PERSONAL_NEAR if entry.personal else NEAR

@@ -22,7 +22,7 @@ func index_soldiers() -> void:
 	nearby.clear()
 	for team in [game.bots,game.allies]:
 		for bot in team:
-			if bot.dead:continue
+			if bot.dead or bot.vehicle!=null:continue
 			var chest: Vector3=bot.global_position+Vector3.UP
 			var key := Vector2i(floori(chest.x/8),floori(chest.z/8))
 			if not nearby.has(key):nearby[key]=[]
@@ -131,7 +131,7 @@ func step_projectiles(delta: float) -> void:
 					var bot: Hostile=entry[0]
 					if bot.dead or bot==shooter:continue
 					# Nearby friendly fire is not an enemy contact. Direct hits still hurt.
-					if (shooter==game.player and bot.friendly) or (shooter is Hostile and shooter.friendly==bot.friendly):continue
+					if (shooter==game.player and bot.friendly) or (shooter is Hostile and shooter.friendly==bot.friendly) or (shooter is BmpVehicle and shooter.friendly==bot.friendly):continue
 					var chest: Vector3=entry[1]
 					var near := Geometry3D.get_closest_point_to_segment(chest,position,segment_end)
 					var identity: int=bot.get_instance_id()

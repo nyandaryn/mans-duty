@@ -207,7 +207,7 @@ func draw_dashboard(v: GradVehicle) -> void:
 func draw_instruments(v: GradVehicle, base: Vector2) -> void:
  draw_rect(Rect2(base-Vector2(470,92),Vector2(940,175)),Color(0.05,0.055,0.045,0.82))
  gauge(base+Vector2(-370,0),62,absf(v.speed())*3.6,0,90,"км/год","%d" % roundi(absf(v.speed())*3.6))
- gauge(base+Vector2(-215,0),62,v.rpm(),0,4000,"об/хв","%d" % roundi(v.rpm()),3200)
+ gauge(base+Vector2(-215,0),62,v.steady_rpm(),0,4000,"об/хв","%d" % roundi(v.steady_rpm()),3200)
  gauge(base+Vector2(-60,0),50,v.air,0,10,"ПОВІТРЯ","%.1f" % v.air)
  gauge(base+Vector2(70,0),50,v.tyre,0,4,"ШИНИ","%.1f" % v.tyre)
  text(base+Vector2(-110,78),"кгс/см²",11,DIM,HORIZONTAL_ALIGNMENT_CENTER,230)

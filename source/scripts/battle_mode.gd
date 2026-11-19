@@ -1,18 +1,37 @@
 class_name BattleMode
 extends Node
 
-const SIZES := [12,20,28,50]
-const CAPTURE_TIME := 30.0
+# Soldiers on each side: whole mechanized squads, one BMP-2 each — the
+# driver-mechanic, the gunner-operator and seven men who dismount.
+const SQUAD := 9
+const SIZES := [18,27,36,54]
+# Seconds without a defender on his feet before a strongpoint, or the whole
+# village, counts as cleared: a soldier knocked down for a moment is not yet
+# out of the fight.
+const CLEAR_TIME := 3.0
 # Seconds before the commander's role passes to a soldier already on the field.
 const TAKEOVER_TIME := 5.0
-# Defenders holding each sector from the start: the first line is the strongest.
-const DEFENCE_SHARE := [0.4,0.3,0.3]
+# Share of the defenders on posts scattered over the village in pairs; the
+# rest hold the three strongpoints.
+const SCATTERED_SHARE := 0.3
+# Scattered posts keep this far from the attackers' start line, and this far
+# from the middle of a strongpoint.
+const POST_STANDOFF := 100.0
+const POST_APART := 55.0
 var game: Node3D
 var active := false
 var finished := false
+# Strongpoint the attackers storm now; -1 once all three are destroyed and
+# they mop up the posts left in the village.
 var sector := 0
-var progress := 0.0
-var contested := false
+var cleared: Array[bool]=[false,false,false]
+var clear_timers: Array[float]=[0.0,0.0,0.0]
+var last_cleared := -1
+var quiet := 0.0
+var enemy_total := 0
+# Posts of the defenders left after the strongpoints, nearest to the
+# attackers first.
+var sweep: Array[Vector3]=[]
 var respawn_left := 0.0
 var command_left := 0.0
 var serial := 0
@@ -29,6 +48,10 @@ var crowd: CrowdRenderer
 # can halt it (consolidate, wait for the end of the barrage) and resume it.
 var halted := false
 var awaiting := false
+# The mechanized squads in column order; the column moves off on the order.
+var mech: Array[MechSquad]=[]
+var column_go := false
+var vehicle_grid: AStarGrid2D
 
 func setup(owner_game: Node3D) -> void:
  game=owner_game
@@ -40,32 +63,119 @@ func reset() -> void:
   crowd.clear_all();crowd.queue_free()
  crowd=null
  active=false;finished=false;corpses.clear();respawn_left=0
- halted=false;awaiting=false
+ halted=false;awaiting=false;column_go=false
+ for squad in mech:
+  if is_instance_valid(squad):
+   if is_instance_valid(squad.vehicle):squad.vehicle.gunner.clear();squad.vehicle.queue_free()
+   squad.queue_free()
+ mech.clear()
+ vehicle_grid=null
 
 func start() -> void:
- reset();active=true;sector=0;progress=0;contested=false;serial=0
+ reset();active=true;serial=0
  command_left=0;result_reason=""
+ cleared=[false,false,false];clear_timers=[0.0,0.0,0.0];last_cleared=-1;quiet=0;sweep.clear()
  budget_frame=-1;peak_cover_queries=0;peak_path_queries=0
  crowd=CrowdRenderer.new();game.add_child(crowd);crowd.setup(game,game.battle_size+32)
  for actor in game.allies:
   actor.set_meta("battle_personal",true)
   crowd.register(actor)
  # Both armies are on the field from the first second and nobody arrives
- # later: every casualty is final. Defenders hold all three sectors in depth;
- # the attackers form up in front of the insertion, the commander behind them.
+ # later: every casualty is final. Defenders hold the three strongpoints and
+ # the posts between them; the attackers form up in front of the insertion,
+ # the commander behind them.
  var defenders:=defence_counts(game.battle_size)
  for index in range(3):
   for i in range(defenders[index]):deploy(false,index)
- for i in range(game.battle_size-game.allies.size()):deploy(true,0)
+ deploy_posts(defenders[3])
+ enemy_total=game.bots.size()
+ sector=next_target(formation_base(true,0))
+ # The attackers come up in their vehicles: the column waits under the
+ # trees by the highway; the player's own vehicle, if he drives one, leads.
+ vehicle_grid=BmpRoutes.vehicle_grid(game.district)
+ for i in range(1 if game.player_class=="bmp" else 0,squad_count(game.battle_size)):deploy_squad(i)
+ game.bmp.start_battle(self)
  if game.player_class in ["mortarman","grad"]:
   set_halt(true);awaiting=true
   game.squad.tell("Штурм очікує твоєї команди · G — %s" % ("радіо" if game.player_class=="grad" else "розрахунок"))
+ column_go=not awaiting
+
+static func squad_count(size: int) -> int:return maxi(1,int(size/SQUAD))
+
+# A mechanized squad in its vehicle at its place in the column: the crew in
+# their seats, seven men in the troop compartment.
+func deploy_squad(index: int) -> MechSquad:
+ var vehicle:=BmpVehicle.new()
+ game.world_root.add_child(vehicle)
+ vehicle.setup(game,str(index+1))
+ place_vehicle(vehicle,BmpRoutes.parking(index,game.district))
+ var squad:=MechSquad.new()
+ add_child(squad)
+ squad.setup(game,self,index,vehicle)
+ register_squad(squad)
+ var spot:=vehicle.global_position
+ for role in ["driver","gunner"]:
+  var actor:=spawn_soldier(true,spot,index)
+  vehicle.board_crew(actor,role)
+ for k in range(BmpVehicle.SEATS):
+  var actor:=spawn_soldier(true,spot,index)
+  squad.members.append(actor)
+  vehicle.board(actor)
+ return squad
+
+# For the tests of the infantry assault: the column has already arrived —
+# every squad is out on the start line in front of the insertion as the
+# groups formed up before the BMPs, the vehicles behind it in support.
+func skip_approach() -> void:
+ var serial_before:=serial
+ serial=0
+ for squad in mech:
+  if squad.player_led:continue
+  var vehicle:=squad.vehicle
+  var spot:=formation_base(true,0)+BattleMap.offset(float(squad.index%3-1)*34.0,38.0+float(squad.index/3)*14.0)
+  spot.y=game.district.ground_height(spot)
+  vehicle.parking=true;vehicle.freeze=false
+  place_vehicle(vehicle,Transform3D(Basis.looking_at(Vector3(BattleMap.north().x,0,BattleMap.north().y),Vector3.UP),spot))
+  vehicle.linear_velocity=Vector3.ZERO;vehicle.angular_velocity=Vector3.ZERO
+  for actor in vehicle.crew:actor.global_position=vehicle.global_position+vehicle.global_basis.y*0.9
+  for actor in squad.aboard():
+   var point:Variant=safe_spawn(true,0)
+   if point==null:point=formation_base(true,0)+BattleMap.offset(randf_range(-6,6),randf_range(-3,3))+Vector3.UP*0.05
+   vehicle.aboard.erase(actor)
+   actor.disembark(point,Vector3(-BattleMap.north().x,0,-BattleMap.north().y))
+   actor.rotation.y=BattleMap.facing(true)
+   squad.control(actor,false)
+   serial+=1
+  squad.drop=vehicle.global_position
+  squad.goal_sector=sector
+  squad.set_state("assault")
+  for actor in squad.on_foot():assign(actor)
+ serial=maxi(serial,serial_before)
+ column_go=true
+ # A passenger gets out with them.
+ if game.bmp.seat=="commander":game.bmp.leave()
+
+# Column order: each squad follows the one before it.
+func register_squad(squad: MechSquad) -> void:
+ mech.append(squad)
+ mech.sort_custom(func(a,b):return a.index<b.index)
+ for i in range(mech.size()):mech[i].ahead=mech[i-1] if i>0 else null
+
+func place_vehicle(vehicle: BmpVehicle, at: Transform3D) -> void:
+ var spot:=at.origin
+ spot.y=game.district.ground_height(spot)
+ var data:=AvdiivkaData.shared() if is_instance_valid(game.district.operation_area) else null
+ var normal:=data.normal_at(spot.x,spot.z) if data!=null and (absf(spot.x)>199 or absf(spot.z)>199) else Vector3.UP
+ var forward:=-at.basis.z
+ vehicle.global_transform=Transform3D.IDENTITY
+ vehicle.look_at_from_position(spot+Vector3.UP*0.12,spot+Vector3.UP*0.12+forward,normal)
 
 func set_halt(value: bool) -> void:
  halted=value
- if not value:awaiting=false
+ if not value:awaiting=false;column_go=true
  for actor in game.allies:
-  if not actor.get_meta("battle_managed",false) or not operational(actor):continue
+  # The men in the vehicles get their halt line where they dismount.
+  if not actor.get_meta("battle_managed",false) or not operational(actor) or actor.vehicle!=null:continue
   if value:
    var cell:Vector2i=game.district.nearest_cell(game.district.navigation_cell(actor.global_position))
    actor.set_meta("halt_point",game.district.navigation_position(cell))
@@ -73,16 +183,92 @@ func set_halt(value: bool) -> void:
   # Everyone looks for cover at once, staggered against the per-frame budget.
   if value:actor.has_cover=false;actor.cover_timer=randf()*1.5
 
+# Defenders of the three strongpoints and on the scattered posts.
 static func defence_counts(size: int) -> Array[int]:
- var first:=ceili(size*DEFENCE_SHARE[0])
- var second:=mini(size-first,roundi(size*DEFENCE_SHARE[1]))
- return [first,second,size-first-second]
+ var scattered:=roundi(size*SCATTERED_SHARE)
+ var held:=size-scattered
+ var first:=ceili(held/3.0)
+ var second:=ceili((held-first)/2.0)
+ return [first,second,held-first-second,scattered]
 
+# An attacker in the formation, or a defender of a strongpoint on one of its
+# firing positions in turn.
 func deploy(friendly: bool, index: int) -> void:
- var point:Variant=safe_spawn(friendly,index)
+ if not friendly:
+  var slot:=0
+  for actor in game.bots:
+   if actor.get_meta("battle_sector",-1)==index:slot+=1
+  spawn_soldier(false,garrison_post(index,slot),index,slot%BattleMap.POSITIONS[index].size())
+  return
+ var point:Variant=safe_spawn(true,index)
  # A full formation still places the soldier: at the base, slightly offset.
- if point==null:point=formation_base(friendly,index)+BattleMap.offset(randf_range(-6,6),randf_range(-3,3)*(1 if friendly else -1))+Vector3.UP*0.05
- spawn_soldier(friendly,point,index)
+ if point==null:point=formation_base(true,index)+BattleMap.offset(randf_range(-6,6),randf_range(-3,3))+Vector3.UP*0.05
+ spawn_soldier(true,point,index)
+
+# A defender's post at a firing position: the first one in the emplacement,
+# the others over the yard and the house around it.
+func garrison_post(index: int, slot: int) -> Vector3:
+ var spots: Array=BattleMap.POSITIONS[index]
+ var spot: Vector2=spots[slot%spots.size()]
+ var at:=Vector3(spot.x,0,spot.y)
+ for attempt in range(40):
+  var reach:=0.0 if attempt==0 and slot<spots.size() else randf_range(3.0,11.0)
+  var point:Variant=post_point(at+Vector3(reach,0,0).rotated(Vector3.UP,randf()*TAU),2.5)
+  if point!=null:return point
+ return snap(at)+Vector3.UP*0.05
+
+# Pairs on posts in the houses between the strongpoints, in different places
+# every battle: away from the strongpoints and from the attackers' start line.
+func deploy_posts(count: int) -> void:
+ var data:=AvdiivkaData.shared()
+ var houses: Array=[]
+ for b in data.features.buildings:
+  if b[6]!="H" or absf(b[0])>185 or absf(b[1])>185:continue
+  var at:=Vector2(b[0],b[1])
+  if at.distance_to(BattleMap.FORMATION)<POST_STANDOFF or at.distance_to(BattleMap.SPAWN)<POST_STANDOFF:continue
+  var apart:=true
+  for c in BattleMap.CENTERS:
+   if at.distance_to(c)<POST_APART:apart=false
+  if apart:houses.append(b)
+ houses.shuffle()
+ var taken: Array[Vector2]=[]
+ for b in houses:
+  if count<=0:break
+  var at:=Vector2(b[0],b[1])
+  var spaced:=true
+  for other in taken:
+   if other.distance_to(at)<30:spaced=false
+  if not spaced:continue
+  var reach:=maxf(b[2],b[3])*0.5+2.0
+  var first:Variant=null
+  var placed:=0
+  for attempt in range(20):
+   if placed>=mini(2,count):break
+   var desired:=Vector3(at.x,0,at.y)+Vector3(reach+randf()*3,0,0).rotated(Vector3.UP,randf()*TAU)
+   # The second of the pair stays within a few steps of the first.
+   if first is Vector3:desired=first+Vector3(randf_range(2.0,4.0),0,0).rotated(Vector3.UP,randf()*TAU)
+   var point:Variant=post_point(desired,2.5)
+   if point==null:continue
+   if first==null:first=point
+   spawn_soldier(false,point,-1,-1)
+   placed+=1
+  if placed>0:taken.append(at);count-=placed
+ # A village with no room for every post: the rest join the strongpoints.
+ for i in range(count):deploy(false,i%3)
+
+# A free navigation point near the desired one that the attackers can reach.
+func post_point(desired: Vector3, tolerance: float) -> Variant:
+ var district: District=game.district
+ var cell:=district.nearest_cell(district.navigation_cell(desired))
+ var point:=district.navigation_position(cell)
+ if Vector2(point.x-desired.x,point.z-desired.z).length()>tolerance:return null
+ if not district.navigation_regions.connected(cell,district.nearest_cell(district.navigation_cell(formation_base(true,0)))):return null
+ for actor in game.bots:
+  if is_instance_valid(actor) and actor.global_position.distance_to(point)<1.8:return null
+ return point+Vector3.UP*0.05
+
+func snap(point: Vector3) -> Vector3:
+ return game.district.navigation_position(game.district.nearest_cell(game.district.navigation_cell(point)))
 
 func budget(kind: String) -> bool:
  if not active:return true
@@ -125,32 +311,103 @@ func update_interval(actor: Hostile) -> int:
   return 2 if apparent<110 else 3
  return 3 if distance<60 else 4
 
+# Middle of a strongpoint; without an index, of the one under assault, or
+# the post the attackers make for while they mop up the village.
 func center(index: int=-1) -> Vector3:
- var c: Vector2=BattleMap.CENTERS[clampi(sector if index<0 else index,0,2)]
+ var i:=sector if index<0 else index
+ if i<0:return objective_point(0)
+ var c: Vector2=BattleMap.CENTERS[clampi(i,0,2)]
  return Vector3(c.x,game.district.ground_height(Vector3(c.x,0,c.y)),c.y)
+
+func position_point(index: int, slot: int) -> Vector3:
+ var p: Vector2=BattleMap.POSITIONS[index][slot]
+ return Vector3(p.x,game.district.ground_height(Vector3(p.x,0,p.y)),p.y)
 
 func operational(actor: Hostile) -> bool:
  return is_instance_valid(actor) and not actor.dead and not actor.concussion.incapacitated()
 
-# Resupply point: the attackers' rear, or behind the sector a defender holds.
+# Still in the fight: alive, conscious and on his feet.
+func fighting(actor: Hostile) -> bool:
+ return operational(actor) and actor.collapse<=0.5
+
+func post_of(actor: Hostile) -> Vector3:
+ return actor.get_meta("battle_post",actor.home)
+
+# Where the attackers come from for the current objective.
+func staging() -> Vector3:
+ return center(last_cleared) if last_cleared>=0 else formation_base(true,0)
+
+# Nearest strongpoint not yet destroyed, or -1.
+func next_target(from: Vector3) -> int:
+ var best:=-1;var best_distance:=INF
+ for i in range(3):
+  if cleared[i]:continue
+  var d:=center(i).distance_to(from)
+  if d<best_distance:best=i;best_distance=d
+ return best
+
+# Where an attack group goes now: a firing position of the strongpoint under
+# assault that still has defenders, a different one for each group; while
+# mopping up, the post of one of the defenders left in the village.
+func objective_point(group: int=0) -> Vector3:
+ if sector>=0:
+  var live: Array[int]=[]
+  for actor in game.bots:
+   if actor.get_meta("battle_sector",-1)!=sector or not operational(actor):continue
+   var slot:int=actor.get_meta("battle_position",0)
+   if slot not in live:live.append(slot)
+  if live.is_empty():return center(sector)
+  live.sort()
+  return position_point(sector,live[group%live.size()])
+ if sweep.is_empty():return staging()
+ return sweep[group%sweep.size()]
+
+func refresh_sweep() -> void:
+ sweep.clear()
+ if sector>=0:return
+ var middle:=Vector3.ZERO;var count:=0
+ for actor in game.allies:
+  if operational(actor) and actor.vehicle==null:middle+=actor.global_position;count+=1
+ middle=middle/count if count>0 else staging()
+ var left: Array=game.bots.filter(func(a):return fighting(a))
+ left.sort_custom(func(a,b):return post_of(a).distance_to(middle)<post_of(b).distance_to(middle))
+ for actor in left:sweep.append(post_of(actor))
+
+# Point the commander's display shows: the strongpoint under assault, or the
+# nearest post left in the village.
+func player_objective() -> Vector3:
+ if sector>=0 or sweep.is_empty():return center()
+ var from: Vector3=game.player.global_position
+ var best: Vector3=sweep[0]
+ for p in sweep:
+  if p.distance_to(from)<best.distance_to(from):best=p
+ return best
+
+func objective_title() -> String:
+ return BattleMap.TITLES[sector] if sector>=0 else "ЗАЧИСТКА СЕЛА"
+
+# Resupply point: the attackers' rear, or a strongpoint's dugouts.
 func depot(friendly: bool, index: int=-1) -> Vector3:
  # The attackers' ammunition point is where they formed up, not the
  # insertion point where the commander or the mortar crew may stand.
- if friendly:return formation_base(true,0)+BattleMap.offset(-14,6) if sector==0 else center(sector-1)+BattleMap.offset(0,24)
- return center(index)+BattleMap.offset(0,-48)
+ if friendly:return formation_base(true,0)+BattleMap.offset(-14,6) if last_cleared<0 else center(last_cleared)
+ return center(maxi(index,0))
 
-# Sector a defender holds: his own until it falls, then the next line.
-func defended_sector(actor: Hostile) -> int:
- return mini(2,maxi(sector,actor.get_meta("battle_sector",0)))
+# Strongpoint nearest to a point: where a scattered defender restocks.
+func nearest_strongpoint(at: Vector3) -> int:
+ var best:=0
+ for i in range(3):
+  if center(i).distance_to(at)<center(best).distance_to(at):best=i
+ return best
 
 func formation_base(friendly: bool, index: int) -> Vector3:
  if friendly:
   var f:Vector2=BattleMap.FORMATION
   return Vector3(f.x,game.district.ground_height(Vector3(f.x,0,f.y)),f.y)
- return center(index)+BattleMap.offset(0,-6)
+ return center(index)
 
-# Initial position: three lanes 34 m apart, rows of five soldiers 2.2 m apart,
-# each next row 3 m further from the enemy.
+# Attackers' initial position: three lanes 34 m apart, rows of five soldiers
+# 2.2 m apart, each next row 3 m further from the enemy.
 func safe_spawn(friendly: bool, index: int) -> Variant:
  var base:=formation_base(friendly,index)
  var depth:=1.0 if friendly else -1.0
@@ -172,14 +429,20 @@ func safe_spawn(friendly: bool, index: int) -> Variant:
   if safe:return point+Vector3.UP*0.05
  return null
 
-func spawn_soldier(friendly: bool, point: Vector3, index: int=0) -> Hostile:
+func spawn_soldier(friendly: bool, point: Vector3, index: int=0, slot: int=-1) -> Hostile:
  var actor:=Hostile.new();actor.friendly=friendly
  actor.formation_index=game.allies.size() if friendly else serial
- actor.set_meta("battle_managed",true);actor.set_meta("battle_group",int(serial/4)%3)
- if not friendly:actor.set_meta("battle_sector",index)
+ actor.set_meta("battle_managed",true);actor.set_meta("battle_group",index if friendly else int(serial/4)%3)
+ if not friendly:
+  actor.set_meta("battle_sector",index);actor.set_meta("battle_position",slot);actor.set_meta("battle_post",point)
  serial+=1
  game.add_child(actor);actor.setup(game,point)
- actor.rotation.y=BattleMap.facing(friendly);actor.has_cover=false
+ if friendly:actor.rotation.y=BattleMap.facing(true)
+ else:
+  # A defender watches the side the attack comes from.
+  var look:=BattleMap.threat(Vector2(point.x,point.z))
+  actor.rotation.y=atan2(-look.x,-look.y)
+ actor.has_cover=false
  actor.think_timer=randf_range(0.1,0.8);actor.path_timer=randf_range(0.1,1.3)
  if friendly:game.allies.append(actor)
  else:game.bots.append(actor)
@@ -219,59 +482,97 @@ static func give_magazine(weapon: WeaponState, magazine: Dictionary) -> bool:
 
 func assign(actor: Hostile) -> void:
  if not operational(actor) or not actor.get_meta("battle_managed",false):return
- var index:=sector if actor.friendly else defended_sector(actor)
- var goal:=center(index)
+ # In a vehicle, or led by his squad on the approach: not the battle's man.
+ if actor.vehicle!=null or actor.get_meta("mech_control",false):return
+ if not actor.friendly:
+  defend(actor);return
+ var group:int=actor.get_meta("battle_group",0)
+ var objective:=objective_point(group)
  var supply:Variant=resupply(actor) if actor.weapon.ammunition_total()==0 else null
- if actor.friendly and halted:
+ if halted:
   # Consolidate where the halt found them: take cover there and hold.
-  goal=actor.get_meta("halt_point",actor.global_position)
+  var goal:Vector3=actor.get_meta("halt_point",actor.global_position)
   if actor.home.distance_to(goal)>4:actor.has_cover=false;actor.path_timer=0;actor.cover_dwell=0
   actor.home=goal;actor.order_point=goal;actor.defensive=true;actor.defense_radius=12
-  actor.order="assault";actor.order_direction=actor.position.direction_to(center(index));actor.order_origin=actor.position
+  actor.order="assault";actor.order_direction=actor.position.direction_to(objective);actor.order_origin=actor.position
   actor.assault_arrived=true
   return
- var group:int=actor.get_meta("battle_group",0)
- var lane:=float(group-1)*30
- # Use a flank approach until near the position, then converge on the sector.
- if absf(BattleMap.depth(goal,actor.position))>27:goal+=BattleMap.offset(lane,16 if actor.friendly else -12)
- else:goal+=BattleMap.offset((actor.formation_index%4-1.5)*4,-2 if actor.friendly else -6)
- goal=game.district.navigation_position(game.district.nearest_cell(game.district.navigation_cell(goal)))
- if supply is Vector3:goal=game.district.navigation_position(game.district.nearest_cell(game.district.navigation_cell(supply)))
- elif actor.weapon.ammunition_total()==0:
-  goal=depot(actor.friendly,index)
-  goal=game.district.navigation_position(game.district.nearest_cell(game.district.navigation_cell(goal)))
-  if actor.position.distance_to(goal)<7:
-   var time:float=actor.get_meta("resupply_time",0.0)+1
-   actor.set_meta("resupply_time",time)
-   if time>=6:actor.weapon=WeaponState.new("ak74");actor.set_meta("resupply_time",0.0)
-  else:actor.set_meta("resupply_time",0.0)
+ var from:=staging()
+ var forward:=Vector3(objective.x-from.x,0,objective.z-from.z)
+ if forward.length()<1:forward=Vector3(BattleMap.north().x,0,BattleMap.north().y)
+ forward=forward.normalized()
+ var side:=Vector3(-forward.z,0,forward.x)
+ var spread:=(actor.formation_index%4-1.5)*4
+ var goal:=objective
+ # Each group comes up on its own lane and stops short, then closes in on
+ # the position it storms.
+ if Vector2(actor.position.x-objective.x,actor.position.z-objective.z).length()>30:goal+=side*(float(group-1)*18+spread)-forward*16
+ else:goal+=side*spread+forward*2
+ goal=snap(goal)
+ if supply is Vector3:goal=snap(supply)
+ elif actor.weapon.ammunition_total()==0:goal=restock(actor,depot(true))
  if actor.home.distance_to(goal)>4:
   actor.has_cover=false;actor.path_timer=0;actor.cover_dwell=0
  actor.home=goal;actor.order_point=goal;actor.defensive=true;actor.defense_radius=25
- if actor.friendly:
-  actor.order="assault";actor.order_direction=actor.position.direction_to(center(index));actor.order_origin=actor.position
-  actor.assault_arrived=actor.position.distance_to(goal)<2.5
- else:
-  # A strategic destination is never a visual contact or an aim coordinate.
-  if not actor.alerted:actor.target=goal
+ actor.order="assault";actor.order_direction=actor.position.direction_to(objective);actor.order_origin=actor.position
+ actor.assault_arrived=actor.position.distance_to(goal)<2.5
+
+# A defender holds his own post to the end; out of rounds, he takes a
+# comrade's magazine or walks to the dugouts of the nearest strongpoint.
+func defend(actor: Hostile) -> void:
+ var goal:=post_of(actor)
+ var supply:Variant=resupply(actor) if actor.weapon.ammunition_total()==0 else null
+ if supply is Vector3:goal=snap(supply)
+ elif actor.weapon.ammunition_total()==0:
+  var index:int=actor.get_meta("battle_sector",-1)
+  goal=restock(actor,depot(false,index if index>=0 else nearest_strongpoint(actor.position)))
+ if actor.home.distance_to(goal)>4:
+  actor.has_cover=false;actor.path_timer=0;actor.cover_dwell=0
+ actor.home=goal;actor.order_point=goal;actor.defensive=true;actor.defense_radius=14
+ # A strategic destination is never a visual contact or an aim coordinate.
+ if not actor.alerted:actor.target=goal
+
+# Walks to the ammunition point; six seconds there give a full load.
+func restock(actor: Hostile, point: Vector3) -> Vector3:
+ var goal:=snap(point)
+ if actor.position.distance_to(goal)<7:
+  var time:float=actor.get_meta("resupply_time",0.0)+1
+  actor.set_meta("resupply_time",time)
+  if time>=6:actor.weapon=WeaponState.new("ak74");actor.set_meta("resupply_time",0.0)
+ else:actor.set_meta("resupply_time",0.0)
+ return goal
 
 func update_objective(delta: float) -> void:
- var a:=0;var d:=0;var target:=center()
- for actor in game.allies+game.bots:
-  if not operational(actor) or actor.collapse>0.5 or actor.treatment_time>0:continue
-  if Vector2(actor.position.x-target.x,actor.position.z-target.z).length()>22 or absf(actor.position.y-target.y)>3:continue
-  if actor.friendly:a+=1
-  else:d+=1
- if game.player.health>0 and not game.player.get_meta("battle_out",false) and game.player.position.distance_to(target)<22:a+=1
- contested=a>0 and d>0
- if a>0 and d==0:progress=minf(1,progress+delta/CAPTURE_TIME)
- elif d>0 and a==0:progress=maxf(0,progress-delta/(CAPTURE_TIME*2))
- if progress>=1:
-  var flag:=game.district.get_node_or_null("SectorFlag"+str(sector)) as MeshInstance3D
-  if flag:flag.material_override=Models.surface("d4b951")
-  sector+=1;progress=0;command_left=0
-  if sector>=3:complete(true,"Усі три рубежі захоплено.")
-  else:game.squad.tell("РУБІЖ ЗАЙНЯТО · НАСТУПНА ЦІЛЬ: "+BattleMap.TITLES[sector])
+ if finished:return
+ var standing:=[0,0,0];var total:=0
+ for actor in game.bots:
+  if not fighting(actor):continue
+  total+=1
+  var index:int=actor.get_meta("battle_sector",-1)
+  if index>=0:standing[index]+=1
+ for i in range(3):
+  if cleared[i]:continue
+  clear_timers[i]=clear_timers[i]+delta if standing[i]==0 else 0.0
+  if clear_timers[i]>=CLEAR_TIME:strongpoint_cleared(i)
+ quiet=quiet+delta if total==0 else 0.0
+ if quiet>=CLEAR_TIME:complete(true,"Противника в селі знищено.")
+
+func strongpoint_cleared(index: int) -> void:
+ cleared[index]=true
+ var flag:=game.district.get_node_or_null("SectorFlag"+str(index)) as MeshInstance3D
+ if flag:flag.material_override=Models.surface("d4b951")
+ var title:String=BattleMap.TITLES[index].get_slice(" ",0)
+ if index!=sector:
+  game.squad.tell("%s ЗНИЩЕНО · ЦІЛЬ ШТУРМУ: %s" % [title,objective_title()])
+  return
+ last_cleared=index;command_left=0
+ sector=next_target(center(index))
+ refresh_sweep()
+ if sector>=0:game.squad.tell("%s ЗНИЩЕНО · НАСТУПНА ЦІЛЬ: %s" % [title,BattleMap.TITLES[sector]])
+ elif living(false)>0:game.squad.tell("УСІ ОП ЗНИЩЕНО · ЗАЧИСТКА СЕЛА · ПРОТИВНИКІВ: %d" % living(false))
+
+func cleared_count() -> int:
+ return cleared.count(true)
 
 func retire_casualties() -> void:
  for friendly in [true,false]:
@@ -293,7 +594,7 @@ func successor() -> Hostile:
  var best: Hostile=null;var best_distance:=INF
  var helper: Hostile=null
  for actor in game.allies:
-  if not operational(actor) or actor.collapse>0.5 or actor.treatment_time>0:continue
+  if not operational(actor) or actor.collapse>0.5 or actor.treatment_time>0 or actor.vehicle!=null:continue
   # The mortar assistant stays with the crew unless nobody else is left.
   if actor.get_meta("crew_role","")=="assistant":helper=actor;continue
   var distance:float=actor.global_position.distance_to(from)
@@ -332,6 +633,7 @@ func respawn_player() -> void:
  var point:=body.global_position+Vector3.UP*0.05;var yaw:=body.rotation.y
  game.allies.erase(body);game.squad.selected=-1;body.queue_free()
  var old:Operator=game.player
+ game.bmp.vacate()
  var next:=Operator.new();game.add_child(next);game.player=next;next.position=point;next.rotation.y=yaw;next.setup(game,game.primary,game.secondary);next.sensitivity=game.sensitivity
  old.queue_free();game.damage_flash=0;game.hearing.reset();game.squad.trail=PackedVector3Array([point])
 
@@ -352,21 +654,23 @@ func _physics_process(delta: float) -> void:
  if command_left<=0:
   command_left=1
   retire_casualties()
+  refresh_sweep()
   for actor in game.allies+game.bots:assign(actor)
  update_objective(delta)
 
 func status() -> String:
- var target:=center();var offset:Vector3=target-game.player.position
+ var target:=player_objective();var offset:Vector3=target-game.player.position
  var bearing:=wrapf(rad_to_deg(atan2(-offset.x,-offset.z)),0,360)
  if respawn_left>0:return "КОМАНДИР ВИБУВ · КОМАНДУВАННЯ ПРИЙМЕ НАЙБЛИЖЧИЙ БОЄЦЬ ЧЕРЕЗ %d с\nУ строю: %d · бій триває" % [ceili(respawn_left),living(true)]
  if awaiting:return "ШТУРМ ОЧІКУЄ КОМАНДИ ГРАВЦЯ · G — %s\nГрупи на вихідних рубежах · СИЛИ %d : %d" % ["РАДІО" if game.player_class=="grad" else "РОЗРАХУНОК",living(true),living(false)]
- if halted:return "ШТУРМ ПРИЗУПИНЕНО · ГРУПИ ЗАКРІПЛЮЮТЬСЯ · G — ПРОДОВЖИТИ\n%s · СИЛИ %d : %d" % [BattleMap.TITLES[mini(sector,2)],living(true),living(false)]
- return "ШТУРМ · %s · %d м / %03d°\n%s %d%% · СИЛИ %d : %d" % [BattleMap.TITLES[mini(sector,2)],offset.length(),bearing,"БОЇ ЗА РУБІЖ" if contested else "ЗАКРІПЛЕННЯ",roundi(progress*100),living(true),living(false)]
+ if halted:return "ШТУРМ ПРИЗУПИНЕНО · ГРУПИ ЗАКРІПЛЮЮТЬСЯ · G — ПРОДОВЖИТИ\n%s · СИЛИ %d : %d" % [objective_title(),living(true),living(false)]
+ if sector<0:return "ЗАЧИСТКА СЕЛА · НАЙБЛИЖЧИЙ ПОСТ %d м / %03d°\nУСІ ОП ЗНИЩЕНО · ЗАЛИШИЛОСЬ ПРОТИВНИКІВ %d · СИЛИ %d : %d" % [offset.length(),bearing,living(false),living(true),living(false)]
+ return "ШТУРМ · %s · %d м / %03d°\nОП ЗНИЩЕНО %d / 3 · СИЛИ %d : %d" % [objective_title(),offset.length(),bearing,cleared_count(),living(true),living(false)]
 
 func build_menu(parent: Control) -> void:
  panel=Control.new();game.place(panel,parent,0,0,1,1)
  UiKit.sheet(game,panel,0.8)
- UiKit.header(game,panel,"ГОЛОВНЕ МЕНЮ   /   ВЕЛИКИЙ ШТУРМ","ВЕЛИКИЙ ШТУРМ","АВДІЇВКА · ПРИВАТНИЙ СЕКТОР · 400 × 400 М · ТРИ РУБЕЖІ",func():game.main_menu.back())
+ UiKit.header(game,panel,"ГОЛОВНЕ МЕНЮ   /   ВЕЛИКИЙ ШТУРМ","ВЕЛИКИЙ ШТУРМ","АВДІЇВКА · ПРИВАТНИЙ СЕКТОР · 400 × 400 М · ЗАЧИСТКА СЕЛА",func():game.main_menu.back())
  var map:=Control.new();map.mouse_filter=Control.MOUSE_FILTER_IGNORE;game.place(map,panel,0.035,0.25,0.5,0.82)
  map.draw.connect(func():
   var s:=map.size;var side:=minf(s.x,s.y);var o:=Vector2((s.x-side)*0.5,0);var box:=Vector2(side,side)
@@ -376,19 +680,34 @@ func build_menu(parent: Control) -> void:
    map.draw_line(o+Vector2(0,side*k/8),o+Vector2(side,side*k/8),Color(1,1,1,0.06))
   map.draw_rect(Rect2(o,box),UiKit.LINE,false,1.0)
   var font:=UiKit.font("head")
-  var prev:=o+Vector2(.5,.92)*side
+  var at:=func(p: Vector2) -> Vector2:return o+(p+Vector2.ONE*200)/400*side
+  # The village: streets and houses, any of which may hide a post.
+  var data:=AvdiivkaData.shared()
+  for road in data.features.roads:
+   var points:=AvdiivkaData.pairs(road[3])
+   for k in range(points.size()-1):
+    var a:=points[k];var b:=points[k+1]
+    if maxf(absf(a.x),absf(a.y))>260 and maxf(absf(b.x),absf(b.y))>260:continue
+    var ca:=a.clamp(Vector2.ONE*-200,Vector2.ONE*200);var cb:=b.clamp(Vector2.ONE*-200,Vector2.ONE*200)
+    map.draw_line(at.call(ca),at.call(cb),Color(1,1,1,0.14),2.0)
+  for b in data.features.buildings:
+   if absf(b[0])>196 or absf(b[1])>196:continue
+   var half:=Vector2(b[2],b[3])*0.25*side/400.0+Vector2.ONE
+   map.draw_rect(Rect2(at.call(Vector2(b[0],b[1]))-half,half*2),Color(1,1,1,0.22))
   for i in range(3):
-   var c:Vector2=BattleMap.CENTERS[i];var p:Vector2=o+(c+Vector2.ONE*200)/400*side
-   map.draw_line(prev,p,UiKit.ACCENT,3);prev=p
-  # Nine strongpoints of the defence.
-  for item in BattleMap.strongpoints():
-   var q:Vector2=o+(Vector2(item.point)+Vector2.ONE*200)/400*side
-   map.draw_rect(Rect2(q-Vector2(5,5),Vector2(10,10)),Color(UiKit.DANGER,0.85))
+   var p:Vector2=at.call(BattleMap.CENTERS[i]);var r:=side*45.0/400.0
+   map.draw_circle(p,r,Color(UiKit.DANGER,0.12));map.draw_arc(p,r,0,TAU,40,Color(UiKit.DANGER,0.8),2.0)
+  # Firing positions of the three strongpoints.
+  for spot in BattleMap.positions():
+   var q:Vector2=at.call(spot.point)
+   map.draw_rect(Rect2(q-Vector2(4,4),Vector2(8,8)),Color(UiKit.DANGER,0.9))
   for i in range(3):
-   var c:Vector2=BattleMap.CENTERS[i];var p:Vector2=o+(c+Vector2.ONE*200)/400*side
-   map.draw_circle(p,20,Color(0.05,0.07,0.06));map.draw_arc(p,20,0,TAU,32,UiKit.ACCENT,2.0)
-   map.draw_string(font,p+Vector2(-7,7),["А","Б","В"][i],HORIZONTAL_ALIGNMENT_LEFT,-1,20,UiKit.INK)
-  map.draw_string(font,o+Vector2(12,side-12),"■ ОПОРНІ ПУНКТИ    ○ РУБЕЖІ А · Б · В",HORIZONTAL_ALIGNMENT_LEFT,-1,13,UiKit.MUTED)
+   var p:Vector2=at.call(BattleMap.CENTERS[i])
+   map.draw_circle(p,13,Color(0.05,0.07,0.06));map.draw_arc(p,13,0,TAU,24,UiKit.ACCENT,2.0)
+   map.draw_string(font,p+Vector2(-5,6),str(i+1),HORIZONTAL_ALIGNMENT_LEFT,-1,17,UiKit.INK)
+  var start:Vector2=at.call(BattleMap.SPAWN)
+  map.draw_colored_polygon(PackedVector2Array([start+Vector2(0,-11),start+Vector2(9,6),start+Vector2(-9,6)]),UiKit.ACCENT)
+  map.draw_string(font,o+Vector2(12,side-12),"○ ОП-1 · 2 · 3    ■ ПОЗИЦІЇ    ▲ ВИХІД ШТУРМУ",HORIZONTAL_ALIGNMENT_LEFT,-1,13,UiKit.MUTED)
  )
  var text:=UiKit.wrapped(BattleMap.MENU_TEXT,16,UiKit.SOFT)
  game.place(text,panel,0.54,0.25,0.965,0.74)

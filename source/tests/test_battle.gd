@@ -12,8 +12,14 @@ func run():
  for button in game.battle.panel.find_children("*","Button",true,false):
   if button.text=="ОБРАТИ ШТУРМ →":button.pressed.emit()
  check(game.selected_map==BattleMap.ID and not game.battle.panel.visible,"Menu selection chooses battle and returns to loadout")
- var team_size:=28 if OS.get_environment("BATTLE_LARGE")=="1" else 12
+ var team_size:=36 if OS.get_environment("BATTLE_LARGE")=="1" else 18
  game.volume=0;game.ally_count=3;game.battle_size=team_size;game.selected_map=BattleMap.ID;game.start_match()
+ var squads:=BattleMode.squad_count(team_size)
+ check(game.battle.mech.size()==squads and game.battle.mech.all(func(s):return s.vehicle.aboard.size()==BmpVehicle.SEATS and s.vehicle.crew.size()==2),"The attackers arrive in %d BMPs, a full crew in each" % squads)
+ # The infantry assault from the start line: the column is taken as arrived.
+ game.battle.skip_approach()
+ # The vehicles hold still and silent: the checks below count every shot.
+ for squad in game.battle.mech:squad.vehicle.set_physics_process(false);squad.vehicle.gunner.manned=false
  game.set_process(false);game.set_physics_process(false);game.squad.set_physics_process(false);game.battle.set_physics_process(false);game.player.set_physics_process(false)
  var battle:BattleMode=game.battle
  check(game.running and battle.active,"Battle starts independently of campaign unlocks")
@@ -24,24 +30,41 @@ func run():
  check(not game.get_world_3d().direct_space_state.intersect_ray(spawn_ray).is_empty(),"Insertion has physical frontal cover")
  for i in range(3):
   check(game.district.path(game.player.position,battle.center(i)).size()>1,"Each objective reachable from insertion")
- check(game.allies.size()==team_size and game.bots.size()==team_size,"Both armies are on the field at once")
- var sectors:Array[int]=[0,0,0];var held:=true
+ check(game.allies.size()==team_size+game.ally_count and game.bots.size()==team_size,"Both armies are on the field at once")
+ var apart:=INF
+ for i in range(3):
+  for j in range(i+1,3):apart=minf(apart,Vector2(BattleMap.CENTERS[i]).distance_to(BattleMap.CENTERS[j]))
+ check(apart>140,"Strongpoints stand in different parts of the village (%.0f m apart at least)" % apart)
+ var counts:=BattleMode.defence_counts(team_size)
+ var sectors:Array[int]=[0,0,0,0];var held:=true;var posted:=true
+ var slots:Array[Dictionary]=[{},{},{}];var reach:Array[float]=[0.0,0.0,0.0]
  for actor in game.bots:
   var index:int=actor.get_meta("battle_sector",-1)
-  if index<0:held=false;continue
+  if actor.position.distance_to(battle.post_of(actor))>1:posted=false
+  if index<0:
+   sectors[3]+=1
+   for c in BattleMap.CENTERS:
+    if Vector2(actor.position.x,actor.position.z).distance_to(c)<40:held=false
+   if Vector2(actor.position.x,actor.position.z).distance_to(BattleMap.FORMATION)<BattleMode.POST_STANDOFF-15:held=false
+   continue
   sectors[index]+=1
-  if actor.position.distance_to(battle.center(index))>50:held=false
- check(held and sectors==BattleMode.defence_counts(team_size) and sectors[2]>0,"Defenders hold all three sectors from the start")
+  slots[index][actor.get_meta("battle_position")]=true
+  if actor.position.distance_to(battle.center(index))>62:held=false
+  for other in game.bots:
+   if other.get_meta("battle_sector",-1)==index:reach[index]=maxf(reach[index],actor.position.distance_to(other.position))
+ check(held and posted and sectors==counts and counts[3]>0,"Defenders hold three strongpoints and posts over the village (%s)" % str(sectors))
+ check(slots[0].size()==3 and slots[1].size()==3 and slots[2].size()>=2 and reach.min()>25,"Each garrison spreads over the firing positions (%s m across)" % str(reach))
+ check(battle.sector==0,"The assault starts with the strongpoint nearest to the forest strip")
  var staged:=true
  for actor in game.allies:
-  if actor.get_meta("battle_managed",false) and actor.position.distance_to(battle.formation_base(true,0))>45:staged=false
+  if actor.get_meta("battle_managed",false) and actor.vehicle==null and actor.position.distance_to(battle.formation_base(true,0))>45:staged=false
  check(staged,"Attackers form up together in front of the insertion")
  for i in range(20):
   battle._physics_process(.16)
   for actor in game.allies+game.bots:actor.set_physics_process(false)
   if i%5==0:await physics_frame
  check(game.squad.targets().size()==3,"Commands only address personal squad")
- var managed:Hostile=game.allies[-1]
+ var managed:Hostile=game.allies.filter(func(a):return a.vehicle==null)[-1]
  check(managed.order=="assault" and managed.get_meta("battle_managed"),"Independent allied squads receive assault goals")
  check(not managed.alerted and managed.contact_age>10,"Strategic orders do not grant enemy sight or live coordinates")
  game.squad.issue("hold")
@@ -49,20 +72,23 @@ func run():
  var groups:Dictionary={}
  for actor in game.allies:
   if actor.get_meta("battle_managed",false):groups[actor.get_meta("battle_group")]=true
- check(groups.size()==3,"Autonomous soldiers cover all three approaches")
- for actor in game.allies+game.bots:actor.position=Vector3(170,1,-170)
+ check(groups.size()==squads,"Every squad is its own attack group (%d)" % groups.size())
  game.player.position=Vector3(-170,1,170)
- var ally:Hostile=game.allies[0];var enemy:Hostile=game.bots[0]
- ally.position=battle.center();enemy.position=battle.center()+Vector3(2,0,0)
- battle.progress=.2;battle.update_objective(10)
- check(battle.contested and is_equal_approx(battle.progress,.2),"Contested sector cannot be captured")
- enemy.position=Vector3(170,1,-170);battle.update_objective(10)
- check(battle.progress>.5,"Allies can secure sector without player")
- ally.collapse=1;battle.progress=.2;battle.update_objective(10)
- check(is_equal_approx(battle.progress,.2),"Downed wounded soldier cannot capture")
- ally.collapse=0;battle.progress=.99;battle.update_objective(1)
- check(battle.sector==1 and battle.progress==0,"Capture advances sequential objective")
- check(battle.depot(true).distance_to(battle.center(0)+BattleMap.offset(0,24))<.1,"Captured sector advances resupply point")
+ var garrison:=func(index:int)->Array:return game.bots.filter(func(a):return a.get_meta("battle_sector",-1)==index)
+ for actor in garrison.call(0):actor.collapse=1
+ battle.update_objective(1.0)
+ check(not battle.cleared[0] and battle.sector==0,"A strongpoint is not destroyed while its men may still get up")
+ garrison.call(0)[0].collapse=0;battle.update_objective(1.0)
+ check(battle.clear_timers[0]==0,"A defender back on his feet keeps the strongpoint in the fight")
+ garrison.call(0)[0].collapse=1
+ for i in range(3):battle.update_objective(1.1)
+ check(battle.cleared[0] and battle.sector==1 and battle.last_cleared==0 and not battle.finished,"A destroyed strongpoint passes the assault to the nearest one left")
+ check(battle.depot(true).distance_to(battle.center(0))<.1,"The destroyed strongpoint becomes the attackers' ammunition point")
+ var aims:Dictionary={}
+ for g in range(3):
+  var aim:Vector3=battle.objective_point(g)
+  if aim.distance_to(battle.center(1))<60:aims[aim]=true
+ check(aims.size()==3,"Attack groups storm different firing positions of the strongpoint")
  var bots_before:int=game.bots.size()
  managed.die();await process_frame;battle.retire_casualties()
  check(not game.allies.has(managed) and battle.corpses.has(managed),"Dead soldier remains a separate casualty")
@@ -70,12 +96,13 @@ func run():
   battle._physics_process(.2)
   for actor in game.allies+game.bots:actor.set_physics_process(false)
   await physics_frame
- check(game.allies.size()==team_size-1 and game.bots.size()==bots_before and managed.dead,"No reinforcements: a casualty is never replaced or revived")
- var rear:Hostile=null
+ check(game.allies.size()==team_size+game.ally_count-1 and game.bots.size()==bots_before and managed.dead,"No reinforcements: a casualty is never replaced or revived")
+ var keep:=true
  for actor in game.bots:
-  if actor.get_meta("battle_sector",-1)==0:rear=actor;break
- battle.assign(rear)
- check(battle.defended_sector(rear)==1 and rear.home.distance_to(battle.center(1))<40,"Defenders of a lost sector fall back to the next line")
+  if not battle.operational(actor):continue
+  battle.assign(actor)
+  if actor.home.distance_to(battle.post_of(actor))>4:keep=false
+ check(keep,"Defenders hold their own posts")
  game.paused=true;battle.command_left=.5;battle._physics_process(10)
  check(battle.command_left==.5,"Pause freezes the battle")
  game.paused=false
@@ -90,7 +117,7 @@ func run():
   for actor in game.allies+game.bots:actor.set_physics_process(false)
   await physics_frame
  check(game.player.get_instance_id()!=identity and game.player.health==100,"Command passes to a fresh, unwounded operator")
- check(game.player.global_position.distance_to(heir_point)<1 and not is_instance_id_valid(heir_id) and game.allies.size()==allies_before-1 and game.bots.size()==bots_before,"Successor is the nearest soldier already on the field; nobody new arrives")
+ check(game.player.global_position.distance_to(heir_point)<1 and not is_instance_id_valid(heir_id) and game.allies.size()==allies_before-1 and game.bots.size()==bots_before,"Successor is the nearest soldier already on the field; nobody new arrives (%.1f m, heir %s, allies %d/%d, bots %d/%d)" % [game.player.global_position.distance_to(heir_point),str(is_instance_id_valid(heir_id)),game.allies.size(),allies_before-1,game.bots.size(),bots_before])
  check(not game.player.current().debug_infinite,"Normal battle preserves finite ammunition")
  game.player.concussion.severity=.8;allies_before=game.allies.size()
  battle._physics_process(.1)
@@ -105,10 +132,20 @@ func run():
  battle._physics_process(.1)
  check(game.running and not battle.finished,"Assault has no time limit while the commander lives")
  for actor in stash:game.allies.append(actor)
- battle.sector=2;battle.progress=.99;game.player.position=battle.center()
- for actor in game.allies+game.bots:actor.position=Vector3(170,1,170)
- battle.update_objective(1)
- check(battle.finished and not game.running and battle.sector==3,"Three captured sectors win battle")
+ for index in range(3):
+  for actor in garrison.call(index):actor.collapse=1
+ for i in range(8):battle.update_objective(1.1)
+ battle.refresh_sweep()
+ var scattered:Array=garrison.call(-1)
+ var posts:=true
+ for g in range(3):
+  var aim:Vector3=battle.objective_point(g)
+  if scattered.filter(func(a):return battle.post_of(a)==aim).is_empty():posts=false
+ check(battle.cleared_count()==3 and battle.sector==-1 and not battle.finished,"All strongpoints destroyed: the assault goes on while posts hold out")
+ check(posts and battle.sweep.size()==scattered.size(),"Mopping up: the attack groups head for the posts left in the village")
+ for actor in scattered:actor.collapse=1
+ for i in range(4):battle.update_objective(1.1)
+ check(battle.finished and not game.running and battle.result_reason.contains("знищено"),"Nobody left to fight in the village wins the assault")
  check(game.campaign.completed.is_empty(),"Battle victory does not unlock campaign missions")
  battle.finished=false;game.running=true;game.allies.clear();game.player.health=0;game.finish(false)
  check(battle.finished and not game.running and battle.respawn_left==0 and battle.result_reason.contains("Живих"),"Death with nobody left to take over ends the assault")

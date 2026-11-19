@@ -35,6 +35,9 @@ var panic_time := 0.0
 var tracked_aim := Vector3.ZERO
 var squad_role := ""
 var squad_partner: Hostile
+# The infantry fighting vehicle this soldier rides in, or null on foot.
+var vehicle: BmpVehicle
+var hitbox_layers: Array[int]=[]
 var suppress_point := Vector3.ZERO
 var suppress_age := 100.0
 var last_visual_point := Vector3.ZERO
@@ -320,7 +323,7 @@ func shell_burst(where: Vector3, strength: float) -> void:
 	if not friendly and not (has_cover and global_position.distance_to(cover_point)<0.85):cover_timer=minf(cover_timer,0.1)
 
 func _physics_process(delta: float) -> void:
-	if dead or not game.running or game.paused:
+	if dead or not game.running or game.paused or vehicle!=null:
 		lod_accum=0
 		return
 	lod_accum+=delta
@@ -747,6 +750,48 @@ func receive_blast(amount: float, severity: float, incoming: Vector3) -> void:
 	take_damage(amount)
 	if not dead:game.pain_voice(self,true)
 
+# Takes a seat in a vehicle: out of sight, out of the physics of the field;
+# the vehicle carries him and he cannot be hit through the armour.
+func embark(carrier: BmpVehicle) -> void:
+	vehicle=carrier
+	visible=false
+	collision_layer=0
+	collision_mask=0
+	hitbox_layers.clear()
+	for hitbox in hitboxes:
+		hitbox_layers.append(hitbox.collision_layer)
+		hitbox.collision_layer=0
+	velocity=Vector3.ZERO
+	has_cover=false
+	cover_requires_prone=false
+	auto_cover=false
+	flank_timer=0
+	path=PackedVector2Array()
+	path_index=0
+	squad_role=""
+	sprinting=false
+	tactical_prone=0
+	stance=0
+	burst_left=0
+	sees_player=false
+	recognition=0
+
+# Steps out of the vehicle onto the ground at a point, facing a direction.
+func disembark(point: Vector3, facing: Vector3) -> void:
+	vehicle=null
+	visible=true
+	collision_layer=4
+	collision_mask=1|2|4|64
+	for i in range(mini(hitboxes.size(),hitbox_layers.size())):hitboxes[i].collision_layer=hitbox_layers[i]
+	global_position=point
+	rotation.y=atan2(-facing.x,-facing.z)
+	velocity=Vector3.ZERO
+	path_timer=0
+	cover_timer=randf()*0.6
+	think_timer=randf()*0.3
+	lod_accum=0
+	shape_dirty=true
+
 func die() -> void:
 	if dead:return
 	dead=true
@@ -901,7 +946,7 @@ func select_contact(eye: Vector3) -> Node3D:
 	var best_score := -1.0
 	var best_observation := {"exposure":0.0,"rate":0.0}
 	for actor in candidates:
-		if not is_instance_valid(actor) or (actor is Hostile and (actor.dead or actor.concussion.incapacitated())) or (actor is Operator and (actor.health<=0 or actor.get_meta("battle_out",false))):continue
+		if not is_instance_valid(actor) or (actor is Hostile and (actor.dead or actor.vehicle!=null or actor.concussion.incapacitated())) or (actor is Operator and (actor.health<=0 or actor.get_meta("battle_out",false) or game.player_sheltered())):continue
 		var center: Vector3=actor.camera.global_position if actor is Operator else actor.n_head.global_position
 		if eye.distance_to(center)>220 or (-global_basis.z).dot(eye.direction_to(center))<=0.42:continue
 		var priority: float=game.squad.contact_priority(self,center) if friendly else 0.0
@@ -923,7 +968,7 @@ func select_contact(eye: Vector3) -> Node3D:
 
 func contact_valid(actor: Node3D) -> bool:
 	if not is_instance_valid(actor):return false
-	if actor is Hostile:return not actor.dead
+	if actor is Hostile:return not actor.dead and actor.vehicle==null
 	return not (actor is Operator and (actor.health<=0 or actor.get_meta("battle_out",false)))
 
 func keep_nearest(actor: Node3D, nearest: Array, dist: Array[float]) -> void:

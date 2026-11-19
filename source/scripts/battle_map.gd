@@ -5,10 +5,18 @@ extends RefCounted
 # 400 × 400 m between the forest strip and Soborna street, built from
 # OpenStreetMap houses and roads and SRTM relief (AvdiivkaData). The streets
 # run east-south-east; the attackers come out of the forest strip in the
-# south-west and cross three streets to the north-north-east.
+# south-west. The enemy holds three strongpoints in different ends of the
+# village and keeps pairs on posts in the houses between them: the assault
+# ends when nobody is left to fight.
 const ID := "battle_front"
-const CENTERS := [Vector2(-26,55),Vector2(22,-43),Vector2(69,-137)]
-const TITLES := ["А / ВУЛ. ЯРОСЛАВА ГОМЗИ","Б / ВУЛ. СПОРТИВНА","В / ВУЛ. СОБОРНА"]
+# Strongpoints: the west end astride Yaroslava Homzy street, the north
+# towards Soborna street, the east at the crossroads of Sportyvna street and
+# the field road.
+const CENTERS := [Vector2(-143,-13),Vector2(-46,-140),Vector2(145,31)]
+const TITLES := ["ОП-1 / ЗАХІД · ВУЛ. ЯРОСЛАВА ГОМЗИ","ОП-2 / ПІВНІЧ · ВУЛ. СОБОРНА","ОП-3 / СХІД · ВУЛ. СПОРТИВНА"]
+# Three firing positions of each strongpoint in separate yards 35–70 m
+# apart, each in front of a house on the side of the attack.
+const POSITIONS := [[Vector2(-168,-39),Vector2(-108,-2),Vector2(-145,27)],[Vector2(-52,-171),Vector2(-8,-140),Vector2(-79,-105)],[Vector2(113,40),Vector2(129,4),Vector2(170,61)]]
 const SPAWN := Vector2(-58,158)
 const FORMATION := Vector2(-40,136)
 # Unit vector along the streets (towards east-south-east).
@@ -17,8 +25,12 @@ const CAR_PAINT := ["5a4636","4a3e33","6a5444","3f3a33"]
 const WALLS := ["c9c3ad","c2b48c","9a5a44","b8b5a6","9fb0ad","b9a68a"]
 const ROOFS := ["6f7372","8a5a3c","6a4a3a","5f6b62","7b7e78"]
 const FENCES := ["6d7b6a","7a6a58","8c8f8a","5d6a73"]
-# Houses and fences of the battlefield, merged per 50 m chunk (ColorMesh).
+# Houses of the battlefield, merged per 50 m chunk (ColorMesh).
 static var scenery: Dictionary={}
+# Fence panels, merged per 100 m chunk apart from the houses: a BMP pushes
+# one over and only the small mesh of its chunk is rebuilt (knock_fence).
+static var fence_meshes: Dictionary={}
+static var fence_parts: Dictionary={}
 
 # Towards the defenders: from each street to the next one north.
 static func north() -> Vector2:return Vector2(STREET.y,-STREET.x)
@@ -39,43 +51,51 @@ static func facing(friendly: bool) -> float:
  var look:=north() if friendly else -north()
  return atan2(-look.x,-look.y)
 
-# Three strongpoints per line, in the yards on the defenders' side.
+# The three strongpoints with their firing positions.
 static func strongpoints() -> Array:
  var points: Array=[]
  for i in range(3):
-  var c: Vector2=CENTERS[i]
-  for along in [-34.0,0.0,34.0]:
-   points.append({"sector":i,"point":c+STREET*along+north()*(13.0 if along==0 else 11.0),"title":"ОП-%d" % (points.size()+1)})
+  points.append({"sector":i,"point":CENTERS[i],"title":"ОП-%d" % (i+1),"positions":POSITIONS[i]})
  return points
+
+# Every firing position: its strongpoint, its number there and the point.
+static func positions() -> Array:
+ var list: Array=[]
+ for i in range(3):
+  for j in range(POSITIONS[i].size()):list.append({"sector":i,"index":j,"point":POSITIONS[i][j]})
+ return list
+
+# Direction from a point towards the attack: the forest strip they come from.
+static func threat(at: Vector2) -> Vector2:
+ return (FORMATION-at).normalized()
 
 static func definition() -> Dictionary:
  return {"id":ID,"title":"ВЕЛИКИЙ ШТУРМ / АВДІЇВКА","kind":"battle","biome":"orchard","seed":161126,"relief":0.0,"terrain":"avdiivka","heading":0.0,"size":400,"spawn":SPAWN,"defender_count":0,"buildings":full_houses(),"belts":[],"trenches":[],"insertion_cover":false,"defer_flush":true}
 
-# OSM houses beside each strongpoint become full houses with rooms; the rest
-# of the street is built as closed light houses.
+# The OSM house behind each firing position becomes a full house with rooms,
+# its door towards the position; the rest of the village is built as closed
+# light houses.
 static func full_houses() -> Array:
  var data := AvdiivkaData.shared()
  var chosen: Array=[]
  var used: Dictionary={}
- for sp in strongpoints():
-  var best: Array=[];var best_distance:=26.0
+ for spot in positions():
+  var at: Vector2=spot.point
+  var best: Array=[];var best_distance:=16.0
   for i in range(data.features.buildings.size()):
    var b: Array=data.features.buildings[i]
    if b[6]!="H" or used.has(i):continue
-   var at := Vector2(b[0],b[1])
-   if (at-Vector2(sp.point)).dot(north())<-4:continue
-   var distance:=at.distance_to(sp.point)
+   var distance:=Vector2(b[0],b[1]).distance_to(at)
    if distance<best_distance:best=[i,b];best_distance=distance
   if best.is_empty():continue
   used[best[0]]=true
   var b: Array=best[1]
-  # The door faces the street, which is south of the defenders' houses.
-  var facing:=-north()
+  var facing:=(at-Vector2(b[0],b[1])).normalized()
   chosen.append({"point":Vector2(b[0],b[1]),"size":Vector2(clampf(maxf(b[2],b[3]),9,13),clampf(minf(b[2],b[3]),7.5,10)),"yaw":atan2(-facing.x,-facing.y),"variant":chosen.size()%5,"floors":1,"osm":best[0]})
  return chosen
 
 static func build(world: District) -> void:
- scenery.clear()
+ scenery.clear();fence_meshes.clear();fence_parts.clear()
  world.batch_cell=100.0
  world.campaign_definition=definition()
  var data := AvdiivkaData.shared()
@@ -85,18 +105,22 @@ static func build(world: District) -> void:
  var rng:=props.rng
  var full: Dictionary={}
  for spec in world.campaign_definition.buildings:full[int(spec.osm)]=spec
- # Footprints that keep fences, trees and wrecks out of houses.
+ # Footprints that keep fences, trees and wrecks out of houses, and the bare
+ # walls that keep the dugouts out of them.
  var rects: Array=[]
+ var walls: Array=[]
  for i in range(data.features.buildings.size()):
   var b: Array=data.features.buildings[i]
   if absf(b[0])>197 or absf(b[1])>197:continue
   if full.has(i):
    var spec: Dictionary=full[i]
    rects.append([spec.point,Vector2(spec.size)*0.5+Vector2.ONE*4.5,float(spec.yaw)])
+   walls.append([spec.point,Vector2(spec.size)*0.5,float(spec.yaw)])
    continue
   # A footprint crossing the edge of the battlefield is left to the outer area.
   if absf(b[0])+maxf(b[2],b[3])*0.5>199 or absf(b[1])+maxf(b[2],b[3])*0.5>199:continue
   rects.append([Vector2(b[0],b[1]),Vector2(b[2],b[3])*0.5,float(b[4])])
+  walls.append(rects[-1])
   light_house(world,props,b)
  var roads: Array=[]
  for road in data.features.roads:
@@ -104,17 +128,28 @@ static func build(world: District) -> void:
   var near:=false
   for p in points:if absf(p.x)<260 and absf(p.y)<260:near=true
   if near:roads.append([points,float(road[1]),int(road[2]),str(road[0])])
+ # Firing positions: a sandbag emplacement facing the attack and a dugout
+ # beside it, clear of the walls and the street. Fences, trees and wrecks
+ # keep out of both.
+ var works: Array=[]
+ for spot in positions():
+  var at:Vector2=spot.point
+  var ahead:=threat(at)
+  var side:=Vector2(-ahead.y,ahead.x)
+  var shelter:=at+ahead*4.5+side*6
+  for candidate: Vector2 in [at+ahead*4.5+side*6,at+ahead*4.5-side*6,at+side*7,at-side*7,at+ahead*8]:
+   if not blocked(candidate,walls,2.0) and road_distance(candidate,roads)>6:shelter=candidate;break
+  works.append([at,shelter,atan2(-ahead.x,-ahead.y)])
+  rects.append([at,Vector2(2.6,2.6),0.0])
+  rects.append([shelter,Vector2(2.6,2.6),0.0])
  fences(world,props,roads,rects)
  vegetation(world,builder,data,roads,rects)
- # Strongpoints: a sandbag emplacement facing the attack and a dugout.
  var occupied: Array[Vector2]=[]
- var facing:=atan2(north().x,north().y)
- for sp in strongpoints():
-  var at:Vector2=sp.point
-  props.sandbags(at,facing)
-  dugout(props,at+north()*5.5+STREET*3,facing)
-  occupied.append(at)
- # Sector flags on the streets.
+ for work in works:
+  props.sandbags(work[0],work[2])
+  dugout(props,work[1],work[2])
+  occupied.append(work[0]);occupied.append(work[1])
+ # A flag in the middle of each strongpoint.
  for i in range(3):
   var c:Vector2=CENTERS[i]
   var p:=Vector3(c.x,world.ground_height(Vector3(c.x,0,c.y)),c.y)
@@ -123,7 +158,8 @@ static func build(world: District) -> void:
   flag.name="SectorFlag"+str(i)
  # Wrecks on the streets and on the open approach from the forest strip.
  var wrecks:=[["ifv",Vector2(-12,118),0.3],["tank",Vector2(-118,98),2.1],["apc",Vector2(48,128),-0.4],["truck",Vector2(-70,24),0.42],["car",Vector2(10,76),0.42],["car",Vector2(-60,42),0.4],
-  ["car",Vector2(60,-22),2.0],["hedgehogs",Vector2(-4,-56),0.42],["barriers",Vector2(40,-35),0.42],["car",Vector2(-25,-75),0.45],["apc",Vector2(96,-118),0.4],["hedgehogs",Vector2(48,-150),0.42],["car",Vector2(120,-104),2.6]]
+  ["car",Vector2(60,-22),2.0],["hedgehogs",Vector2(-4,-56),0.42],["barriers",Vector2(40,-35),0.42],["car",Vector2(-25,-75),0.45],["apc",Vector2(96,-118),0.4],["hedgehogs",Vector2(48,-150),0.42],["car",Vector2(120,-104),2.6],
+  ["barriers",Vector2(-130,6),0.42],["hedgehogs",Vector2(-62,-87),0.42],["barriers",Vector2(150,22),0.42]]
  for item in wrecks:
   var at:Vector2=item[1];var yaw:float=item[2]
   if blocked(at,rects,3.0):continue
@@ -141,10 +177,10 @@ static func build(world: District) -> void:
      var p:=Vector3(q.x,0,q.y);p.y=world.ground_height(p)
      world.concrete_barrier(p)
  # The insertion in the forest edge is screened by gabions towards the town.
- var ahead:Vector2=(Vector2(CENTERS[0])-SPAWN).normalized()
+ var ahead:=Vector2(0.297,-0.955)
  var side:=Vector2(-ahead.y,ahead.x)
  for offset in [-22.0,0.0,22.0]:props.gabions(SPAWN+ahead*10+side*offset,atan2(-side.y,side.x),9)
- # Shell craters: the sector has been shelled for months.
+ # Shell craters: the village has been shelled for months.
  var made:=0
  var tries:=0
  while made<46 and tries<2000:
@@ -165,8 +201,26 @@ static func build(world: District) -> void:
   instance.mesh=scenery[key].build(material)
   world.add_child(instance)
  scenery.clear()
+ for key in fence_meshes:
+  var instance:=MeshInstance3D.new()
+  instance.name="Fences_%d_%d" % [key.x,key.y]
+  instance.mesh=fence_meshes[key].build(material)
+  instance.set_meta("color_mesh",fence_meshes[key])
+  world.add_child(instance)
+  for part in fence_parts[key]:
+   part[0].set_meta("fence_mesh",instance);part[0].set_meta("fence_range",Vector2i(part[1],part[2]))
+ fence_meshes.clear();fence_parts.clear()
  OperationArea.attach(world)
  world.flush();world.flush_details();world.rebuild_campaign_grid()
+
+# A fence panel pushed over: its board and post leave the merged mesh.
+static func knock_fence(body: Node) -> void:
+ var instance: MeshInstance3D=body.get_meta("fence_mesh",null)
+ if not is_instance_valid(instance):return
+ var mesh: ColorMesh=instance.get_meta("color_mesh")
+ var span: Vector2i=body.get_meta("fence_range")
+ for i in range(span.x,span.y):mesh.vertices[i]=mesh.vertices[span.x]
+ instance.mesh=mesh.build(instance.mesh.surface_get_material(0))
 
 static func chunk(at: Vector3) -> ColorMesh:
  var key:=Vector2i(floori(at.x/50.0),floori(at.z/50.0))
@@ -282,9 +336,17 @@ static func fences(world: District, props: BattleProps, roads: Array, rects: Arr
       var g:=world.ground_height(Vector3(mid.x,0,mid.y))
       props.origin=Vector3(mid.x,g,mid.y);props.basis=Basis(Vector3.UP,atan2(-u.y,u.x))
       var tilt:=Vector3(0,0,rng.randf_range(-0.05,0.05)) if rng.randf()<0.3 else Vector3.ZERO
-      blk(props,Vector3(0,0.68,0),Vector3(2.45,1.36,0.04),color,tilt)
-      blk(props,Vector3(-1.2,0.75,0),Vector3(0.07,1.5,0.07),"4a4a44")
-      props.solid(Vector3(0,0.68,0),Vector3(2.5,1.36,0.08),"wood",color)
+      var board:=props.origin+props.basis*Vector3(0,0.68,0)
+      var key:=Vector2i(floori(board.x/100.0),floori(board.z/100.0))
+      if not fence_meshes.has(key):fence_meshes[key]=ColorMesh.new();fence_parts[key]=[]
+      var mesh: ColorMesh=fence_meshes[key]
+      var first:=mesh.vertices.size()
+      mesh.box(Transform3D(props.basis*Basis.from_euler(tilt),board),Vector3(2.45,1.36,0.04),Color(color))
+      mesh.box(Transform3D(props.basis,props.origin+props.basis*Vector3(-1.2,0.75,0)),Vector3(0.07,1.5,0.07),Color("4a4a44"))
+      # Rifle fire does not cut these boards; 14 t of a BMP pushes them over.
+      var body:=props.solid(Vector3(0,0.68,0),Vector3(2.5,1.36,0.08),"wood",color)
+      body.set_meta("crushable",true)
+      fence_parts[key].append([body,first,mesh.vertices.size()])
      t+=2.5
 
 # Woods of the forest strip, fruit trees in the yards, grass and bushes.
@@ -339,4 +401,4 @@ static func dugout(props: BattleProps, at: Vector2, yaw: float) -> void:
  for k in range(6):props.rod(Vector3(-2.1,1.1,-1.5+k*0.6),Vector3(2.1,1.1,-1.5+k*0.6),0.11,"4f4434")
  blk(props,Vector3(0,0.4,1.75),Vector3(1.0,0.8,0.3),"2a2622")
 
-const MENU_TEXT := "А · вул. Ярослава Гомзи → Б · вул. Спортивна → В · вул. Соборна\n\nПівденний приватний сектор Авдіївки: реальні будинки й вулиці (OpenStreetMap) та рельєф. Штурм виходить з лісосмуги на південному заході. Займи рубіж і утримуй його 30 с без противника в зоні.\n\nПротивник тримає дев'ять опорних пунктів, по три на кожній вулиці. Мінометник і командир БМ-21 «Град» командують штурмом: на старті штурм чекає їхньої команди. «Град» стоїть за кілька кілометрів у полі.\n\nУсі війська на полі від початку, підкріплень немає. Після твоєї загибелі командування за 5 с приймає найближчий живий боєць."
+const MENU_TEXT := "ОП-1 · захід → ОП-2 · північ → ОП-3 · схід, і пости по всьому селу\n\nПівденний приватний сектор Авдіївки: реальні будинки й вулиці (OpenStreetMap) та рельєф. Відділення підходять колоною БМП-2 з посадки за ≈2 км і висаджуються за укриттям на краю села. Завдання — знищити всіх противників у селі.\n\nПротивник тримає три опорні пункти в різних кінцях села, по три позиції в окремих дворах, решта — парами на постах між ними. Мінометник і командир «Града» командують штурмом: колона чекає їхньої команди. Стрілець і снайпер їдуть у головній БМП, механік-водій веде свою.\n\nПідкріплень немає. Після твоєї загибелі командування за 5 с приймає найближчий живий боєць."

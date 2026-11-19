@@ -40,12 +40,13 @@ func block(local: Vector3, size: Vector3, color: String, rot: Vector3=Vector3.ZE
  batch.transforms[batch.transforms.size()-1]=Transform3D((basis*Basis.from_euler(rot)).scaled_local(size),position)
 
 # Collision volume; it also blocks navigation like any other static body.
-func solid(local: Vector3, size: Vector3, substance: String, color: String, rot: Vector3=Vector3.ZERO) -> void:
+func solid(local: Vector3, size: Vector3, substance: String, color: String, rot: Vector3=Vector3.ZERO) -> DestructibleSurface:
  var body := world.collider(origin+basis*local,size,substance) as DestructibleSurface
  body.basis=basis*Basis.from_euler(rot)
  body.tint=Color(color)
  body.set_meta("surface_color",Color(color))
  body.set_meta("indestructible",true)
+ return body
 
 func deco(shape: String, local: Vector3, size: Vector3, color: String, rot: Vector3=Vector3.ZERO) -> void:
  world.detail(shape,origin+basis*local,size,color,(basis*Basis.from_euler(rot)).get_euler())

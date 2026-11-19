@@ -93,7 +93,7 @@ func run():
  game.set_player_class("sniper")
  game.main_menu.show_screen("training")
  var menu=game.main_menu
- check(menu.course_tabs.size()==4,"Training screen has a tab for every class")
+ check(menu.course_tabs.size()==game.COURSE_IDS.size() and game.COURSE_IDS.size()==5,"Training screen has a tab for every class")
  check(menu.course_pick=="sniper" and menu.chapter_cards.size()==SniperTraining.CHAPTERS.size(),"It opens on the player's own class")
  menu.select_course("mortarman")
  check(menu.chapter_cards.size()==3 and menu.chapter_title.text==MortarTraining.CHAPTERS[0].title,"Mortarman tab lists its chapters")

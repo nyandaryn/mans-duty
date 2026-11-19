@@ -57,7 +57,10 @@ func run():
  check(game.loadout_bag.count("rpo_a")==0,"Catalogue refuses an item the class cannot carry")
  game.loadout_bag.add("mortar_mine")
 
- game.battle_size=12;game.selected_map=BattleMap.ID;game.start_match()
+ game.battle_size=18;game.selected_map=BattleMap.ID;game.start_match()
+ # The column is taken as arrived: the groups are on the start line.
+ game.battle.skip_approach()
+ for squad in game.battle.mech:squad.vehicle.set_physics_process(false);squad.vehicle.gunner.manned=false
  game.set_physics_process(false);game.battle.set_physics_process(false);game.squad.set_physics_process(false);game.crew.set_physics_process(false)
  game.blasts.set_physics_process(false)
  for actor in game.allies+game.bots:actor.set_physics_process(false)
@@ -71,7 +74,7 @@ func run():
  check(battle.halted and battle.awaiting and battle.status().contains("ОЧІКУЄ КОМАНДИ"),"Assault waits for the mortarman's order")
  var managed: Hostile=null
  for actor in game.allies:
-  if actor.get_meta("battle_managed",false):managed=actor;break
+  if actor.get_meta("battle_managed",false) and actor.vehicle==null:managed=actor;break
  battle.assign(managed)
  check(managed.assault_arrived and managed.home.distance_to(managed.get_meta("halt_point"))<0.1,"Held groups consolidate where they stand")
  check(battle.successor()!=crew.assistant,"Command does not pass to the assistant while others live")

@@ -12,6 +12,9 @@ const MINE_DAMAGE := 260.0
 # instantaneous action. Still dimensionless game units.
 const GRAD_RANGE := 42.0
 const GRAD_DAMAGE := 520.0
+# 3UOF8 30 mm HE-I of the 2A42: 49 g of A-IX-2, impact fuse. Game units.
+const CANNON_RANGE := 6.5
+const CANNON_DAMAGE := 170.0
 var game: Node3D
 var rockets: Array[Dictionary]=[]
 var mines: Array[Dictionary]=[]
@@ -191,17 +194,18 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
  detonations+=1
  last_detonation=where
  var grad := kind=="grad"
- var mine := kind=="mine" or grad
+ var cannon := kind=="cannon"
+ var mine := kind=="mine" or grad or cannon
  if grad:GradEffects.impact(game,where)
  else:
-  var effect := BlastEffect.new();add_child(effect);effect.setup(game,where,0.8 if mine else 1.0)
- game.spatial_shot("mine_blast" if mine else "rpo_blast",where,(6 if grad else 3) if mine else 2)
+  var effect := BlastEffect.new();add_child(effect);effect.setup(game,where,0.35 if cannon else (0.8 if mine else 1.0))
+ game.spatial_shot("mine_blast" if mine else "rpo_blast",where,(-4 if cannon else (6 if grad else 3)) if mine else 2)
  if is_instance_valid(game.player):
   var distance: float=game.player.camera.global_position.distance_to(where)
-  game.hearing.exposure=minf(1.6,game.hearing.exposure+(3.0 if grad else 1.5)/pow(maxf(1,distance/9),1.2))
+  game.hearing.exposure=minf(1.6,game.hearing.exposure+(3.0 if grad else (0.5 if cannon else 1.5))/pow(maxf(1,distance/9),1.2))
   if grad and distance>250:game.distant_blast(where,distance)
  if grad and game.has_method("grad_impact"):game.grad_impact(where)
- var reach := GRAD_RANGE if grad else (MINE_RANGE if mine else EFFECT_RANGE)
+ var reach := GRAD_RANGE if grad else (CANNON_RANGE if cannon else (MINE_RANGE if mine else EFFECT_RANGE))
  # Fragments leave the body of the mine above the fuse, not the soil surface.
  var source := where+Vector3.UP*(0.35 if mine else 0.0)
  # Resolve exposure before cosmetic fractures, so one frame cannot make a
@@ -209,20 +213,22 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
  for actor in [game.player]+game.bots+game.allies:
   if not is_instance_valid(actor) or (actor is Hostile and actor.dead):continue
   if actor is Operator and actor.get_meta("battle_out",false):continue
+  # Men inside the armour are out of reach of fragments and blast.
+  if (actor is Hostile and actor.vehicle!=null) or (actor is Operator and game.player_sheltered()):continue
   var distance: float=actor.global_position.distance_to(where)
   if distance>=reach:continue
   var intensity := pow(maxf(0,1-distance/reach),2)*actor_exposure(source,actor)
   if mine:intensity*=posture_factor(actor)
   if intensity<0.015:continue
-  actor.receive_blast((GRAD_DAMAGE if grad else (MINE_DAMAGE if mine else 240.0))*intensity,clampf(intensity*1.35,0,1),where.direction_to(actor.global_position))
+  actor.receive_blast((GRAD_DAMAGE if grad else (CANNON_DAMAGE if cannon else (MINE_DAMAGE if mine else 240.0)))*intensity,clampf(intensity*1.35,0,1),where.direction_to(actor.global_position))
  # Bursts pin down everyone close by: heads down, into cover, no peeking.
  for bot in game.bots+game.allies:
-  if bot.dead:continue
+  if bot.dead or bot.vehicle!=null:continue
   bot.hear(where)
   var near: float=bot.global_position.distance_to(where)
   if near<reach*1.6:bot.shell_burst(where,clampf(1-near/(reach*1.6),0,1))
  # Reuse bounded local destruction; never traverse every scene object.
- var sphere := SphereShape3D.new();sphere.radius=6.0 if grad else 3.0
+ var sphere := SphereShape3D.new();sphere.radius=6.0 if grad else (1.5 if cannon else 3.0)
  var query := PhysicsShapeQueryParameters3D.new();query.shape=sphere;query.transform.origin=where;query.collision_mask=1
  var seen := {}
  for contact in get_world_3d().direct_space_state.intersect_shape(query,24):
@@ -233,4 +239,4 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
   var hit := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(where,body.global_position,1))
   if hit.is_empty() or hit.collider!=body:continue
   body.strike(hit.position,where.direction_to(body.global_position),1200,true)
-  if seen.size()>=(16 if grad else 8):break
+  if seen.size()>=(16 if grad else (3 if cannon else 8)):break

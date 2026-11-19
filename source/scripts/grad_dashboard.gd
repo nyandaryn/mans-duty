@@ -58,7 +58,7 @@ func _draw() -> void:
  var v:=vehicle
  # Speedometer and tachometer in front of the driver, then the manometers.
  dial(Vector2(112,128),94,absf(v.speed())*3.6,0,100,10,20,"км/год")
- dial(Vector2(328,128),94,v.rpm()/1000.0,0,4,0.25,1,"об/хв ×1000",3.2)
+ dial(Vector2(328,128),94,v.steady_rpm()/1000.0,0,4,0.25,1,"об/хв ×1000",3.2)
  dial(Vector2(502,92),60,v.air,0,10,1,2,"ПОВІТРЯ")
  dial(Vector2(636,92),60,v.tyre,0,4,0.5,1,"ШИНИ")
  # Warning lamps light with the ignition on.

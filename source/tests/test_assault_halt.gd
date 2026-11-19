@@ -9,8 +9,9 @@ func check(ok: bool, message: String) -> void:
  if not ok:failed=true;printerr("FAIL: ",message)
 func _initialize():call_deferred("run")
 
+# The men of the assault groups on foot (the BMP crews stay in their seats).
 func managed(game) -> Array:
- return game.allies.filter(func(a):return a.get_meta("battle_managed",false) and game.battle.operational(a))
+ return game.allies.filter(func(a):return a.get_meta("battle_managed",false) and a.vehicle==null and game.battle.operational(a))
 
 func low(actor: Hostile) -> int:
  return 2 if actor.tactical_prone>0.5 else (1 if actor.stance>0.5 else 0)
@@ -46,7 +47,9 @@ func run():
  var game=load("res://main.tscn").instantiate();game.set_meta("automated_preview",true);root.add_child(game);await process_frame
  game.volume=0
  game.set_player_class("mortarman")
- game.battle_size=12;game.selected_map=BattleMap.ID;game.start_match()
+ game.battle_size=18;game.selected_map=BattleMap.ID;game.start_match()
+ # The column is taken as arrived: the squads wait dismounted on the start line.
+ game.battle.skip_approach()
  game.player.set_physics_process(false)
  check(game.battle.halted and game.battle.awaiting,"Mortarman: the assault waits for the order")
  var start: Dictionary={}
