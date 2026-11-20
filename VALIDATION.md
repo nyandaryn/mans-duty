@@ -1,3 +1,56 @@
+# 0.27.0 validation — 2026-11-20
+
+The BMP-2 seen from inside in 3D: the driver's compartment with live prisms,
+the passenger in the troop compartment among his squad, and the dismount and
+boarding played out through the rear doors.
+
+- test_bmp (75 checks, was 42, --fixed-fps 60):
+  - the driver's compartment in 3D, the prisms showing the world, RMB lean
+    to an eyepiece, the panel large in the bottom-left corner;
+  - the passenger of the great assault in the troop compartment: five of
+    his squad seated round him on the interior layer only, bent under the
+    roof, the two beyond the turret basket out of sight; RMB on the prism
+    over his port; V out of the roof hatch with its lid up, V back in with
+    it shut;
+  - new passenger_exit: the doors open and the world comes in, the man by
+    the door seen from outside in the doorway, the player's turn after him,
+    head down under the top of the doorway, on his feet behind the stern
+    facing away, all seven out, every man back on the world layer upright,
+    the doors shut; «По місцях»: they climb in through the doorways, all
+    seated before the doors shut, out of sight again.
+- test_bmp_training (30 checks, was 29): RMB on the middle prism in the new
+  «Подивись у призму» step.
+- Renders: the troop compartment ahead / across / rear / down / lean, the
+  dismount from the player's eyes (0.4–5.0 s) and from outside, boarding
+  from outside. Fixed from them: interior boxes seen from below had no
+  bottom faces (sky through the roof); squad numbers showed through the
+  roof; the player's BMP on the city map parked with a lamp post (no
+  collider) through its hull, now avoided via district.posts.
+- Full source suite (53 scenarios): all pass. test_squad_routes exits 0
+  with no PASS line, as before.
+- Exported pck (22 MB, sha256 6864bc0f…), run with the shipped kvartal.x86_64
+  via --main-pack: `--quit-after 300` exits with no ERROR lines, and all
+  pass:
+
+    | Test | Checks |
+    |---|---|
+    | bmp | 75 |
+    | bmp_training | 30 |
+    | grad | pass |
+    | grad_training | pass |
+    | infantry_training | pass |
+    | battle | 43 |
+    | mortar | 83 |
+    | equipment | 98 |
+    | loadout_preview | 34 |
+    | campaign_flow | 34 |
+    | squad_tactics | 18 |
+    | wide_screen | pass |
+    | user_data | 10 |
+
+- The installed game gets this pck by an atomic rename; 0.26.0 is backed up
+  as .build/backup/kvartal-0.26.0.pck.
+
 # 0.26.0 validation — 2026-11-19
 
 The great assault mechanized: three enemy strongpoints in the village, the

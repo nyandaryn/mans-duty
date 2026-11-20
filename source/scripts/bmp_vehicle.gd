@@ -51,6 +51,9 @@ var ray: PhysicsRayQueryParameters3D
 var engine_sound: AudioStreamPlayer3D
 var radio_player: AudioStreamPlayer3D
 var seat_camera: Camera3D
+# The compartments seen from the seats: built for the player's vehicle only.
+var interior: BmpInterior
+var troops: BmpTroops
 var gunner: BmpGunner
 var driver_ai: BmpDriver
 var squad: Node
@@ -92,6 +95,10 @@ var parking := true
 var hatch_open := true
 var doors_wanted := false
 var doors := 0.0
+var doors_open := false
+# The passenger's roof hatch over the troop compartment.
+var troop_hatch_open := false
+var troop_hatch := 0.0
 var hatch := 1.0
 var drive_force := 0.0
 var grind := 0.0
@@ -154,6 +161,13 @@ func setup(owner_game: Node3D, label: String="") -> void:
  radio_player.unit_size=1.4;radio_player.max_distance=25.0;radio_player.bus=game.hearing.bus_name
  radio_player.finished.connect(next_track);add_child(radio_player)
  gunner=BmpGunner.new();gunner.setup(self)
+ troops=BmpTroops.new();troops.setup(self)
+
+func cabin() -> BmpInterior:
+ if interior==null:
+  interior=BmpInterior.new()
+  interior.setup(self)
+ return interior
 
 func say(text: String, seconds: float=4.0) -> void:
  notice=text;notice_left=seconds
@@ -236,6 +250,12 @@ func update_radio() -> void:
  if not radio_on or game==null:return
  radio_player.stream_paused=game.paused
  radio_player.volume_db=radio_volume()
+ # The crew hear the R-173 in the intercom headsets: in the turret as loud
+ # as in the driver's seat, where the set stands at the left elbow.
+ var command=game.get("bmp")
+ if command!=null and command.vehicle==self and command.seat!="":
+  radio_player.global_position=seat_camera.global_transform*Vector3(-0.3,-0.25,-0.45)
+ else:radio_player.position=BmpArt.RADIO
 
 func shift(step: int) -> bool:
  if clutch_engagement()>0.15:
@@ -257,20 +277,27 @@ func toggle_hatch() -> void:
  hatch_open=not hatch_open;game.sound("click",-10)
  say("Люк механіка-водія %s" % ("відкрито · голова назовні" if hatch_open else "закрито · огляд через призми ТНПО"),2)
 
+# The doors stay open while anybody is still in a doorway.
 func open_doors(open: bool) -> void:
- if doors_wanted==open:return
  doors_wanted=open
- game.spatial_shot("bolt",to_global(Vector3(0,1.0,BmpArt.HALF)),-8)
+
+func doors_wanted_now() -> bool:return doors_wanted or troops.busy()
 
 # --- Troops ---------------------------------------------------------------
 func room() -> int:return SEATS-aboard.size()
 
-func board(actor: Hostile) -> bool:
+# Aboard at once (the column forms up), or `walk`: in through his door to
+# a seat (BmpTroops).
+func board(actor: Hostile, walk: bool=false) -> bool:
  if aboard.has(actor):return true
  if room()<=0 or destroyed:return false
  aboard.append(actor)
  actor.embark(self)
+ troops.take(actor,walk)
  return true
+
+# Everybody out through the doors, row by row.
+func unload_all() -> void:troops.unload_all()
 
 func board_crew(actor: Hostile, role: String) -> void:
  crew.append(actor)
@@ -282,15 +309,24 @@ func exit_point(index: int) -> Vector3:
  var local:Vector3=BmpArt.EXITS[index%2]+Vector3(0,0,float(index/2)*0.6)
  return to_global(local)
 
+# Out at once (the vehicle is lost).
 func unload(actor: Hostile, index: int) -> void:
  aboard.erase(actor)
- var spot:=exit_point(index)
- if is_instance_valid(game.district) and game.district.grid!=null and absf(spot.x)<199 and absf(spot.z)<199:
-  var cell:Vector2i=game.district.nearest_cell(game.district.navigation_cell(spot))
-  var snapped:Vector3=game.district.navigation_position(cell)
-  if snapped.distance_to(spot)<4:spot=snapped
- spot.y=game.district.ground_height(spot)+0.1
- actor.disembark(spot,global_basis.z)
+ troops.forget(actor)
+ actor.rotation=Vector3.ZERO
+ actor.disembark(ground_spot(exit_point(index),true),global_basis.z)
+
+# A point on the ground for a man stepping out: on the walkable grid when
+# `snap` or when the point itself is in a wall.
+func ground_spot(spot: Vector3, snap: bool) -> Vector3:
+ var district: Node3D=game.district
+ if is_instance_valid(district) and district.grid!=null and absf(spot.x)<199 and absf(spot.z)<199:
+  var cell:Vector2i=district.navigation_cell(spot)
+  if snap or not district.grid.is_in_boundsv(cell) or district.grid.is_point_solid(cell):
+   var snapped:Vector3=district.navigation_position(district.nearest_cell(cell))
+   if snapped.distance_to(spot)<4:spot=snapped
+ if is_instance_valid(district):spot.y=district.ground_height(spot)+0.1
+ return spot
 
 # --- Frame ------------------------------------------------------------------
 func _physics_process(delta: float) -> void:
@@ -321,7 +357,8 @@ func _physics_process(delta: float) -> void:
   drive(delta)
  hold_parked(delta)
  animate(delta)
- for actor in aboard+crew:
+ # The troops are placed by BmpTroops: on their seats or on the way.
+ for actor in crew:
   if is_instance_valid(actor) and not actor.dead:actor.global_position=global_position+global_basis.y*0.9
  gunner.tick(delta)
  crush()
@@ -530,12 +567,19 @@ func animate(delta: float) -> void:
   wheel.position.y=BmpArt.WHEEL_RADIUS+0.07+lift
   wheel.rotation.x=-track_phase/BmpArt.WHEEL_RADIUS
  for hub in art.drive:hub.rotation.x=-track_phase/BmpArt.SPROCKET_RADIUS
- doors=move_toward(doors,1.0 if doors_wanted else 0.0,delta*1.6)
+ # The heavy doors (they are the fuel tanks) swing out and slow at the end.
+ var want:=doors_wanted_now()
+ if want!=doors_open:
+  doors_open=want
+  game.spatial_shot("bolt",to_global(Vector3(0,1.0,BmpArt.HALF)),-8)
+ doors=move_toward(doors,1.0 if want else 0.0,delta*1.1)
+ var swing:=smoothstep(0.0,1.0,doors)*1.85
  var leaves: Array=art.doors
- for i in range(leaves.size()):leaves[i].rotation.y=(-1.0 if i==0 else 1.0)*doors*1.85
+ for i in range(leaves.size()):leaves[i].rotation.y=(-1.0 if i==0 else 1.0)*swing
+ troop_hatch=move_toward(troop_hatch,1.0 if troop_hatch_open else 0.0,delta*2.2)
+ art.troop_hatch.rotation.z=-smoothstep(0.0,1.0,troop_hatch)*1.65
  hatch=move_toward(hatch,1.0 if hatch_open else 0.0,delta*2.5)
  art.hatch.rotation.z=-hatch*1.75
- art.yoke.rotation.z=-yoke*0.6
 
 # A hull moving over a soldier on foot: nobody survives under 14 t.
 func crush() -> void:

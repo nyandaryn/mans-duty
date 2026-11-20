@@ -118,6 +118,9 @@ var n_arms: Array[Node3D]=[]
 var n_forearms: Array[Node3D]=[]
 # Distant soldiers are drawn by CrowdRenderer from the animated nodes.
 var render_far := false
+# Seen while aboard a vehicle: the visual layers of the model in the troop
+# compartment or in a doorway (BmpTroops); 0 keeps him out of sight.
+var ride_layer := 0
 var pose_serial := 0
 var shape_dirty := true
 var n_shape: CollisionShape3D
@@ -776,15 +779,27 @@ func embark(carrier: BmpVehicle) -> void:
 	sees_player=false
 	recognition=0
 
+# Shown inside a vehicle on these layers, or hidden with 0; out of it the
+# model is back on the world layer.
+func show_aboard(mask: int) -> void:
+	if mask==ride_layer:return
+	ride_layer=mask
+	visible=mask!=0
+	# His number over the helmet would stand through the roof: hidden aboard.
+	for item in model.find_children("*","VisualInstance3D",true,false):
+		if item is Label3D:item.layers=0 if mask!=0 else 1
+		else:item.layers=mask if mask!=0 else 1
+
 # Steps out of the vehicle onto the ground at a point, facing a direction.
 func disembark(point: Vector3, facing: Vector3) -> void:
+	show_aboard(0)
 	vehicle=null
 	visible=true
 	collision_layer=4
 	collision_mask=1|2|4|64
 	for i in range(mini(hitboxes.size(),hitbox_layers.size())):hitboxes[i].collision_layer=hitbox_layers[i]
 	global_position=point
-	rotation.y=atan2(-facing.x,-facing.z)
+	rotation=Vector3(0,atan2(-facing.x,-facing.z),0)
 	velocity=Vector3.ZERO
 	path_timer=0
 	cover_timer=randf()*0.6

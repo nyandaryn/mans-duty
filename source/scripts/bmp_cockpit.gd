@@ -1,23 +1,16 @@
 class_name BmpCockpit
 extends Control
 
-# What the player sees from inside the BMP-2. The driver with the hatch shut
-# looks through three TNPO-170A prism blocks under the rubber brow pad; at
-# his left knee is the instrument panel (tachometer with the engine-hour
-# counter, speedometer with the odometer, the GPK-59 gyro semi-compass,
-# coolant and oil temperatures, oil pressure, the voltmeter, the gauge of the
-# air-start bottle, the clock and the warning lamps), in front of him the
-# yoke, at his right hand the gear gate. The right mouse button brings the
-# panel up large, as in the BM-21 cab; with the hatch open it is the only
-# way to read it. A passenger in the commander's seat of the turret looks
-# through the TKN-3B and two TNPO-170A; the right button gives the TKN-3B
-# at ×5 with its reticle.
+# What is drawn over the view from inside the BMP-2 (the compartments
+# themselves are 3D: BmpInterior). A dot in the middle of the view and the
+# name of the device it rests on; the right button on the instrument panel,
+# or anywhere with the hatch open, slides the panel up large at the bottom
+# left of the screen, leaving the view above it free: tachometer with the
+# engine-hour counter, speedometer with the odometer, the GPK-59 gyro
+# semi-compass, coolant and oil temperatures, oil pressure, the voltmeter, the
+# gauge of the air-start bottle, the clock and the warning lamps. With
+# `plate_only` it draws just the panel into the texture of the 3D one.
 const PANEL := Vector2(1100,480)
-# Height of the middle of the prism windows on the screen (0 top, 1 bottom):
-# the seat camera is pitched so that this band looks at the horizon.
-const DRIVER_BAND := 0.29
-const COMMANDER_BAND := 0.32
-const INTERIOR := Color("1d211a")
 const STEEL := Color("2c3128")
 const PLATE := Color("394034")
 const PLATE_EDGE := Color("23281f")
@@ -32,214 +25,100 @@ const GREEN := Color("6fcf4f")
 var game: Node3D
 var command: Node
 var large := 0.0
-var knob := Vector2(1,1)
+var plate_only := false
+var source: BmpVehicle
 
 func setup(owner_game: Node3D, owner_command: Node) -> void:
  game=owner_game;command=owner_command
  mouse_filter=Control.MOUSE_FILTER_IGNORE
  hide()
 
-func vehicle() -> BmpVehicle:return command.vehicle
+func vehicle() -> BmpVehicle:return source if source!=null else command.vehicle
 
 func view() -> String:
- if not command.active() or not game.running or command.seat=="":return ""
+ if command==null or not command.active() or not game.running or command.seat=="":return ""
  if command.seat=="driver":return "driver_open" if vehicle().hatch_open else "driver"
- if command.seat=="commander" and not command.head_out:return "commander"
+ if command.seat=="troop" and not command.head_out:return "troop"
  return ""
 
 func aiming() -> bool:
  return Input.is_action_pressed("aim") and not game.commands_open and not game.paused and not game.inventory_open
 
-# The right button: the panel large at the driver's seat, the TKN-3B at ×5
-# at the commander's.
-func instruments_shown() -> bool:return command.seat=="driver" and aiming()
-func scope_shown() -> bool:return view()=="commander" and aiming()
+# What the right button is doing now (BmpCommand decides on the press).
+func instruments_shown() -> bool:return command.seat=="driver" and command.press=="panel"
 
 func _process(delta: float) -> void:
+ # The plate in the cabin is redrawn by BmpInterior when its texture renders.
+ if plate_only:return
  var mode:=view()
  visible=mode!=""
  if not visible:large=0.0;return
  large=move_toward(large,1.0 if instruments_shown() else 0.0,delta*6.0)
- var v:=vehicle()
- var slot: Vector2={0:Vector2(0,0),1:Vector2(1,1),2:Vector2(0,2),3:Vector2(1,0),4:Vector2(1,2),5:Vector2(2,0),6:Vector2(2,2)}.get(v.gear,Vector2(1,1))
- # The lever goes through neutral: across first, then along the slot.
- if absf(knob.x-slot.x)>0.01 and absf(knob.y-1.0)>0.01:knob.y=move_toward(knob.y,1.0,delta*12.0)
- else:
-  knob.x=move_toward(knob.x,slot.x,delta*12.0)
-  if absf(knob.x-slot.x)<=0.01:knob.y=move_toward(knob.y,slot.y,delta*12.0)
  queue_redraw()
 
 func _draw() -> void:
+ if plate_only:draw_plate();return
  match view():
   "driver":
-   var windows:=driver_windows()
-   interior(windows)
-   brow_pad(windows)
-   for r in windows:prism(r)
-   yoke()
-   gear_gate()
+   if large<0.05:sight()
    notice()
-   panel(1.0)
+   clutch()
+   if large>0.0:panel(large)
   "driver_open":
    if large>0.0:panel(large)
-  "commander":
-   if scope_shown():scope();return
-   var windows:=commander_windows()
-   interior(windows)
-   for i in range(windows.size()):prism(windows[i],i==1)
-   draw_string(ThemeDB.fallback_font,Vector2(0,windows[1].end.y+46.0*unit()),"ТКН-3Б",HORIZONTAL_ALIGNMENT_CENTER,size.x,int(15*unit()),Color(MARK,0.35))
+  "troop":
+   if not command.exiting():sight()
+   notice()
 
 func unit() -> float:return size.y/1000.0
 
-# --- Prisms and the hull around them -----------------------------------------
-func driver_windows() -> Array[Rect2]:
- var w:=size.x;var h:=size.y
- return [Rect2(w*0.075,h*0.205,w*0.24,h*0.17),Rect2(w*0.345,h*0.185,w*0.31,h*0.21),Rect2(w*0.685,h*0.205,w*0.24,h*0.17)]
-
-func commander_windows() -> Array[Rect2]:
- var w:=size.x;var h:=size.y
- return [Rect2(w*0.10,h*0.255,w*0.22,h*0.13),Rect2(w*0.39,h*0.21,w*0.22,h*0.22),Rect2(w*0.68,h*0.255,w*0.22,h*0.13)]
-
-# Steel everywhere but the windows, column by column between their edges.
-func interior(windows: Array[Rect2]) -> void:
- var cuts: Array[float]=[0.0,size.x]
- for r in windows:cuts.append(r.position.x);cuts.append(r.end.x)
- cuts.sort()
- for i in range(cuts.size()-1):
-  var x0:=cuts[i];var x1:=cuts[i+1]
-  if x1-x0<0.5:continue
-  var hole:=Rect2()
-  for r in windows:
-   if (x0+x1)*0.5>r.position.x and (x0+x1)*0.5<r.end.x:hole=r
-  if hole.has_area():
-   draw_rect(Rect2(x0,0,x1-x0,hole.position.y),INTERIOR)
-   draw_rect(Rect2(x0,hole.end.y,x1-x0,size.y-hole.end.y),INTERIOR)
-  else:draw_rect(Rect2(x0,0,x1-x0,size.y),INTERIOR)
- # Daylight from the prisms on the steel below them, darkness above.
- var top:=INF;var bottom:=0.0
- for r in windows:top=minf(top,r.position.y);bottom=maxf(bottom,r.end.y)
+# The dot in the middle of the view and what it rests on.
+func sight() -> void:
+ if command.lean>0.02:return
  var u:=unit()
- for k in range(6):
-  draw_rect(Rect2(0,top-40*u-k*18*u,size.x,18*u),Color(0,0,0,0.05*k))
-  draw_rect(Rect2(0,bottom+16*u+k*22*u,size.x,22*u),Color(0.75,0.8,0.65,0.035*(6-k)))
- # Welds and bolts of the hatch frame.
- for r in windows:
-  for corner in [r.position+Vector2(-18,-18)*u,Vector2(r.end.x+18*u,r.position.y-18*u),Vector2(r.position.x-18*u,r.end.y+18*u),r.end+Vector2(18,18)*u]:
-   draw_circle(corner,5*u,Color("3b4136"));draw_circle(corner-Vector2(1,1)*u,2.2*u,Color("4b5244"))
-
-func prism(r: Rect2, eyepiece: bool=false) -> void:
- var u:=unit()
- # A greenish tint of the glass, darker at the edges, the prism's top shade.
- draw_rect(r,Color(0.28,0.46,0.36,0.10))
- for k in range(5):draw_rect(r.grow(-k*4*u),Color(0,0,0,0.16-0.03*k),false,4*u)
- draw_rect(Rect2(r.position,Vector2(r.size.x,r.size.y*0.14)),Color(0,0,0,0.22))
- if eyepiece:
-  # Rubber eyecups of the binocular device: rounded, thick.
-  draw_rect(r.grow(10*u),RUBBER,false,18*u)
-  for corner in [r.position,Vector2(r.end.x,r.position.y),Vector2(r.position.x,r.end.y),r.end]:fillet(corner,r,26*u)
- else:
-  draw_rect(r.grow(7*u),Color("101210"),false,12*u)
-  draw_rect(r.grow(1.5*u),Color(0.55,0.6,0.5,0.35),false,2*u)
-
-# A rounded corner of the eyecup: rubber over the corner of the window.
-func fillet(corner: Vector2, r: Rect2, radius: float) -> void:
- var inward:=Vector2(1.0 if corner.x<=r.position.x+1.0 else -1.0,1.0 if corner.y<=r.position.y+1.0 else -1.0)
- var center:=corner+inward*radius
- var a0:=atan2(0.0,-inward.x);var a1:=atan2(-inward.y,0.0)
- var points:=PackedVector2Array([corner])
- for k in range(9):
-  var a:=lerp_angle(a0,a1,k/8.0)
-  points.append(center+Vector2(cos(a),sin(a))*radius)
- draw_colored_polygon(points,RUBBER)
-
-func brow_pad(windows: Array[Rect2]) -> void:
- var u:=unit()
- var left:=windows[0].position.x-30*u;var right:=windows[windows.size()-1].end.x+30*u
- var y:=windows[1].position.y-62*u;var h:=34*u
- draw_rect(Rect2(left,y,right-left,h),RUBBER)
- draw_circle(Vector2(left,y+h*0.5),h*0.5,RUBBER);draw_circle(Vector2(right,y+h*0.5),h*0.5,RUBBER)
- draw_line(Vector2(left,y+4*u),Vector2(right,y+4*u),Color(1,1,1,0.07),2*u)
- for k in range(1,12):draw_line(Vector2(lerpf(left,right,k/12.0),y+6*u),Vector2(lerpf(left,right,k/12.0),y+h-6*u),Color(0,0,0,0.35),1.5*u)
-
-# The yoke of the steering mechanism: a bar with two grips on a column,
-# turned as far as it is deflected.
-func yoke() -> void:
- var u:=unit()
- var c:=Vector2(size.x*0.56,size.y*0.80)
- draw_rect(Rect2(c.x-16*u,c.y,32*u,size.y-c.y),Color("1a1d17"))
- var half:=size.x*0.105
- var turn:=vehicle().yoke*0.55
- var along:=Vector2(cos(turn),sin(turn))
- draw_line(c-along*half,c+along*half,STEEL,26*u)
- draw_line(c-along*half+Vector2(0,-6*u),c+along*half+Vector2(0,-6*u),Color(1,1,1,0.06),4*u)
- for side in [-1.0,1.0]:
-  var end: Vector2=c+along*half*side
-  draw_line(end,end+along*side*58*u,RUBBER,34*u)
- draw_circle(c,30*u,Color("23271f"));draw_circle(c,14*u,Color("3a3f34"))
-
-# The gear gate under the driver's right hand: reverse and first on the
-# left, second and third in the middle, fourth and fifth on the right.
-func gear_gate() -> void:
- var u:=unit()
- var plate:=Rect2(size.x*0.775,size.y*0.70,size.x*0.15,size.y*0.20)
- draw_rect(plate,PLATE);draw_rect(plate,PLATE_EDGE,false,3*u)
+ var c:=size*0.5
+ draw_circle(c,3.6*u,Color(0,0,0,0.55));draw_circle(c,2.2*u,Color(1,1,1,0.75))
+ var target: Dictionary=command.target
+ if target.is_empty():return
+ var action: String={"prism":"ПКМ — ДИВИТИСЯ","panel":"ПКМ — ВЕЛИКИМ ПЛАНОМ"}.get(target.kind,"")
+ var text:="%s  ·  %s" % [target.title,action]
  var font:=ThemeDB.fallback_font
- var at:=func(column: float, row: float) -> Vector2:return plate.position+Vector2(plate.size.x*(0.22+0.28*column),plate.size.y*(0.2+0.3*row))
- for column in range(3):draw_line(at.call(column,0),at.call(column,2),Color("0d0e0c"),14*u)
- draw_line(at.call(0,1),at.call(2,1),Color("0d0e0c"),14*u)
- var names:=[["ЗХ","1"],["2","3"],["4","5"]]
- for column in range(3):
-  for row in range(2):
-   var p: Vector2=at.call(column,row*2)
-   draw_string(font,p+Vector2(14*u,(row*2-1)*-4*u+8*u),names[column][row],HORIZONTAL_ALIGNMENT_LEFT,-1,int(26*u),MARK)
- var top: Vector2=at.call(knob.x,knob.y)
- draw_line(Vector2(plate.get_center().x,plate.end.y+60*u),top,Color("2c2e2a"),11*u)
- draw_circle(top,26*u,Color("8a8a80"));draw_circle(top,23*u,Color("262622"));draw_circle(top-Vector2(7,7)*u,8*u,Color(1,1,1,0.22))
- var pedal:=vehicle().clutch_engagement()
- var state:="ФРИКЦІОН ВИЖАТО" if pedal<0.05 else ("ФРИКЦІОН ПРОБУКСОВУЄ" if pedal<0.95 else "")
- if state!="":draw_string(font,Vector2(plate.position.x,plate.position.y-14*u),state,HORIZONTAL_ALIGNMENT_CENTER,plate.size.x,int(18*u),AMBER)
+ var height:=int(17*u)
+ draw_string(font,Vector2(1,c.y+38*u+1),text,HORIZONTAL_ALIGNMENT_CENTER,size.x,height,Color(0,0,0,0.8))
+ draw_string(font,Vector2(0,c.y+38*u),text,HORIZONTAL_ALIGNMENT_CENTER,size.x,height,Color(MARK,0.9))
 
 func notice() -> void:
  var v:=vehicle()
  if v.notice_left<=0.0 or v.notice=="":return
  var u:=unit()
  var font:=ThemeDB.fallback_font
- var y:=size.y*0.49
+ # Under the window of a prism even with the face at the eyepiece.
+ var y:=size.y*0.81
  draw_string(font,Vector2(1,y+1),v.notice,HORIZONTAL_ALIGNMENT_CENTER,size.x,int(24*u),Color(0,0,0,0.8))
  draw_string(font,Vector2(0,y),v.notice,HORIZONTAL_ALIGNMENT_CENTER,size.x,int(24*u),AMBER)
 
-# --- The commander's TKN-3B at ×5 -------------------------------------------
-func scope() -> void:
- var c:=size*0.5
- var r:=size.y*0.43
- draw_arc(c,r+size.x,0,TAU,96,Color.BLACK,size.x*2.0)
- draw_arc(c,r,0,TAU,96,Color("0a0b0a"),6)
- var line:=Color(0.05,0.07,0.05,0.85)
- # Chevron and the scale of thousandths across the field.
- draw_line(c,c+Vector2(-18,22),line,2);draw_line(c,c+Vector2(18,22),line,2)
- for k in range(-8,9):
-  if k==0:continue
-  var x:=c.x+k*r*0.1
-  draw_line(Vector2(x,c.y),Vector2(x,c.y+(12 if k%2==0 else 6)),line,2)
- draw_line(Vector2(c.x-r*0.85,c.y),Vector2(c.x-r*0.12,c.y),line,2)
- draw_line(Vector2(c.x+r*0.12,c.y),Vector2(c.x+r*0.85,c.y),line,2)
- draw_line(Vector2(c.x,c.y+r*0.12),Vector2(c.x,c.y+r*0.6),line,2)
- var font:=ThemeDB.fallback_font
- draw_string(font,c+Vector2(r*0.62,r*0.86),"ТКН-3Б ×5",HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(MARK,0.55))
+# The main clutch held out or slipping: the driver feels it in his foot.
+func clutch() -> void:
+ var pedal:=vehicle().clutch_engagement()
+ var state:="ФРИКЦІОН ВИЖАТО" if pedal<0.05 else ("ФРИКЦІОН ПРОБУКСОВУЄ" if pedal<0.95 else "")
+ if state=="":return
+ var u:=unit()
+ draw_string(ThemeDB.fallback_font,Vector2(0,size.y*0.885),state,HORIZONTAL_ALIGNMENT_CENTER,size.x,int(18*u),AMBER)
 
 # --- The driver's instrument panel --------------------------------------------
+# Large, it slides up from the bottom edge and stays in the lower part of the
+# screen, at the left where the panel is: the view above stays open, the
+# course card at the bottom right stays clear.
+func panel_rect() -> Rect2:
+ var k:=minf(size.x*0.56/PANEL.x,size.y*0.42/PANEL.y)
+ var w:=PANEL*k
+ return Rect2(Vector2(size.x*0.02,size.y*0.905-w.y),w)
+
 func panel(amount: float) -> void:
- var hidden_low:=view()=="driver_open"
- # At the driver's left knee, above the line of the key hints.
- var small_k:=minf(size.x*0.40/PANEL.x,size.y*0.42/PANEL.y)
- var small_at:=Vector2(size.x*0.012,size.y*0.885-PANEL.y*small_k)
- if hidden_low:small_at=Vector2(size.x*0.06,size.y*1.02)
- var big_k:=minf(size.x*0.88/PANEL.x,size.y*0.84/PANEL.y)
- var big_at:=(size-PANEL*big_k)*0.5+Vector2(0,size.y*0.04)
- var t:=ease(large,-2.0)
- if large>0.0:draw_rect(Rect2(Vector2.ZERO,size),Color(0,0,0,0.5*t))
- var k:=lerpf(small_k,big_k,t)
- var at:=small_at.lerp(big_at,t)
+ var rect:=panel_rect()
+ var t:=ease(amount,-2.0)
+ var at:=Vector2(rect.position.x,lerpf(size.y+8.0,rect.position.y,t))
+ var k:=rect.size.x/PANEL.x
  draw_set_transform(at,0.0,Vector2(k,k))
  draw_plate()
  draw_set_transform(Vector2.ZERO,0.0,Vector2.ONE)

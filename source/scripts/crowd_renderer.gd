@@ -97,6 +97,13 @@ func set_far(entry: Dictionary, far: bool) -> void:
 		elif not far and mesh.get_parent()==null and is_instance_valid(parents[i]):
 			parents[i].add_child(mesh)
 
+# The layers of the detailed meshes, attached to the tree or not.
+func ride_layers(entry: Dictionary, mask: int) -> void:
+	if int(entry.get("ride",1))==mask:return
+	entry.ride=mask
+	for mesh in entry.meshes:
+		if is_instance_valid(mesh):mesh.layers=mask
+
 func discard(entry: Dictionary) -> void:
 	# Detached meshes of a freed soldier are orphans: free them explicitly.
 	for mesh in entry.meshes:
@@ -133,19 +140,24 @@ func _process(delta: float) -> void:
 			entries.remove_at(index)
 			continue
 		var actor: Hostile=entry.actor
-		# A soldier inside a vehicle is drawn by nobody: hide his instance
-		# and keep his detailed meshes out of the tree until he steps out.
+		# A soldier inside a vehicle: no instance of the crowd. He is drawn
+		# in detail only while seen in the troop compartment or the doorway
+		# (on the layers BmpTroops gives him); otherwise his detailed meshes
+		# stay out of the tree until he steps out.
 		if actor.vehicle!=null:
+			var shown: bool=actor.ride_layer!=0
+			ride_layers(entry,actor.ride_layer if shown else 1)
+			if entry.far==shown:
+				entry.far=not shown
+				set_far(entry,not shown)
 			if not entry.get("aboard",false):
 				entry.aboard=true
-				if not entry.far:
-					entry.far=true
-					set_far(entry,true)
 				hide_slot(entry.team,entry.slot)
 			continue
 		if entry.get("aboard",false):
 			entry.aboard=false
 			entry.serial=-1
+			ride_layers(entry,1)
 		var position := actor.global_position
 		var distance := origin.distance_to(position)
 		var limit: float=PERSONAL_NEAR if entry.personal else NEAR

@@ -11,7 +11,6 @@ extends Node
 # into the village — it supports from behind the line and changes its fire
 # position; it comes up to take the men aboard only when the place is quiet,
 # and only when the next objective is far.
-const EXIT_INTERVAL := 0.7
 const FILE_GAP := 2.3
 const FILE_PACE := 1.5
 const ASSAULT_LINE := 65.0
@@ -31,7 +30,7 @@ var state := "wait"
 var state_time := 0.0
 var player_led := false
 var ahead: MechSquad
-var exit_clock := 0.0
+var unloading := false
 var exits := 0
 var after_dismount := "file"
 var goal_sector := -2
@@ -116,8 +115,9 @@ func run_to_door(actor: Hostile, index: int) -> void:
  actor.has_cover=false
  actor.cover_timer=maxf(actor.cover_timer,0.6)
 
+# Close to the doors: he climbs in and walks to his seat (BmpTroops).
 func try_board(actor: Hostile, index: int) -> void:
- if actor.global_position.distance_to(vehicle.exit_point(index))<BOARD_REACH and absf(vehicle.speed())<0.8 and vehicle.doors>0.8:vehicle.board(actor)
+ if actor.global_position.distance_to(vehicle.exit_point(index))<BOARD_REACH and absf(vehicle.speed())<0.8 and vehicle.doors>0.8:vehicle.board(actor,true)
 
 # A plain move order the soldier's own tactics carry out: he walks there and
 # drops into cover nearby if he comes under fire.
@@ -329,27 +329,27 @@ func tick_approach() -> void:
 func begin_dismount(next: String) -> void:
  after_dismount=next
  exits=0
- exit_clock=0.4
+ unloading=false
  driver.stop()
  vehicle.open_doors(true)
  set_state("dismount")
 
-func tick_dismount(delta: float) -> void:
+# The doors swing open and the men get up as they do, row by row from the
+# doors (BmpTroops); each takes his place behind the hull as he is out.
+func tick_dismount(_delta: float) -> void:
  driver.stop()
- if absf(vehicle.speed())>1.5 or vehicle.doors<0.8:return
- exit_clock-=delta
- if exit_clock>0.0:return
- var inside:=aboard()
- if inside.is_empty():
+ if absf(vehicle.speed())>1.5 or vehicle.doors<0.3:return
+ if not unloading:
+  unloading=true
+  vehicle.unload_all()
+ if aboard().is_empty() and not vehicle.troops.busy():
   vehicle.open_doors(false)
   start_after_dismount()
-  return
- var actor: Hostile=inside[0]
- vehicle.unload(actor,exits)
+
+func stepped_out(actor: Hostile) -> void:
+ if not members.has(actor):return
  exits+=1
- exit_clock=EXIT_INTERVAL
  control(actor,after_dismount!="assault")
- # Out of the door, the men first take their places right behind the hull.
  move_to(actor,file_slot(exits-1),4.0)
 
 func start_after_dismount() -> void:
@@ -543,7 +543,7 @@ func tick_pickup() -> void:
    control(men[i],true)
    run_to_door(men[i],i)
    try_board(men[i],i)
-  if aboard().size()==living() or (state_time>PICKUP_PATIENCE and not aboard().is_empty()):
+  if (aboard().size()==living() or (state_time>PICKUP_PATIENCE and not aboard().is_empty())) and not vehicle.troops.busy():
    for actor in on_foot():control(actor,false)
    vehicle.open_doors(false)
    transfer()
@@ -610,7 +610,7 @@ func tick_player(delta: float) -> void:
    for i in range(men.size()):
     run_to_door(men[i],i)
     try_board(men[i],i)
-   if on_foot().is_empty():
+   if on_foot().is_empty() and not vehicle.troops.busy():
     boarded_clock+=delta
     if boarded_clock>1.0:vehicle.open_doors(false);set_state("mounted");game.squad.tell("Десант на місцях: %d" % aboard().size())
    else:boarded_clock=0.0

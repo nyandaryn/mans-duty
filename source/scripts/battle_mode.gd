@@ -153,7 +153,7 @@ func skip_approach() -> void:
  serial=maxi(serial,serial_before)
  column_go=true
  # A passenger gets out with them.
- if game.bmp.seat=="commander":game.bmp.leave()
+ if game.bmp.seat=="troop":game.bmp.leave()
 
 # Column order: each squad follows the one before it.
 func register_squad(squad: MechSquad) -> void:

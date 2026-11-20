@@ -4,8 +4,9 @@ extends Node
 # The player and the BMP-2. As the driver-mechanic (class «механік-водій
 # БМП») he drives his squad's vehicle and is the squad leader: dismount,
 # mount up, follow the vehicle in file, storm dispersed. In the great assault
-# a player of another class rides in the leading vehicle in the commander's
-# hatch and gets out with the troops at the drop point.
+# a player of another class rides in the troop compartment of the leading
+# vehicle among the squad and gets out with them at the drop point, in his
+# turn through the right door (BmpTroops).
 const REACH := 2.6
 const COMMANDS := [["dismount","1","ДЕСАНТ · СПІШИТИСЯ"],["mount","2","ПО МІСЦЯХ · ПОСАДКА"],["file","3","ЗА БМП · КОЛОНОЮ ПО ОДНОМУ"],["assault","4","ШТУРМ РОЗСИПОМ"]]
 var game: Node3D
@@ -17,17 +18,25 @@ var panel: Control
 var caption: Label
 var instruments: Label
 var cockpit: BmpCockpit
-# The passenger in the commander's hatch: head and shoulders out with the
-# rifle, or inside at the TKN-3B.
+# The passenger in the troop compartment: head and shoulders out of the roof
+# hatch over his seat with the rifle, or inside among the squad.
 var head_out := false
 var hitbox_layers: Array[int]=[]
-# Eye height in the commander's hatch (turret coordinates): inside under the
-# periscopes, and standing with the shoulders over the rim to shoot.
-const COMMANDER_EYE := Vector3(0.42,0.88,-0.08)
-const COMMANDER_HATCH := Vector3(0.45,1.22,0.18)
-# The TKN-3B: ×5, a field of 10°; its circle fills 0.86 of the screen height.
-const SCOPE_FOV := 11.6
-const PRISM_FOV := 55.0
+# The eyes standing in the troop hatch with the shoulders over the rim to
+# shoot (vehicle frame); seated inside they are BmpArt.TROOP_EYE.
+const TROOP_HEAD_OUT := Vector3(0.50,2.06,1.22)
+# Looking along the bench to the doors when he sits down.
+const TROOP_LOOK := Vector2(-0.45,-0.10)
+# Inside the compartments, and with the face at the eyepiece of a prism.
+const INSIDE_FOV := 70.0
+const LEAN_FOV := 62.0
+# The right button inside: decided on the press by what the eyes rest on —
+# "lean" (to the eyepiece of a prism), "panel" (the instruments large at the
+# bottom), "none".
+var press := ""
+var lean := 0.0
+var lean_device := -1
+var target := {}
 
 func setup(owner_game: Node3D, ui_root: Control) -> void:
  game=owner_game
@@ -78,7 +87,7 @@ func reset() -> void:
  if is_instance_valid(vehicle) and not (is_instance_valid(squad) and squad.battle!=null and squad.battle.active):
   if is_instance_valid(squad):squad.queue_free()
   vehicle.gunner.clear();vehicle.queue_free()
- vehicle=null;squad=null;seat="";look=Vector2.ZERO
+ vehicle=null;squad=null;seat="";look=Vector2.ZERO;clear_press()
 
 # --- Starting a match --------------------------------------------------------
 # A regular map: the player's vehicle stands near the insertion point with
@@ -131,8 +140,8 @@ func start_battle(battle: BattleMode) -> void:
  if game.player_class in ["mortarman","grad"] or battle.mech.is_empty():return
  squad=battle.mech[0]
  vehicle=squad.vehicle
- enter("commander")
- game.squad.tell("Ти в люку командира першої БМП · колона рушить на штурм · F — вийти на зупинці")
+ enter("troop")
+ game.squad.tell("Ти в десантному відділенні першої БМП, з відділенням · колона рушить на штурм · F — вийти на зупинці")
 
 # The personal allies of the class: the first is the gunner-operator, the
 # rest go into the troop compartment.
@@ -189,14 +198,22 @@ func footprint_clear(center: Vector3, forward: Vector3, margin: float=0.3) -> bo
  query.collision_mask=1
  var at:=center;at.y=district.ground_height(center)+0.45+0.85
  query.transform=Transform3D(Basis.looking_at(forward,Vector3.UP),at)
- return game.get_world_3d().direct_space_state.intersect_shape(query,1).is_empty()
+ if not game.get_world_3d().direct_space_state.intersect_shape(query,1).is_empty():return false
+ # Lamp posts have no collider: one would stand through the troop
+ # compartment, in the passenger's face once the doors open.
+ for post in district.get("posts") if district.get("posts") is Array else []:
+  var d: Vector3=post-center
+  if absf(d.dot(forward))<BmpArt.HALF+0.6 and absf(d.dot(side))<BmpArt.WIDTH*0.5+margin+0.3:return false
+ return true
 
 # --- Seats -----------------------------------------------------------------------
 func enter(id: String) -> void:
  var player: Operator=game.player
  player.field_rig.cancel();game.inventory.close();game.close_panels()
- seat=id;look=Vector2.ZERO;head_out=false
+ seat=id;look=TROOP_LOOK if id=="troop" else Vector2(0,-0.05);head_out=false;clear_press()
+ vehicle.cabin()
  if id=="driver":vehicle.seat="driver"
+ if id=="troop":vehicle.troops.seat_player()
  player.set_physics_process(false);player.set_process(false);player.set_process_unhandled_input(false)
  player.collision_layer=0;player.collision_mask=0;player.velocity=Vector3.ZERO
  hitbox_layers.clear()
@@ -217,20 +234,36 @@ func release_player() -> void:
  hitbox_layers.clear()
  player.viewmodel.show();player.world_body.show()
  player.camera.make_current()
+ if active():
+  clear_press()
+  vehicle.troop_hatch_open=false
+  vehicle.troops.unseat_player()
+  if vehicle.interior!=null:vehicle.interior.set_station("")
 
+# Out at once: the driver through his hatch, a passenger behind the hull
+# (the vehicle is lost, or the battle skipped the march).
 func leave() -> void:
  if seat=="":return
- var player: Operator=game.player
  var spot: Vector3
  if seat=="driver":spot=vehicle.to_global(Vector3(-2.3,0,-1.3))
  else:spot=vehicle.exit_point(0)+vehicle.global_basis.z*0.6
+ var away:=spot-vehicle.global_position
+ out_at(spot,-away if seat=="driver" else vehicle.global_basis.z)
+
+# The passenger at the end of his way out through the right door.
+func step_out(spot: Vector3, facing: Vector3) -> void:
+ if seat!="troop":return
+ out_at(spot,facing)
+ game.squad.tell("Спішування: ти з десантом першої БМП")
+
+func out_at(spot: Vector3, facing: Vector3) -> void:
+ var player: Operator=game.player
  spot.y=game.district.ground_height(spot)
  var space:=vehicle.get_world_3d().direct_space_state
  var hit:=space.intersect_ray(PhysicsRayQueryParameters3D.create(spot+Vector3.UP*4,spot+Vector3.DOWN*4,1,[vehicle.get_rid()]))
  if not hit.is_empty():spot=hit.position
  player.global_position=spot+Vector3.UP*0.05
- var away:=spot-vehicle.global_position
- player.rotation.y=atan2(away.x,away.z) if seat=="driver" else vehicle.rotation.y
+ player.rotation.y=atan2(-facing.x,-facing.z)
  player.pitch=0
  if seat=="driver":
   vehicle.throttle=0;vehicle.brake_pedal=0;vehicle.clutch_pedal=0;vehicle.yoke_input=0
@@ -247,51 +280,90 @@ func vacate() -> void:
  if seat=="driver" and is_instance_valid(vehicle):
   vehicle.throttle=0;vehicle.yoke_input=0;vehicle.seat=""
  if head_out and is_instance_valid(game.player):game.player.anchor=Callable()
- seat="";hitbox_layers.clear();head_out=false
+ seat="";hitbox_layers.clear();head_out=false;clear_press()
+ if is_instance_valid(vehicle):
+  vehicle.troop_hatch_open=false
+  vehicle.troops.unseat_player()
+  if vehicle.interior!=null:vehicle.interior.set_station("")
  instruments.hide()
 
 func place_player() -> void:
  var player: Operator=game.player
  if seat=="driver":player.global_position=vehicle.to_global(BmpArt.DRIVER_EYE+Vector3.DOWN*1.2)
- else:player.global_position=vehicle.art.turret.to_global(Vector3(0.45,-0.3,0.1))
+ else:player.global_position=vehicle.to_global(BmpArt.TROOP_EYE+Vector3.DOWN*0.9)
 
-func eye() -> Transform3D:
- if seat=="driver":
-  var point:Vector3=BmpArt.DRIVER_HEAD_OUT if vehicle.hatch_open else BmpArt.DRIVER_PRISM
-  return vehicle.global_transform*Transform3D(Basis.IDENTITY,point)
- # The commander's seat on the right of the turret: the view turns with it.
- var turret: Node3D=vehicle.art.turret
- return Transform3D(turret.global_basis.orthonormalized(),turret.global_transform*COMMANDER_EYE)
+# Where the eyes of the operator standing in the troop hatch are.
+func hatch_point() -> Vector3:return vehicle.global_transform*TROOP_HEAD_OUT
 
-# Where the eyes of the operator standing in the commander's hatch are.
-func hatch_point() -> Vector3:return vehicle.art.turret.global_transform*COMMANDER_HATCH
+# On his way out of the troop compartment: the camera goes with him.
+func exiting() -> bool:return seat=="troop" and active() and vehicle.troops.player_moving()
+
+func clear_press() -> void:
+ press="";lean=0.0;lean_device=-1;target={}
+
+# Which compartment the eyes are in: none with the hatch open or head out
+# (the camera is outside then).
+func station() -> String:
+ match cockpit.view():
+  "driver":return "driver"
+  "troop":return "troop"
+ return ""
 
 func update_camera() -> void:
  var camera:=vehicle.seat_camera
- var fov:=75.0
- var tilt:=0.0
- # The prisms sit high on the screen: the camera is tipped down so that
- # they, not the middle of the frame, look at the horizon.
- match cockpit.view():
-  "driver":fov=PRISM_FOV;tilt=-prism_tilt(BmpCockpit.DRIVER_BAND,fov)
-  "commander":
-   if cockpit.scope_shown():fov=SCOPE_FOV
-   else:fov=PRISM_FOV;tilt=-prism_tilt(BmpCockpit.COMMANDER_BAND,fov)
- camera.global_transform=eye()*Transform3D(Basis(Vector3.UP,look.x)*Basis(Vector3.RIGHT,look.y+tilt),Vector3.ZERO)
- camera.fov=fov
+ var view:=cockpit.view()
+ var inside:=station()
+ if inside!="":
+  var cabin:=vehicle.cabin()
+  var part:=cabin.holder(inside)
+  var seat_eye:=cabin.eye(inside)
+  var head:=part.global_transform*Transform3D(Basis(Vector3.UP,cabin.facing(inside)+look.x)*Basis(Vector3.RIGHT,look.y),seat_eye)
+  var t:=smoothstep(0.0,1.0,lean)
+  if lean_device>=0 and t>0.0:
+   var at:=part.global_transform*cabin.lean_frame(inside,lean_device)
+   var turn:=Quaternion(head.basis.orthonormalized()).slerp(Quaternion(at.basis.orthonormalized()),t)
+   head=Transform3D(Basis(turn),head.origin.lerp(at.origin,t))
+  if exiting():head=vehicle.global_transform*vehicle.troops.player_view();t=0.0
+  camera.global_transform=head
+  camera.fov=lerpf(INSIDE_FOV,LEAN_FOV,t)
+  # Only the compartment, a few metres deep: the world comes in through
+  # the prisms, and through the doors when they are open.
+  if inside=="troop" and (vehicle.doors>0.01 or exiting()):
+   camera.near=0.03;camera.far=6000;camera.cull_mask=BmpArt.INTERIOR_LAYER|1
+  else:
+   camera.near=0.02;camera.far=6.0;camera.cull_mask=BmpArt.INTERIOR_LAYER
+  return
+ camera.near=0.05;camera.far=6000;camera.cull_mask=1|OperatorBody.WORLD_BODY_LAYER
+ camera.global_transform=vehicle.global_transform*Transform3D(Basis(Vector3.UP,look.x)*Basis(Vector3.RIGHT,look.y),BmpArt.DRIVER_HEAD_OUT)
+ camera.fov=INSIDE_FOV
 
-static func prism_tilt(band: float, fov: float) -> float:
- return atan((0.5-band)*2.0*tan(deg_to_rad(fov)*0.5))
+# The right button: on the press it does what the eyes rest on, until it is
+# let go.
+func update_press(delta: float) -> void:
+ var view:=cockpit.view()
+ var held:=view!="" and cockpit.aiming() and not exiting()
+ if not held:
+  if press!="":press=""
+ elif press=="":
+  match view:
+   "driver_open":press="panel"
+   _:
+    match str(target.get("kind","")):
+     "prism":press="lean";lean_device=int(target.index)
+     "panel":press="panel"
+     _:press="panel" if view=="driver" else "none"
+ lean=move_toward(lean,1.0 if press=="lean" else 0.0,delta*5.0)
+ if lean<=0.0 and press!="lean":lean_device=-1
 
 func look_limits() -> Vector4:
- if seat=="driver" and not vehicle.hatch_open:return Vector4(-0.55,0.55,-0.18,0.12)
+ if seat=="driver" and not vehicle.hatch_open:return Vector4(-1.75,1.75,-0.95,0.55)
  if seat=="driver":return Vector4(-1.9,1.9,-0.9,0.7)
- # Inside: from one prism to the other; the TKN-3B tilts a little more.
- return Vector4(-0.6,0.6,-0.2,0.25)
+ # On the bench the head and shoulders turn round to the doors and ahead.
+ return Vector4(-2.4,2.4,-0.85,0.6)
 
-# V at the commander's seat: up into the hatch with the rifle, or back in.
+# V on the bench: up into the roof hatch with the rifle, or back in.
 func set_head_out(on: bool) -> void:
- if seat!="commander" or head_out==on:return
+ if seat!="troop" or head_out==on or (on and exiting()):return
  var player: Operator=game.player
  var areas:=player.find_children("*","Area3D",true,false)
  if on:
@@ -299,7 +371,8 @@ func set_head_out(on: bool) -> void:
   var forward:=-vehicle.seat_camera.global_basis.z
   player.rotation.y=atan2(-forward.x,-forward.z)
   player.pitch=0.0
-  head_out=true
+  head_out=true;clear_press()
+  vehicle.cabin().set_station("")
   player.anchor=hatch_point
   player.global_position+=hatch_point()-player.camera.global_position
   player.set_physics_process(true);player.set_process(true);player.set_process_unhandled_input(true)
@@ -307,7 +380,8 @@ func set_head_out(on: bool) -> void:
   for i in range(mini(areas.size(),hitbox_layers.size())):areas[i].collision_layer=hitbox_layers[i]
   player.viewmodel.show()
   player.camera.make_current()
-  vehicle.say("Відкрив люк командира · голова й плечі назовні, автомат у руках",2)
+  vehicle.troop_hatch_open=true
+  vehicle.say("Відкрив люк десантного відділення · голова й плечі назовні, автомат у руках",2)
  else:
   head_out=false
   player.anchor=Callable()
@@ -315,7 +389,8 @@ func set_head_out(on: bool) -> void:
   player.velocity=Vector3.ZERO
   for area in areas:area.collision_layer=0
   player.viewmodel.hide()
-  look=Vector2.ZERO
+  look=TROOP_LOOK;clear_press()
+  vehicle.troop_hatch_open=false
   vehicle.seat_camera.make_current()
   place_player()
  game.sound("click",-10)
@@ -326,19 +401,29 @@ func _process(delta: float) -> void:
  if seat!="":
   if not head_out:
    place_player()
+   update_press(delta)
    update_camera()
+   var cabin:=vehicle.cabin()
+   if cabin.station!=station():cabin.set_station(station())
+   cabin.leaning=lean_device if lean>0.0 else -1
+   # What the middle of the view rests on, for the next press and the
+   # prompt under the dot.
+   target=cabin.pick(vehicle.seat_camera) if lean<=0.0 and not exiting() else {}
   # Pinned again after all the physics of the frame: the hull must not
   # slide a step ahead of the eyes in the hatch.
-  else:game.player.global_position+=hatch_point()-game.player.camera.global_position
+  else:
+   game.player.global_position+=hatch_point()-game.player.camera.global_position
+   # His turn to get out: down from the hatch first.
+   if exiting():set_head_out(false)
   if seat=="driver":read_controls(delta)
   # A bot is driving: the receiver plays all the way.
-  if seat=="commander" and not vehicle.destroyed and not vehicle.radio_on:
+  if seat=="troop" and not vehicle.destroyed and not vehicle.radio_on:
    vehicle.master=true;vehicle.set_radio(true)
-  # A passenger gets out first when the squad dismounts, or when the
-  # vehicle is lost.
-  if seat=="commander" and (vehicle.destroyed or (squad.state=="dismount" and vehicle.doors>0.7 and absf(vehicle.speed())<1.0)):
+  # A passenger gets out with the squad in his turn (BmpTroops); at once
+  # when the vehicle is lost.
+  if seat=="troop" and vehicle.destroyed:
    leave()
-   game.squad.tell("Спішування: «До машини!» · ти з десантом першої БМП")
+   game.squad.tell("БМП підбито — ти з десантом пішки")
   elif seat=="driver" and vehicle.destroyed:
    leave()
    game.squad.tell("БМП знищено — покинь машину й веди відділення пішки")
@@ -356,7 +441,7 @@ func _process(delta: float) -> void:
   if game.training!="" and game.course()!=null:game.objective.text=game.course().objective_text()+"\n"+squad_status()
   elif not game.battle.active:game.objective.text=squad_status()
   else:game.objective.text=game.battle.status()+"\n"+squad_status()
- elif seat=="commander" and game.battle.active:
+ elif seat=="troop" and game.battle.active:
   game.objective.text=game.battle.status()+"\nКОЛОНА · %s" % column_text()
  var notice:=vehicle.notice if vehicle.notice_left>0 else ""
  if notice!="" and instruments.visible:instruments.text+="\n"+notice
@@ -392,9 +477,10 @@ func instrument_text() -> String:
 
 func hint_text() -> String:
  if seat=="driver":
-  return "W ПАЛИВО  S ГАЛЬМО  A/D ШТУРВАЛ  SHIFT ГОЛОВНИЙ ФРИКЦІОН  Q/E ПЕРЕДАЧА  I МАСА  X СТАРТЕР  SPACE СТОЯНКОВЕ\nV ЛЮК  R РАДІО  ПКМ ПРИЛАДИ  1 ДЕСАНТ  2 ПО МІСЦЯХ  3 ЗА БМП  4 ШТУРМ РОЗСИПОМ  G КОМАНДИ  F ВИЙТИ"
- if head_out:return "ЛКМ ВОГОНЬ  ПКМ ПРИЦІЛ  R ПЕРЕЗАРЯДИТИ  ·  V — СХОВАТИСЯ В БАШТУ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
- return "МИША — ОГЛЯД ЧЕРЕЗ ПРИЛАДИ  ·  ПКМ — ТКН-3Б ×5  ·  V — ВИГЛЯНУТИ З ЛЮКА З АВТОМАТОМ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
+  return "W ПАЛИВО  S ГАЛЬМО  A/D ШТУРВАЛ  SHIFT ГОЛОВНИЙ ФРИКЦІОН  Q/E ПЕРЕДАЧА  I МАСА  X СТАРТЕР  SPACE СТОЯНКОВЕ\nV ЛЮК  R РАДІО  %s  1 ДЕСАНТ  2 ПО МІСЦЯХ  3 ЗА БМП  4 ШТУРМ РОЗСИПОМ  G КОМАНДИ  F ВИЙТИ" % ("ПКМ ЩИТОК" if vehicle.hatch_open else "МИША ОГЛЯД  ПКМ НА ПРИЗМІ — ДИВИТИСЯ, НА ЩИТКУ — ЩИТОК")
+ if exiting():return "ВИХІД ЧЕРЕЗ ПРАВІ ДВЕРІ…"
+ if head_out:return "ЛКМ ВОГОНЬ  ПКМ ПРИЦІЛ  R ПЕРЕЗАРЯДИТИ  ·  V — СХОВАТИСЯ В ДЕСАНТНЕ ВІДДІЛЕННЯ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
+ return "МИША — ОГЛЯД  ·  ПКМ НА ПРИЗМІ — ДИВИТИСЯ  ·  V — ВИГЛЯНУТИ З ЛЮКА З АВТОМАТОМ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
 
 func station_prompt() -> String:
  if not active() or vehicle.destroyed:return ""
@@ -478,7 +564,10 @@ func _input(event: InputEvent) -> void:
  # Head out the operator looks and aims himself.
  if head_out and event is InputEventMouseMotion:return
  if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
-  var s: float=game.player.sensitivity*(SCOPE_FOV/PRISM_FOV if cockpit.scope_shown() else 1.0)
+  # At the eyepiece the face stays where it is; on the way out the eyes
+  # look where he goes.
+  if lean>0.0 or press=="lean" or exiting():accept();return
+  var s: float=game.player.sensitivity
   var limits:=look_limits()
   look.x=clampf(look.x-event.relative.x*s,limits.x,limits.y)
   look.y=clampf(look.y-event.relative.y*s,limits.z,limits.w)
@@ -487,9 +576,12 @@ func _input(event: InputEvent) -> void:
  match event.physical_keycode:
   KEY_F:
    if absf(vehicle.speed())>1.5:vehicle.say("На ходу не виходять: зупинись",2)
+   elif seat=="troop":
+    if head_out:set_head_out(false)
+    vehicle.troops.unload_player()
    else:leave()
   KEY_M,KEY_TAB:return
-  KEY_V when seat=="commander":set_head_out(not head_out)
+  KEY_V when seat=="troop":set_head_out(not head_out)
   _:
    if seat!="driver":
     if event.physical_keycode in [KEY_ESCAPE,KEY_F11]:return

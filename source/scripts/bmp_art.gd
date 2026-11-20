@@ -37,12 +37,19 @@ const TURRET := Vector3(0,ROOF,-0.30)
 const TRUNNION := Vector3(-0.05,0.40,-0.80)
 const BARREL := 2.95
 const DRIVER_HATCH := Vector3(-0.78,1.50,-1.30)
-# Driver's eye at the three periscopes (hatch closed) and with the head out.
-const DRIVER_EYE := Vector3(-0.78,1.36,-1.42)
-# The heads of the three TNPO-170A on the roof in front of the hatch (the
-# glacis there is at 1.46 m): what the prisms see, they see from here.
-const DRIVER_PRISM := Vector3(-0.78,1.63,-1.66)
+# Driver's eyes in the seat lowered under the shut hatch, and with the head
+# out. The commander's eyes in his seat, in turret coordinates.
+const DRIVER_EYE := Vector3(-0.78,1.33,-1.24)
 const DRIVER_HEAD_OUT := Vector3(-0.78,2.02,-1.22)
+const COMMANDER_EYE := Vector3(0.42,0.48,0.12)
+# The troop compartment: the seats along the benches from the rear (their
+# firing ports in the sides), the eyes of the passenger in the right row,
+# middle seat, and the roof hatch over him (hinge on its outer edge).
+const TROOP_Z := [2.35,1.62,0.89]
+const TROOP_EYE := Vector3(0.62,1.42,1.62)
+const TROOP_HATCH := Vector3(0.52,1.606,1.15)
+# Visual layer of the compartments: only the seat camera draws them.
+const INTERIOR_LAYER := 16
 const GUNNER_EYE := Vector3(-0.42,2.30,-0.55)
 # Rear doors: hinges on the outer edges, the doors are the fuel tanks.
 const DOOR_HINGE_X := 0.90
@@ -52,7 +59,7 @@ const DOOR_TOP := 1.42
 # Where the troops step down behind the open doors, and the receiver
 # beside the driver.
 const EXITS := [Vector3(-0.75,0,4.25),Vector3(0.75,0,4.25)]
-const RADIO := Vector3(-1.18,1.15,-1.62)
+const RADIO := Vector3(-1.38,1.24,-1.02)
 static var shared_material: StandardMaterial3D
 
 static func material() -> StandardMaterial3D:
@@ -69,6 +76,50 @@ static func solid() -> ColorMesh:
  return mesh
 
 static func at(p: Vector3) -> Transform3D:return Transform3D(Basis.IDENTITY,p)
+
+# --- Vision devices -------------------------------------------------------------
+# A periscope shows the world as an eye `rise` higher and `reach` further
+# along its line of sight would see it through a window there. Each device:
+# the eyepiece window inside (centre, yaw, size) on an arc in front of the
+# seated eyes, and the head window outside on the roof.
+static func device(eye: Vector3, yaw: float, distance: float, drop: float, size: Vector2, rise: float, reach: float, kind: String, title: String) -> Dictionary:
+ var turn:=Basis(Vector3.UP,yaw)
+ var glass:=eye+turn*Vector3(0,-drop,-distance)
+ var lift:=Vector3.UP*rise+turn*Vector3(0,0,-reach)
+ return {"kind":kind,"title":title,"yaw":yaw,"glass":glass,"size":size,"lift":lift,"head":glass+lift}
+
+# The driver's three TNPO-170A in front of the hatch, left to right.
+static func driver_devices() -> Array:
+ var list:=[]
+ for k in [-1,0,1]:list.append(device(DRIVER_EYE,-k*0.68,0.30,0.02,Vector2(0.14,0.045),0.23,0.08,"prism","ТНПО-170А"))
+ return list
+
+# The commander's TKN-3B in the front of his hatch ring between two
+# TNPO-170A (turret coordinates).
+static func commander_devices() -> Array:
+ return [device(COMMANDER_EYE,0.95,0.23,0.02,Vector2(0.12,0.04),0.27,0.05,"prism","ТНПО-170А"),
+  device(COMMANDER_EYE,0.0,0.24,0.01,Vector2(0.20,0.06),0.30,0.08,"tkn","ТКН-3Б"),
+  device(COMMANDER_EYE,-0.95,0.23,0.02,Vector2(0.12,0.04),0.27,0.05,"prism","ТНПО-170А")]
+
+# The TNPO-170A over a firing port of the troop compartment, side `s`, seat
+# at `z`: the eyepiece high on the side wall, the head outside over the port.
+static func troop_device(s: float, z: float) -> Dictionary:
+ var eye:=Vector3(s*TROOP_EYE.x,TROOP_EYE.y,z)
+ return device(eye,-PI/2 if s>0.0 else PI/2,0.78,0.02,Vector2(0.14,0.045),0.04,0.16,"prism","ТНПО-170А")
+
+# The head of a device on the roof: a block behind its window, the glass
+# flush with the window, a base down to the armour.
+static func device_head(mesh: ColorMesh, item: Dictionary) -> void:
+ var turn:=Basis(Vector3.UP,float(item.yaw))
+ var head: Vector3=item.head
+ var size: Vector2=item.size
+ var deep:=0.16 if item.kind=="tkn" else 0.07
+ var block:=Vector3(size.x+0.03,size.y+0.03,deep)
+ mesh.box(Transform3D(turn,head+turn*Vector3(0,0,deep*0.5)),block,OLIVE_DARK)
+ mesh.box(Transform3D(turn,head+turn*Vector3(0,-block.y*0.5-0.03,deep*0.5)),Vector3(block.x-0.02,0.06,deep-0.01),OLIVE_DARK)
+ mesh.box(Transform3D(turn,head+turn*Vector3(0,0,0.002)),Vector3(size.x,size.y,0.004),GLASS)
+ # The brow over the window keeps off the rain and the glare.
+ mesh.box(Transform3D(turn,head+turn*Vector3(0,block.y*0.5+0.006,-0.012)),Vector3(block.x,0.012,0.03),OLIVE_DARK)
 
 static func node(parent: Node3D, name: String, mesh: ColorMesh, position: Vector3=Vector3.ZERO) -> MeshInstance3D:
  var instance:=MeshInstance3D.new();instance.name=name
@@ -126,10 +177,11 @@ static func build() -> Dictionary:
  # Fender edges and the side skirts over the upper track run.
  for s in [-1.0,1.0]:
   hull.box(at(Vector3(s*1.535,FENDER-0.06,0.05)),Vector3(0.05,0.10,6.5),OLIVE_DARK)
-  # Firing ports: three in each side of the troop compartment.
-  for z in [0.65,1.45,2.25]:
-   hull.cylinder(Transform3D(Basis(Vector3.BACK,PI/2),Vector3(s*1.525,1.30,z)),0.075,0.05,8,OLIVE_DARK,BLACK)
-   hull.box(at(Vector3(s*1.535,1.42,z)),Vector3(0.03,0.08,0.10),GLASS)
+  # Firing ports: three in each side of the troop compartment, a prism
+  # head over each.
+  for z in TROOP_Z:
+   hull.cylinder(Transform3D(Basis(Vector3.BACK,PI/2),Vector3(s*1.525,1.24,z)),0.075,0.05,8,OLIVE_DARK,BLACK)
+   hull.box(at(Vector3(s*1.535,1.46,z)),Vector3(0.03,0.07,0.16),GLASS)
  # Ribs of the upper glacis and the folded trim vane.
  for k in range(5):
   var z:=-3.05+k*0.34
@@ -151,15 +203,19 @@ static func build() -> Dictionary:
  # Driver's hatch with three periscopes in front of it; the troop seat hatch
  # behind it.
  var hatch_y:=glacis_height(DRIVER_HATCH.z)
- for k in range(3):
-  hull.box(Transform3D(Basis(Vector3.UP,(k-1)*0.35),Vector3(DRIVER_HATCH.x+(k-1)*0.16,hatch_y+0.05,DRIVER_HATCH.z-0.30)),Vector3(0.13,0.08,0.06),BLACK)
+ for item in driver_devices():device_head(hull,item)
  hull.cylinder(at(Vector3(-0.78,ROOF+0.02,-0.55)),0.30,0.05,12,OLIVE_DARK)
  # Troop compartment: four roof hatches, rear plate.
  for x in [-0.52,0.52]:
   for z in [1.15,2.25]:
-   hull.box(at(Vector3(x,ROOF+0.0-z*0.012,z)),Vector3(0.86,0.04,1.0),OLIVE_LIGHT)
    hull.box(at(Vector3(x*1.55,ROOF+0.02-z*0.012,z)),Vector3(0.06,0.05,0.18),STEEL)
+   if x>0.0 and z<2.0:continue
+   hull.box(at(Vector3(x,ROOF+0.0-z*0.012,z)),Vector3(0.86,0.04,1.0),OLIVE_LIGHT)
  hull.box(at(Vector3(0,0.98,HALF-0.01)),Vector3(0.20,0.92,0.06),OLIVE_DARK)
+ # The doorways behind the doors: dark inside, seen only from behind.
+ for s in [-1.0,1.0]:
+  var x0:float=s*(DOOR_HINGE_X-DOOR_WIDTH);var x1:float=s*DOOR_HINGE_X
+  hull.quad(Vector3(x0,DOOR_BOTTOM,HALF+0.004),Vector3(x1,DOOR_BOTTOM,HALF+0.004),Vector3(x1,DOOR_TOP,HALF+0.004),Vector3(x0,DOOR_TOP,HALF+0.004),Color("15170f"),Vector3.BACK)
  # Stowage boxes on the rear fenders.
  for s in [-1.0,1.0]:hull.box(at(Vector3(s*1.32,FENDER+0.16,2.85)),Vector3(0.36,0.32,0.70),OLIVE_DARK)
  node(root,"Hull",hull)
@@ -212,6 +268,13 @@ static func build() -> Dictionary:
   for y in [DOOR_BOTTOM+0.15,DOOR_TOP-0.15]:door.cylinder(at(Vector3(0,y,0.03)),0.035,0.14,6,STEEL)
   node(pivot,"Leaf",door)
   doors.append(pivot)
+ # The roof hatch over the passenger's seat opens on its outer hinge.
+ var troop_hatch:=Node3D.new();troop_hatch.name="TroopHatch";troop_hatch.position=TROOP_HATCH+Vector3(0.43,0,0)
+ root.add_child(troop_hatch)
+ var leaf:=solid()
+ leaf.box(at(Vector3(-0.43,0,0)),Vector3(0.86,0.04,1.0),OLIVE_LIGHT)
+ leaf.box(at(Vector3(-0.43,0.03,0)),Vector3(0.10,0.03,0.40),STEEL)
+ node(troop_hatch,"Leaf",leaf)
  var hatch_pivot:=Node3D.new();hatch_pivot.name="DriverHatch";hatch_pivot.position=Vector3(DRIVER_HATCH.x+0.30,hatch_y+0.04,DRIVER_HATCH.z)
  root.add_child(hatch_pivot)
  var lid:=solid()
@@ -230,10 +293,10 @@ static func build() -> Dictionary:
  for x in [-0.42,0.42]:
   shell.cylinder(at(Vector3(x,0.74,0.25)),0.28,0.06,12,OLIVE_LIGHT)
   shell.box(at(Vector3(x,0.80,-0.10)),Vector3(0.14,0.10,0.10),BLACK)
- # Commander's periscopes and the gunner's sight head.
+ # The gunner's sight head; the commander's TKN-3B and periscopes.
  shell.box(at(Vector3(-0.42,0.86,-0.32)),Vector3(0.26,0.22,0.22),OLIVE_DARK)
  shell.box(at(Vector3(-0.42,0.88,-0.44)),Vector3(0.20,0.14,0.02),GLASS)
- for k in range(3):shell.box(at(Vector3(0.20+k*0.20,0.80,-0.22)),Vector3(0.10,0.08,0.05),BLACK)
+ for item in commander_devices():device_head(shell,item)
  # Smoke grenade dischargers on the turret sides.
  for s in [-1.0,1.0]:
   for k in range(3):
@@ -255,24 +318,7 @@ static func build() -> Dictionary:
  node(mount,"Barrel",gun)
  var muzzle:=Marker3D.new();muzzle.name="Muzzle";muzzle.position=Vector3(0,0,-0.32-BARREL);mount.add_child(muzzle)
  var coax:=Marker3D.new();coax.name="Coax";coax.position=Vector3(0.20,-0.03,-0.86);mount.add_child(coax)
- # Interior seen from the driver's seat: the dark compartment, the yoke
- # (штурвал), the gear lever and the instrument panel.
- var inside:=solid()
- inside.box(at(Vector3(-0.78,1.02,-1.72)),Vector3(0.62,0.30,0.20),Color("2c2f25"))
- for k in range(4):inside.cylinder(Transform3D(Basis(Vector3.RIGHT,PI/2),Vector3(-0.98+k*0.13,1.10,-1.616)),0.035,0.01,10,BLACK,Color("cfc9a8"))
- var yoke:=Node3D.new();yoke.name="Yoke";yoke.position=Vector3(-0.78,1.05,-1.58)
- root.add_child(yoke)
- var bar:=solid()
- bar.box(at(Vector3(0,0,0)),Vector3(0.46,0.04,0.04),BLACK)
- for x in [-0.23,0.23]:bar.box(at(Vector3(x,0.06,0)),Vector3(0.05,0.14,0.05),RUBBER)
- bar.cylinder(Transform3D(Basis(Vector3.RIGHT,PI/2),Vector3(0,0,-0.10)),0.025,0.20,6,STEEL)
- node(yoke,"Bar",bar)
- inside.box(at(Vector3(-0.42,0.80,-1.38)),Vector3(0.03,0.36,0.03),STEEL)
- inside.box(at(Vector3(-0.42,0.99,-1.38)),Vector3(0.06,0.06,0.06),BLACK)
- inside.box(at(RADIO),Vector3(0.10,0.18,0.24),Color("1b1c18"))
- inside.box(at(RADIO+Vector3(0.051,0.04,0)),Vector3(0.004,0.04,0.12),Color("4a4b44"))
- node(root,"Inside",inside)
- return {"root":root,"wheels":wheels,"drive":drive,"turret":turret,"gun":mount,"doors":doors,"hatch":hatch_pivot,"yoke":yoke,"muzzle":muzzle,"coax":coax}
+ return {"root":root,"wheels":wheels,"drive":drive,"turret":turret,"gun":mount,"doors":doors,"hatch":hatch_pivot,"troop_hatch":troop_hatch,"muzzle":muzzle,"coax":coax}
 
 # A plate between two points across the track width (track runs).
 static func slab(mesh: ColorMesh, a: Vector3, b: Vector3, width: float, thick: float, color: Color) -> void:

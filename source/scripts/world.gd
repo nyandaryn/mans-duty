@@ -30,6 +30,9 @@ var fragments: Array[RigidBody3D] = []
 var navigation_pending := false
 var grid_limit := 47
 var canopy_centers: Array[Vector3] = []
+# Street lamp posts: thin rods with no collider, kept so a vehicle never
+# parks with one standing through its hull.
+var posts: Array[Vector3] = []
 # Extra outlines for the 1:10 000 sheet (the training range draws its works).
 var map_marks: Array[PackedVector2Array] = []
 var map_id := "city"
@@ -267,6 +270,7 @@ func build(selected_map: String="city") -> void:
 	for z in [-38,-18,2,22,42]:
 		for x in [-13,13]:
 			rod(Vector3(x,0,z),Vector3(x,5.4,z),0.065,"59615e")
+			posts.append(Vector3(x,0,z))
 			rod(Vector3(x,5.2,z),Vector3(x+(-0.8 if x>0 else 0.8),5.5,z),0.04,"59615e")
 			var lamp := Node3D.new()
 			lamp.position=Vector3(x+(-0.75 if x>0 else 0.75),5.46,z)
