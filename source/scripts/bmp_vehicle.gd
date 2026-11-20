@@ -244,7 +244,10 @@ func next_track() -> void:
  radio_track=(radio_track+1)%RADIO_TRACKS.size()
  play_track()
 
-func radio_volume() -> float:return linear_to_db(maxf(game.volume,0.0001))-4.0
+# The music ducks under the commander's orders on the radio net.
+func radio_volume() -> float:
+ var voice=game.get("radio_voice")
+ return linear_to_db(maxf(game.volume,0.0001))-4.0-(14.0 if voice!=null and voice.speaking() else 0.0)
 
 func update_radio() -> void:
  if not radio_on or game==null:return

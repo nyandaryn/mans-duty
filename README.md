@@ -3,7 +3,7 @@
 **English** · [Українська](#українська)
 
 A tactical first-person shooter about assaulting positions in Ukraine. A campaign of ten operations
-on 400 × 400 m maps, a large assault with up to 54 × 54 bots and BMP-2 squads on a real map of
+on 400 × 400 m maps, a large assault with up to 54 attackers in BMP-2 squads against three times as many defenders on a real map of
 Avdiivka, rifleman, sniper, mortarman and BMP driver classes, a recon drone, a BM-21 «Grad»
 commander, and a training course for every class.
 Made with Godot 4.5.1. The interface is in Ukrainian; no internet connection is needed to play.
@@ -65,7 +65,7 @@ Third-party assets and their licenses (CC0, CC BY 4.0, SIL OFL 1.1, ODbL):
 ## Українська
 
 Тактичний шутер від першої особи про штурм позицій в Україні. Кампанія з десяти операцій на картах
-400 × 400 м, «Великий штурм» до 54 × 54 ботів на реальній карті Авдіївки з БМП-2 і десантом, класи
+400 × 400 м, «Великий штурм» до 54 наших у БМП-2 з десантом проти втричі більшого противника на реальній карті Авдіївки, класи
 стрільця, снайпера, мінометника й механіка-водія БМП, розвідувальний дрон, командир БМ-21 «Град»
 і навчальний курс для кожного класу. Зроблено на Godot 4.5.1. Інтерфейс український; інтернет під час гри не потрібен.
 

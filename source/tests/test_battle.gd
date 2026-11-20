@@ -15,7 +15,8 @@ func run():
  var team_size:=36 if OS.get_environment("BATTLE_LARGE")=="1" else 18
  game.volume=0;game.ally_count=3;game.battle_size=team_size;game.selected_map=BattleMap.ID;game.start_match()
  var squads:=BattleMode.squad_count(team_size)
- check(game.battle.mech.size()==squads and game.battle.mech.all(func(s):return s.vehicle.aboard.size()==BmpVehicle.SEATS and s.vehicle.crew.size()==2),"The attackers arrive in %d BMPs, a full crew in each" % squads)
+ # The rifleman's squads start on the field by their vehicles (test_field_start).
+ check(game.battle.mech.size()==squads and game.battle.mech.all(func(s):return s.on_foot().size()+s.aboard().size()==BmpVehicle.SEATS and s.vehicle.crew.size()==2),"The attackers come in %d BMPs, a full crew and squad to each" % squads)
  # The infantry assault from the start line: the column is taken as arrived.
  game.battle.skip_approach()
  # The vehicles hold still and silent: the checks below count every shot.
@@ -30,12 +31,12 @@ func run():
  check(not game.get_world_3d().direct_space_state.intersect_ray(spawn_ray).is_empty(),"Insertion has physical frontal cover")
  for i in range(3):
   check(game.district.path(game.player.position,battle.center(i)).size()>1,"Each objective reachable from insertion")
- check(game.allies.size()==team_size+game.ally_count and game.bots.size()==team_size,"Both armies are on the field at once")
+ check(game.allies.size()==team_size+game.ally_count and game.bots.size()==BattleMode.enemies(team_size),"Both armies are on the field at once, the enemy three to one (%d : %d)" % [team_size,game.bots.size()])
  var apart:=INF
  for i in range(3):
   for j in range(i+1,3):apart=minf(apart,Vector2(BattleMap.CENTERS[i]).distance_to(BattleMap.CENTERS[j]))
  check(apart>140,"Strongpoints stand in different parts of the village (%.0f m apart at least)" % apart)
- var counts:=BattleMode.defence_counts(team_size)
+ var counts:=BattleMode.defence_counts(BattleMode.enemies(team_size))
  var sectors:Array[int]=[0,0,0,0];var held:=true;var posted:=true
  var slots:Array[Dictionary]=[{},{},{}];var reach:Array[float]=[0.0,0.0,0.0]
  for actor in game.bots:

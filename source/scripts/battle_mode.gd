@@ -5,6 +5,15 @@ extends Node
 # driver-mechanic, the gunner-operator and seven men who dismount.
 const SQUAD := 9
 const SIZES := [18,27,36,54]
+# The size chosen in the menu is ours; the enemy holds the village with three
+# times as many. The menu does not say how many.
+const ENEMY_RATIO := 3
+# The rifleman's and the sniper's start: the squads stand dismounted on the
+# field by their vehicles in the column's place, the battery of three «Grads»
+# lays on the strongpoints and fires on the order, then «По машинах!» and
+# the column moves off. The column waits this long for the player to board.
+const MOUNT_PATIENCE := 90.0
+const FIRE_DELAY := 2.4
 # Seconds without a defender on his feet before a strongpoint, or the whole
 # village, counts as cleared: a soldier knocked down for a moment is not yet
 # out of the fight.
@@ -52,6 +61,18 @@ var awaiting := false
 var mech: Array[MechSquad]=[]
 var column_go := false
 var vehicle_grid: AStarGrid2D
+# "" (none or over), "barrage" (the squads wait while the battery fires) or
+# "mount" (they board their vehicles).
+var prep := ""
+var prep_time := 0.0
+var fire_at := -1.0
+var done_at := -1.0
+var held_said := false
+var battery: GradBattery
+# Marks over the player's squad and over his vehicle when it is boarded.
+var marks: Array[Sprite3D]=[]
+var vehicle_mark: Label3D
+static var mark_texture: ImageTexture
 
 func setup(owner_game: Node3D) -> void:
  game=owner_game
@@ -64,6 +85,10 @@ func reset() -> void:
  crowd=null
  active=false;finished=false;corpses.clear();respawn_left=0
  halted=false;awaiting=false;column_go=false
+ prep="";prep_time=0.0;fire_at=-1.0;done_at=-1.0;held_said=false
+ if is_instance_valid(battery):battery.queue_free()
+ battery=null
+ marks.clear();vehicle_mark=null
  for squad in mech:
   if is_instance_valid(squad):
    if is_instance_valid(squad.vehicle):squad.vehicle.gunner.clear();squad.vehicle.queue_free()
@@ -76,7 +101,7 @@ func start() -> void:
  command_left=0;result_reason=""
  cleared=[false,false,false];clear_timers=[0.0,0.0,0.0];last_cleared=-1;quiet=0;sweep.clear()
  budget_frame=-1;peak_cover_queries=0;peak_path_queries=0
- crowd=CrowdRenderer.new();game.add_child(crowd);crowd.setup(game,game.battle_size+32)
+ crowd=CrowdRenderer.new();game.add_child(crowd);crowd.setup(game,enemies(game.battle_size)+32)
  for actor in game.allies:
   actor.set_meta("battle_personal",true)
   crowd.register(actor)
@@ -84,7 +109,7 @@ func start() -> void:
  # later: every casualty is final. Defenders hold the three strongpoints and
  # the posts between them; the attackers form up in front of the insertion,
  # the commander behind them.
- var defenders:=defence_counts(game.battle_size)
+ var defenders:=defence_counts(enemies(game.battle_size))
  for index in range(3):
   for i in range(defenders[index]):deploy(false,index)
  deploy_posts(defenders[3])
@@ -94,11 +119,123 @@ func start() -> void:
  # trees by the highway; the player's own vehicle, if he drives one, leads.
  vehicle_grid=BmpRoutes.vehicle_grid(game.district)
  for i in range(1 if game.player_class=="bmp" else 0,squad_count(game.battle_size)):deploy_squad(i)
+ if field_class(game.player_class) and not mech.is_empty():prep="barrage"
  game.bmp.start_battle(self)
  if game.player_class in ["mortarman","grad"]:
   set_halt(true);awaiting=true
   game.squad.tell("Штурм очікує твоєї команди · G — %s" % ("радіо" if game.player_class=="grad" else "розрахунок"))
  column_go=not awaiting
+ if prep!="":begin_field()
+ mark_squad()
+
+static func enemies(size: int) -> int:return size*ENEMY_RATIO
+
+static func field_class(id: String) -> bool:return id in ["rifleman","sniper"]
+
+# --- The start on the field: the battery's fire, then «По машинах!» ----------
+func begin_field() -> void:
+ prep="barrage";prep_time=0.0;fire_at=-1.0;done_at=-1.0;held_said=false
+ column_go=false
+ for squad in mech:squad.form_up()
+ game.bmp.stand_by_vehicle()
+ game.district.operation_area.stream(mech[0].vehicle.global_position,40)
+ battery=GradBattery.new()
+ add_child(battery)
+ battery.setup(game,self)
+ game.squad.tell("Відділення спішене біля БМП-1 · чекай команди · на КПК — «Гради» і село")
+
+func barrage_shown() -> bool:return prep=="barrage" and is_instance_valid(battery)
+
+func tick_prep(delta: float) -> void:
+ prep_time+=delta
+ if prep=="barrage":
+  if not held_said and prep_time>1.5:held_said=true;game.radio_voice.say("hold")
+  if fire_at<0.0 and battery.all_ready() and prep_time>8.0:
+   fire_at=prep_time+FIRE_DELAY
+   game.radio_voice.say("grad_fire")
+  if fire_at>=0.0 and not battery.ordered and prep_time>=fire_at:battery.fire()
+  if battery.finished():
+   if done_at<0.0:done_at=prep_time
+   elif prep_time-done_at>2.5:begin_mount()
+  return
+ # Boarding: the column moves off once every squad is in, the player too
+ # (or he is left behind after a while).
+ var boarded:=true
+ for squad in mech:
+  if squad.state in ["field","board"]:boarded=false
+ if boarded:finish_prep()
+
+func begin_mount() -> void:
+ prep="mount";prep_time=0.0
+ game.radio_voice.say("mount_up")
+ for squad in mech:squad.mount_up()
+ # The battery has done its work: it stands still from now on.
+ for vehicle in battery.launchers:
+  if is_instance_valid(vehicle):vehicle.engine_sound.stop();vehicle.process_mode=Node.PROCESS_MODE_DISABLED
+ battery.process_mode=Node.PROCESS_MODE_DISABLED
+ game.squad.tell("«По машинах!» · БМП-1 — твоя машина · F біля кормових дверей")
+
+# The player's squad keeps its doors open for him.
+func waiting_for_player(squad: MechSquad) -> bool:
+ return prep=="mount" and game.bmp.squad==squad and game.bmp.seat!="troop" and prep_time<MOUNT_PATIENCE and is_instance_valid(game.player) and game.player.health>0 and not game.player.get_meta("battle_out",false)
+
+func finish_prep() -> void:
+ prep=""
+ column_go=not halted
+ game.radio_voice.say("column")
+ if game.bmp.seat!="troop":game.squad.tell("Колона рушила без тебе")
+
+# --- Marks over the player's squad ------------------------------------------------
+static func mark_image() -> ImageTexture:
+ if mark_texture!=null:return mark_texture
+ var image:=Image.create(32,32,false,Image.FORMAT_RGBA8)
+ for y in range(32):
+  for x in range(32):
+   # A chevron pointing down: dark rim, light green inside.
+   var half:=15.5-float(y)*0.5
+   var dx:=absf(float(x)-15.5)
+   if y>=2 and y<=30 and dx<=half:image.set_pixel(x,y,Color(0.55,0.95,0.55,1.0) if dx<=half-2.2 and y>=4 else Color(0.03,0.08,0.03,0.9))
+ mark_texture=ImageTexture.create_from_image(image)
+ return mark_texture
+
+func mark_squad() -> void:
+ var squad: MechSquad=game.bmp.squad
+ if not is_instance_valid(squad):return
+ for actor in squad.members:
+  var mark:=Sprite3D.new()
+  mark.name="SquadMark"
+  mark.texture=mark_image()
+  mark.billboard=BaseMaterial3D.BILLBOARD_ENABLED
+  mark.no_depth_test=true
+  mark.fixed_size=true
+  mark.pixel_size=0.00055
+  mark.render_priority=10
+  mark.shaded=false
+  mark.position=Vector3(0,2.3,0)
+  actor.add_child(mark)
+  marks.append(mark)
+ vehicle_mark=Label3D.new()
+ vehicle_mark.name="BoardMark"
+ vehicle_mark.text="БМП-%d · ПО МАШИНАХ" % (squad.index+1)
+ vehicle_mark.font_size=40;vehicle_mark.outline_size=10
+ vehicle_mark.modulate=Color(0.65,1.0,0.6);vehicle_mark.outline_modulate=Color(0,0,0,0.85)
+ vehicle_mark.billboard=BaseMaterial3D.BILLBOARD_ENABLED
+ vehicle_mark.no_depth_test=true;vehicle_mark.fixed_size=true;vehicle_mark.pixel_size=0.0006
+ vehicle_mark.render_priority=10
+ vehicle_mark.position=Vector3(0,3.4,1.5)
+ vehicle_mark.hide()
+ squad.vehicle.add_child(vehicle_mark)
+
+func update_marks() -> void:
+ var seated: bool=game.bmp.seat!=""
+ for mark in marks:
+  if not is_instance_valid(mark):continue
+  var actor:=mark.get_parent() as Hostile
+  mark.visible=not seated and operational(actor) and actor.vehicle==null
+ if is_instance_valid(vehicle_mark):
+  var squad: MechSquad=game.bmp.squad
+  var boarding: bool=is_instance_valid(squad) and (waiting_for_player(squad) or (squad.state=="pickup" and squad.vehicle.doors>0.5))
+  vehicle_mark.visible=not seated and boarding and not squad.vehicle.destroyed
 
 static func squad_count(size: int) -> int:return maxi(1,int(size/SQUAD))
 
@@ -129,6 +266,11 @@ func deploy_squad(index: int) -> MechSquad:
 func skip_approach() -> void:
  var serial_before:=serial
  serial=0
+ var afoot:=prep!=""
+ if afoot:
+  prep=""
+  if is_instance_valid(battery):battery.queue_free()
+  battery=null
  for squad in mech:
   if squad.player_led:continue
   var vehicle:=squad.vehicle
@@ -138,7 +280,8 @@ func skip_approach() -> void:
   place_vehicle(vehicle,Transform3D(Basis.looking_at(Vector3(BattleMap.north().x,0,BattleMap.north().y),Vector3.UP),spot))
   vehicle.linear_velocity=Vector3.ZERO;vehicle.angular_velocity=Vector3.ZERO
   for actor in vehicle.crew:actor.global_position=vehicle.global_position+vehicle.global_basis.y*0.9
-  for actor in squad.aboard():
+  vehicle.open_doors(false)
+  for actor in squad.aboard()+squad.on_foot():
    var point:Variant=safe_spawn(true,0)
    if point==null:point=formation_base(true,0)+BattleMap.offset(randf_range(-6,6),randf_range(-3,3))+Vector3.UP*0.05
    vehicle.aboard.erase(actor)
@@ -152,8 +295,31 @@ func skip_approach() -> void:
   for actor in squad.on_foot():assign(actor)
  serial=maxi(serial,serial_before)
  column_go=true
- # A passenger gets out with them.
+ # A passenger gets out with them; one still on the field by the column
+ # is put behind his vehicle as if he had got out there.
  if game.bmp.seat=="troop":game.bmp.leave()
+ elif afoot and is_instance_valid(game.bmp.vehicle):
+  var spot:Vector3=game.bmp.vehicle.exit_point(0)+game.bmp.vehicle.global_basis.z*0.6
+  spot.y=game.district.ground_height(spot)+0.05
+  game.player.global_position=spot
+  game.player.rotation.y=BattleMap.facing(true)
+
+# For the tests of the ride: the battery has fired and everybody is aboard —
+# the squads in their vehicles, the player in the lead one's troop
+# compartment — as the old start had it.
+func skip_field() -> void:
+ if prep=="":return
+ if is_instance_valid(battery):battery.queue_free()
+ battery=null
+ for squad in mech:
+  for actor in squad.on_foot():
+   squad.control(actor,false)
+   squad.vehicle.board(actor)
+  squad.vehicle.open_doors(false)
+  if squad.state in ["field","board"]:squad.set_state("wait")
+ prep=""
+ column_go=not halted
+ if is_instance_valid(game.bmp.vehicle) and game.bmp.seat=="":game.bmp.enter("troop")
 
 # Column order: each squad follows the one before it.
 func register_squad(squad: MechSquad) -> void:
@@ -568,7 +734,9 @@ func strongpoint_cleared(index: int) -> void:
  last_cleared=index;command_left=0
  sector=next_target(center(index))
  refresh_sweep()
- if sector>=0:game.squad.tell("%s ЗНИЩЕНО · НАСТУПНА ЦІЛЬ: %s" % [title,BattleMap.TITLES[sector]])
+ if sector>=0:
+  game.squad.tell("%s ЗНИЩЕНО · НАСТУПНА ЦІЛЬ: %s" % [title,BattleMap.TITLES[sector]])
+  game.radio_voice.say("strongpoint")
  elif living(false)>0:game.squad.tell("УСІ ОП ЗНИЩЕНО · ЗАЧИСТКА СЕЛА · ПРОТИВНИКІВ: %d" % living(false))
 
 func cleared_count() -> int:
@@ -638,7 +806,9 @@ func respawn_player() -> void:
  old.queue_free();game.damage_flash=0;game.hearing.reset();game.squad.trail=PackedVector3Array([point])
 
 func complete(won: bool, reason: String) -> void:
- finished=true;result_reason=reason;game.finish(won)
+ finished=true;result_reason=reason
+ if won:game.radio_voice.say("cleared")
+ game.finish(won)
 
 func _physics_process(delta: float) -> void:
  if not active or finished or not game.running or game.paused:return
@@ -650,6 +820,8 @@ func _physics_process(delta: float) -> void:
   respawn_left=maxf(0,respawn_left-delta)
   if respawn_left==0:respawn_player()
   if finished:return
+ if prep!="":tick_prep(delta)
+ update_marks()
  command_left-=delta
  if command_left<=0:
   command_left=1
@@ -661,11 +833,25 @@ func _physics_process(delta: float) -> void:
 func status() -> String:
  var target:=player_objective();var offset:Vector3=target-game.player.position
  var bearing:=wrapf(rad_to_deg(atan2(-offset.x,-offset.z)),0,360)
+ if prep!="":return prep_status()
  if respawn_left>0:return "КОМАНДИР ВИБУВ · КОМАНДУВАННЯ ПРИЙМЕ НАЙБЛИЖЧИЙ БОЄЦЬ ЧЕРЕЗ %d с\nУ строю: %d · бій триває" % [ceili(respawn_left),living(true)]
  if awaiting:return "ШТУРМ ОЧІКУЄ КОМАНДИ ГРАВЦЯ · G — %s\nГрупи на вихідних рубежах · СИЛИ %d : %d" % ["РАДІО" if game.player_class=="grad" else "РОЗРАХУНОК",living(true),living(false)]
  if halted:return "ШТУРМ ПРИЗУПИНЕНО · ГРУПИ ЗАКРІПЛЮЮТЬСЯ · G — ПРОДОВЖИТИ\n%s · СИЛИ %d : %d" % [objective_title(),living(true),living(false)]
  if sector<0:return "ЗАЧИСТКА СЕЛА · НАЙБЛИЖЧИЙ ПОСТ %d м / %03d°\nУСІ ОП ЗНИЩЕНО · ЗАЛИШИЛОСЬ ПРОТИВНИКІВ %d · СИЛИ %d : %d" % [offset.length(),bearing,living(false),living(true),living(false)]
  return "ШТУРМ · %s · %d м / %03d°\nОП ЗНИЩЕНО %d / 3 · СИЛИ %d : %d" % [objective_title(),offset.length(),bearing,cleared_count(),living(true),living(false)]
+
+func prep_status() -> String:
+ var line:="ВИХІДНИЙ РУБІЖ · ВІДДІЛЕННЯ СПІШЕНЕ БІЛЯ БМП · ЧЕКАЙ КОМАНДИ"
+ if prep=="mount":
+  line="«ПО МАШИНАХ!» · %s" % ("ТИ В ДЕСАНТІ БМП-1 · КОЛОНА ЧЕКАЄ ПОСАДКИ" if game.bmp.seat=="troop" else "F БІЛЯ КОРМОВИХ ДВЕРЕЙ БМП-1")
+ elif is_instance_valid(battery):
+  if not battery.ordered:line+="\n«ГРАДИ» НАВОДЯТЬСЯ: ГОТОВІ %d / 3" % battery.ready_count()
+  elif not battery.finished():line+="\n«ГРАДИ» ВЕДУТЬ ВОГОНЬ ПО ОП-1…3 · РАКЕТ У ПОВІТРІ %d" % battery.in_flight()
+  else:line+="\nЗАЛП ЗАВЕРШЕНО"
+ return line+" · СИЛИ %d : %d" % [living(true),living(false)]
+
+# Our strength in the menu: men and vehicles, not the enemy's.
+static func size_text(n: int) -> String:return "%d · %d БМП" % [n,squad_count(n)]
 
 func build_menu(parent: Control) -> void:
  panel=Control.new();game.place(panel,parent,0,0,1,1)
@@ -712,9 +898,9 @@ func build_menu(parent: Control) -> void:
  var text:=UiKit.wrapped(BattleMap.MENU_TEXT,16,UiKit.SOFT)
  game.place(text,panel,0.54,0.25,0.965,0.74)
  var row:=HBoxContainer.new();row.add_theme_constant_override("separation",18);game.place(row,panel,0.035,0.85,0.5,0.92)
- var caption:=UiKit.text("БОТІВ НА СТОРОНУ",16,UiKit.ACCENT,"head");caption.size_flags_vertical=Control.SIZE_SHRINK_CENTER;row.add_child(caption)
+ var caption:=UiKit.text("НАШИХ БІЙЦІВ",16,UiKit.ACCENT,"head");caption.size_flags_vertical=Control.SIZE_SHRINK_CENTER;row.add_child(caption)
  var size:=OptionButton.new();size.custom_minimum_size=Vector2(150,46)
- for n in SIZES:size.add_item(str(n)+" × "+str(n))
+ for n in SIZES:size.add_item(size_text(n))
  size.selected=maxi(0,SIZES.find(game.battle_size));row.add_child(size)
  size.item_selected.connect(func(i:int):game.battle_size=SIZES[i];game.save_settings())
  var pick:=UiKit.cta("ОБРАТИ ШТУРМ →",func():game.selected_map=BattleMap.ID;game.save_settings();game.update_map_description();game.main_menu.show_screen("loadout"))

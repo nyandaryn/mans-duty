@@ -292,6 +292,7 @@ func destination(actor: Hostile) -> Vector3:
  var desired: Vector3=actor.home
  # Under fire with no usable cover: lower the silhouette before moving on.
  if actor.under_fire_time>0 and not actor.has_cover and actor.exposed_time<1.25:return actor.global_position
+ if game.district.off_grid(desired):return desired
  var cell: Vector2i=game.district.nearest_cell(game.district.navigation_cell(desired))
  var reachable: Vector3=game.district.navigation_position(cell)
  if Vector2(reachable.x-desired.x,reachable.z-desired.z).length()>4:return actor.global_position

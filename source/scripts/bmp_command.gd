@@ -140,8 +140,25 @@ func start_battle(battle: BattleMode) -> void:
  if game.player_class in ["mortarman","grad"] or battle.mech.is_empty():return
  squad=battle.mech[0]
  vehicle=squad.vehicle
+ # The rifleman and the sniper start on the field with the squad, dismounted
+ # (BattleMode.begin_field puts them there).
+ if battle.prep!="":return
  enter("troop")
  game.squad.tell("Ти в десантному відділенні першої БМП, з відділенням · колона рушить на штурм · F — вийти на зупинці")
+
+# On foot in the squad's half ring behind the stern, facing where the
+# vehicle faces.
+func stand_by_vehicle() -> void:
+ if not active() or not is_instance_valid(squad):return
+ var count:=squad.on_foot().size()+1
+ var spot:=squad.field_spot(count-1,count)
+ spot.y=game.district.ground_height(spot)+0.05
+ var facing:=-vehicle.global_basis.z
+ var player: Operator=game.player
+ player.global_position=spot
+ player.rotation.y=atan2(-facing.x,-facing.z)
+ player.pitch=0
+ player.velocity=Vector3.ZERO
 
 # The personal allies of the class: the first is the gunner-operator, the
 # rest go into the troop compartment.
@@ -437,6 +454,9 @@ func _process(delta: float) -> void:
  elif driver_class():
   var prompt:=station_prompt()
   game.soldier_controls.text=prompt if prompt!="" else game.control_hint()
+ elif game.battle.active and is_instance_valid(squad):
+  var prompt:=troop_prompt()
+  game.soldier_controls.text=prompt if prompt!="" else game.control_hint()
  if driver_class() and is_instance_valid(squad):
   if game.training!="" and game.course()!=null:game.objective.text=game.course().objective_text()+"\n"+squad_status()
   elif not game.battle.active:game.objective.text=squad_status()
@@ -481,6 +501,16 @@ func hint_text() -> String:
  if exiting():return "ВИХІД ЧЕРЕЗ ПРАВІ ДВЕРІ…"
  if head_out:return "ЛКМ ВОГОНЬ  ПКМ ПРИЦІЛ  R ПЕРЕЗАРЯДИТИ  ·  V — СХОВАТИСЯ В ДЕСАНТНЕ ВІДДІЛЕННЯ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
  return "МИША — ОГЛЯД  ·  ПКМ НА ПРИЗМІ — ДИВИТИСЯ  ·  V — ВИГЛЯНУТИ З ЛЮКА З АВТОМАТОМ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
+
+# The passenger climbs in through an open door of his squad's vehicle.
+func troop_prompt() -> String:
+ if driver_class() or seat!="" or not active() or vehicle.destroyed or not game.battle.active:return ""
+ # Seven men and the passenger: the eighth place is his (BmpTroops).
+ if vehicle.doors<0.6 or absf(vehicle.speed())>0.8:return ""
+ var from: Vector3=game.player.global_position
+ for i in [0,1]:
+  if from.distance_to(vehicle.exit_point(i))<REACH+0.6:return "F — СІСТИ В ДЕСАНТ БМП-%d" % (squad.index+1 if is_instance_valid(squad) else 1)
+ return ""
 
 func station_prompt() -> String:
  if not active() or vehicle.destroyed:return ""
@@ -560,6 +590,10 @@ func _input(event: InputEvent) -> void:
   if seat=="" and key==KEY_F and driver_class() and station_prompt()!="":
    if absf(vehicle.speed())>1.5:vehicle.say("На ходу в машину не сідають",2);accept();return
    enter("driver");accept();return
+  if seat=="" and key==KEY_F and troop_prompt()!="":
+   enter("troop")
+   game.squad.tell("Ти в десанті БМП-%d, з відділенням · V — виглянути з люка · F — вийти на зупинці" % (squad.index+1))
+   accept();return
  if seat=="":return
  # Head out the operator looks and aims himself.
  if head_out and event is InputEventMouseMotion:return

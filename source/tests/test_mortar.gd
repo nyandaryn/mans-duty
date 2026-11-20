@@ -238,7 +238,7 @@ func run():
  check(not topo.visible and not game.commands_open,"Map closes")
  # Riflemen and snipers have no crew and no command menu.
  game.set_player_class("rifleman");game.start_match()
- check(not game.crew.active() and game.allies.size()==game.battle_size-0 and not game.battle.halted,"Rifleman: no crew and the assault starts at once")
+ check(not game.crew.active() and game.allies.size()==game.battle_size-0 and not game.battle.halted and game.battle.prep=="barrage","Rifleman: no crew, the assault starts with the battery's fire")
  game.crew.toggle()
  check(not game.crew.panel.visible,"Rifleman has no command menu")
  game.queue_free();await process_frame;await process_frame

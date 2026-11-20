@@ -589,7 +589,13 @@ func build_grid() -> void:
 				if bounds.has_point(Vector2(x,z)):grid.set_point_solid(Vector2i(x,z))
 	navigation_regions.build(grid)
 
+# Out on the fields round the great assault's village (the column's place)
+# there is no navigation grid: the ground is open and the way is straight.
+func off_grid(point: Vector3) -> bool:
+	return is_instance_valid(operation_area) and (absf(point.x)>199 or absf(point.z)>199)
+
 func path(from: Vector3, to: Vector3) -> PackedVector2Array:
+	if off_grid(from) and off_grid(to):return PackedVector2Array([Vector2(from.x,from.z),Vector2(to.x,to.z)])
 	var a := navigation_cell(from)
 	var b := navigation_cell(to)
 	a = nearest_cell(a)

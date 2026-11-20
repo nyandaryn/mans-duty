@@ -92,6 +92,9 @@ func great_assault() -> void:
  var game=await new_game()
  game.set_player_class("rifleman");game.battle_size=27;game.selected_map=BattleMap.ID;game.start_match()
  var battle: BattleMode=game.battle
+ # The start on the field (the battery, «По машинах!») has its own test
+ # (test_field_start): here everybody is already aboard.
+ battle.skip_field()
  check(battle.mech.size()==3,"27 attackers: three BMPs (%d)" % battle.mech.size())
  var full:=true
  for squad in battle.mech:

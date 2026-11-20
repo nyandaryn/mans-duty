@@ -43,6 +43,7 @@ const TYRE_FULL := 3.2
 # Correction of the boussole (declination east about 8.4°, grid convergence
 # -0.9° in zone 7): grid bearing = magnetic bearing + 1-55.
 const BOUSSOLE_CORRECTION := 155.0
+const FAR_LAUNCH := 1500.0
 
 var game: Node3D
 var art: Dictionary
@@ -128,6 +129,7 @@ var fired := 0
 var last_launch: Dictionary={}
 var last_launch_time := -100.0
 var salvo_rockets := 0
+var far_heard := -10.0
 # Sight D726-45 with the PG-1M panorama.
 var deflection := 3000.0
 var sight_setting := 0.0
@@ -669,6 +671,14 @@ func launch_next() -> bool:
 # Recorded launches: the close one for each rocket, the long rolling tail
 # after the last of a series.
 func play_launch(at: Vector3, last: bool) -> void:
+ # A soldier watching the battery on his tablet hears it from its speaker.
+ if game.get("drone_feed")!=null:game.drone_feed.relay_launch(self,at,last)
+ # Kilometres away a launch is a rolling rumble that comes late.
+ var listener:=get_viewport().get_camera_3d()
+ var distance:=listener.global_position.distance_to(at) if listener!=null else 0.0
+ if distance>FAR_LAUNCH:
+  if clock-far_heard>0.9 or last:far_heard=clock;game.distant_launch(at,distance)
+  return
  var output:=launch_players[launch_index];launch_index=(launch_index+1)%launch_players.size()
  output.stream=GradAudio.clip("launch_tail" if last else "launch_close")
  output.volume_db=linear_to_db(maxf(game.volume,0.0001))+2.0

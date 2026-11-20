@@ -26,6 +26,7 @@ var grad: GradCommand
 var bmp: BmpCommand
 var topo_map: TopoMap
 var drone_feed: DroneFeed
+var radio_voice: RadioVoice
 var player_class := "rifleman"
 var world_root: Node3D
 var menu_camera: Camera3D
@@ -226,6 +227,7 @@ func build_district() -> void:
 
 func start_match() -> void:
 	battle.reset()
+	radio_voice.reset()
 	if selected_map in Campaign.IDS and not campaign.unlocked(selected_map):return
 	inventory.close()
 	hearing.reset()
@@ -325,6 +327,7 @@ func set_pause(value: bool) -> void:
 func to_menu(screen: String="") -> void:
 	var from_training := training!=""
 	battle.reset()
+	radio_voice.reset()
 	if is_instance_valid(player):player.field_rig.cancel()
 	inventory.close()
 	close_panels()
@@ -507,6 +510,21 @@ func distant_blast(where: Vector3, distance: float) -> void:
 		output.stream=GradAudio.synth("thump")
 		output.volume_db=db+linear_to_db(volume)
 		output.pitch_scale=randf_range(0.85,1.05)
+		output.play())
+
+# A launch of a far battery: the recorded launch from a distance, after the
+# sound has come that far.
+func distant_launch(where: Vector3, distance: float) -> void:
+	if volume<=0:return
+	var delay := distance/343.0
+	var db := -1.0-20.0*log(distance/1000.0)/log(10.0)*0.7
+	get_tree().create_timer(delay,false).timeout.connect(func():
+		if not running:return
+		var output := audio_pool[audio_index]
+		audio_index=(audio_index+1)%audio_pool.size()
+		output.stream=GradAudio.clip("launch_far")
+		output.volume_db=db+linear_to_db(volume)
+		output.pitch_scale=randf_range(0.92,1.05)
 		output.play())
 
 func grad_impact(where: Vector3) -> void:
@@ -853,6 +871,9 @@ func setup_ui() -> void:
 	bmp.setup(self,root)
 	drone_feed=DroneFeed.new()
 	drone_feed.setup(self,root)
+	radio_voice=RadioVoice.new()
+	add_child(radio_voice)
+	radio_voice.setup(self,hud)
 	topo_map=TopoMap.new()
 	topo_map.setup(self,root)
 	inventory=CombatInventory.new()
@@ -980,7 +1001,7 @@ func select_map(index: int) -> void:
 func update_map_description() -> void:
 	if not is_instance_valid(map_description):return
 	if selected_map==BattleMap.ID:
-		map_description.text="Великий штурм · %d × %d · зачистка села" % [battle_size,battle_size]
+		map_description.text="Великий штурм · %d бійців · зачистка села" % battle_size
 		return
 	if selected_map in Campaign.IDS:
 		var mission := Campaign.mission(selected_map)

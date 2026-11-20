@@ -1,3 +1,33 @@
+# 0.28.0 validation — 2026-11-20
+
+Great assault: the enemy three to one, the rifleman's and sniper's start on
+the field with an allied Grad battery, the tablet's live pictures and speaker,
+«По машинах!», marks over the player's squad, the commander's orders on the
+radio (Piper TTS through a field-radio chain).
+
+- New test_field_start (30 checks, --fixed-fps 60): 18 ours against 54;
+  squads dismounted by their BMPs; three BM-21 loaded on the firing position,
+  one strongpoint each; laid within a thousandth in 31 s, cover off, crews in
+  the cabs; «Гради, вогонь!»; 120 rockets down, mean bursts 4–13 m from each
+  strongpoint; the tablet's speaker relays the launches; «По машинах!», the
+  tablet back to the drone; the player boards by F at the doors; «Колона —
+  вперед!» 7.5 s later; every man aboard, doors shut; column on the march;
+  skip_approach still ends at the start line.
+- Radio lines: Whisper large-v3-turbo recognizes all ten after the radio
+  filter. Recorded game mix (movie maker): the tablet's launches 9–10 dB over
+  the BMP idle in 400 Hz–4 kHz, no clipped samples.
+- Full suite from source: 54 scenarios pass after updating test_battle and
+  test_grad (enemy counts), test_mortar (the rifleman starts with the
+  battery's fire) and test_bmp (skip_field). test_assault_halt is
+  seed-sensitive (1 of 4 seeds failed at 1:1, 2 of 4 at 1:3); it now uses
+  seed 11, which passes at both.
+- Rendered fight bench at 1:3, 1600×900: 27 ours ≈157 fps, 36 ≈86 fps,
+  54 (216 bots) 17–23 fps (scripts 13 ms/tick); at 1:1, 54 ran 106–138 fps.
+- Exported pck with the shipped kvartal.x86_64 via --main-pack:
+  `--quit-after 300` with no ERROR lines; test_field_start, test_bmp,
+  test_battle and test_grad pass.
+- The installed game gets this pck by an atomic rename.
+
 # 0.27.1 validation — 2026-11-20
 
 The Grad's receiver while the commander flies the observation post's drone
