@@ -401,10 +401,20 @@ func run():
  grad.drone.camera_pitch=-1.3
  grad.drone.camera.rotation.x=-1.3
  await frames(3)
+ # The receiver keeps playing by the commander's head while he flies.
+ var radio_was: bool=vehicle.radio_on
+ if not radio_was:vehicle.set_radio(true)
+ await process_frame;await process_frame
+ var cab:=vehicle.seat_camera.global_position.distance_to(vehicle.to_global(GradArt.RADIO))
+ var by_drone:=grad.drone.camera.global_position.distance_to(vehicle.radio_player.global_position)
+ check(vehicle.radio_player.playing and absf(by_drone-cab)<0.05 and grad.drone.camera.global_position.distance_to(vehicle.global_position)>25.0,"Flying the drone, the radio is heard as in the cab: %.2f m from the drone's camera, %.2f m in the cab" % [by_drone,cab])
  grad.mark_target()
  check(grad.targets.size()==1 and grad.targets[0].name=="Ц-1","Laser rangefinder marks a target")
  grad.end_piloting()
  check(not grad.piloting and vehicle.seat_camera.current,"Back to the cab")
+ await process_frame
+ check(vehicle.radio_player.position.distance_to(GradArt.RADIO)<0.001,"…the receiver back in its place on the dashboard")
+ if not radio_was:vehicle.set_radio(false)
  grad.hud.toggle("tablet")
  await process_frame;await process_frame
  check(grad.hud.open_panel()=="tablet" and grad.hud.tablet.layer.built,"Tablet map built")

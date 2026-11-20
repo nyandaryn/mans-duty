@@ -1,13 +1,16 @@
-MANS DUTY / 0.27.0 / Linux x86_64
+MANS DUTY / 0.27.1 / Linux x86_64
 
 Запуск: ./play.sh або bash play.sh у цій папці.
 Godot включено; тримайте kvartal.x86_64, kvartal.pck та play.sh поруч.
 Усі збірки: https://github.com/nyandaryn/mans-duty/releases
-macOS (Apple Silicon та Intel): kvartal-0.27.0-macos.zip.
-Windows 10/11 (64-біт): kvartal-0.27.0-windows.zip.
+macOS (Apple Silicon та Intel): kvartal-0.27.1-macos.zip.
+Windows 10/11 (64-біт): kvartal-0.27.1-windows.zip.
 Версія та сама, що й тут. Збірки не підписані: як дозволити перший запуск
 (Gatekeeper на Mac, SmartScreen на Windows) — у README-macOS.txt
 і README-Windows.txt в архівах.
+
+Радіо «Града» під час польоту дрона — 0.27.1:
+Командир, що керує дроном із кабіни, чує приймач так само, як у кабіні.
 
 Вид зсередини БМП-2 і десантне відділення — 0.27.0:
 Механік-водій із закритим люком сидить у тривимірному відділенні: три

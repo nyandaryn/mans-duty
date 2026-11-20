@@ -248,6 +248,20 @@ func update_radio() -> void:
  radio_player.stream_paused=game.paused
  radio_player.volume_db=radio_volume()
 
+# The commander flying the drone of the observation post still sits in the
+# cab: the receiver stays by his head as heard from his seat, carried over to
+# the drone's camera that now hears for him. Placed after the physics step,
+# so the drone's own motion in the frame does not shift it.
+func _process(_delta: float) -> void:
+ if radio_on and game!=null:place_radio()
+
+func place_radio() -> void:
+ var command=game.get("grad")
+ var heard: Camera3D=get_viewport().get_camera_3d()
+ if command!=null and command.vehicle==self and command.piloting and heard!=null and heard!=seat_camera:
+  radio_player.global_position=heard.global_transform*(seat_camera.global_transform.affine_inverse()*to_global(GradArt.RADIO))
+ else:radio_player.position=GradArt.RADIO
+
 func shift(step: int) -> void:
  if clutch_engagement()>0.15:
   grind=0.4;say("Скрегіт шестерень: вижми зчеплення (Shift)",2.5);return

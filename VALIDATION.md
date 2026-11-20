@@ -1,3 +1,20 @@
+# 0.27.1 validation — 2026-11-20
+
+The Grad's receiver while the commander flies the observation post's drone
+from the cab: the drone's camera is the listener, and the receiver (a 3D
+source in the cab, max 30 m) fell silent once the drone flew off. Now, while
+piloting, it is placed by the drone's camera at the same offset as from the
+commander's seat, after the physics step; back on the dashboard after.
+
+- test_grad: new check — flying the drone over 25 m from the vehicle, the
+  receiver is 0.96 m from the drone's camera, as 0.96 m in the cab; back on
+  the dashboard after end_piloting. test_grad, test_grad_training and
+  test_recon_drone (42) pass from source.
+- Exported pck run with the shipped kvartal.x86_64 via --main-pack:
+  `--quit-after 300` with no ERROR lines; test_grad and test_grad_training
+  pass.
+- The installed game gets this pck by an atomic rename.
+
 # 0.27.0 validation — 2026-11-20
 
 The BMP-2 seen from inside in 3D: the driver's compartment with live prisms,
