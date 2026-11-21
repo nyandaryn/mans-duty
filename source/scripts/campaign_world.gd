@@ -55,6 +55,9 @@ func part(local: Vector3, size: Vector3, color: String, substance: String="concr
  batch.transforms[index]=Transform3D(rotation.scaled_local(size),position)
  if solid:batch.bodies[index].basis=rotation
 
+const WALL_COLORS := ["b5aa8c","a7b1ad","aa8170","c3bfa6","8d9695"]
+const ROOF_COLORS := ["875746","586569","76796b","815c48","575951"]
+
 func house(spec: Dictionary) -> void:
  origin=ground(spec.point)
  basis=Basis(Vector3.UP,float(spec.yaw))
@@ -63,8 +66,8 @@ func house(spec: Dictionary) -> void:
  var d := size.y
  var floors: int=spec.floors
  var variant: int=spec.variant
- var wall_colors := ["b5aa8c","a7b1ad","aa8170","c3bfa6","8d9695"]
- var roof_colors := ["875746","586569","76796b","815c48","575951"]
+ var wall_colors := WALL_COLORS
+ var roof_colors := ROOF_COLORS
  var wall: String=wall_colors[variant]
  part(Vector3(0,0.02,0),Vector3(w+0.3,0.08,d+0.3),"78796e")
  # Four facades: segmented masonry around real windows and a front doorway.

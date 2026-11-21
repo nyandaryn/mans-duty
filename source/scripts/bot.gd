@@ -227,6 +227,21 @@ func suppress(source: Vector3, amount: float) -> void:
 func line_clear(a: Vector3, b: Vector3) -> bool:
 	return get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(a,b,1)).is_empty()
 
+# What lies between: 0 nothing, 1 only fence panels (they hide a man, a
+# bullet goes through), 2 something that stops a bullet.
+func obstruction(a: Vector3, b: Vector3) -> int:
+	var excluded: Array[RID]=[]
+	var screened := 0
+	for i in range(4):
+		var hit:=get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(a,b,1,excluded))
+		if hit.is_empty():return screened
+		if not hit.collider.has_meta("screen"):return 2
+		screened=1
+		excluded.append(hit.rid)
+	return 2
+
+func cover_clear(a: Vector3, b: Vector3) -> bool:return obstruction(a,b)<2
+
 func find_cover(wounded: bool = false) -> void:
 	if not game.battle.budget("cover"):
 		cover_timer=0.1+randf()*0.15
@@ -285,8 +300,8 @@ func find_cover(wounded: bool = false) -> void:
 		if point.distance_to(target)<12:score+=20
 		# Prefer a fire position: lean out at the side or rise over the top.
 		var side := Vector3(-(point-target).z,0,(point-target).x).normalized()*0.5
-		if not wounded and (line_clear(point+Vector3.UP*1.25+side,threat) or line_clear(point+Vector3.UP*1.25-side,threat)):score-=4
-		elif not wounded and line_clear(point+Vector3.UP*(1.1 if low else 1.6),threat):score-=2.5
+		if not wounded and (cover_clear(point+Vector3.UP*1.25+side,threat) or cover_clear(point+Vector3.UP*1.25-side,threat)):score-=4
+		elif not wounded and cover_clear(point+Vector3.UP*(1.1 if low else 1.6),threat):score-=2.5
 		ranked.append({"point":point,"score":score,"low":low})
 	ranked.sort_custom(func(a,b):return float(a.score)<float(b.score))
 	# Route checks are expensive: only the best few candidates get one.
@@ -309,13 +324,17 @@ func find_cover(wounded: bool = false) -> void:
 # Share of a body at this height (centre and both sides) hidden from a threat.
 func shield(threat: Vector3, point: Vector3, height: float) -> float:
 	var sample := point+Vector3.UP*height
-	if line_clear(threat,sample):return 0.0
+	var middle := obstruction(threat,sample)
+	if middle==0:return 0.0
 	var heading := point-threat
 	heading.y=0
 	var side := Vector3(-heading.z,0,heading.x).normalized()*0.22
-	var covered := 1.0/3
+	# A fence hides, it does not cover: three quarters of the worth of a wall.
+	var covered := 1.0/3 if middle==2 else 0.25
 	for offset in [side,-side]:
-		if not line_clear(threat,sample+offset):covered+=1.0/3
+		match obstruction(threat,sample+offset):
+			2:covered+=1.0/3
+			1:covered+=0.25
 	return covered
 
 # A shell burst close by: heads down and into cover for a few seconds.
@@ -867,7 +886,7 @@ func update_medical(delta: float) -> bool:
 	if needs_help and medical_kits>0 and treatment_wait<=0 and wound_timer<=0 and concussion.blackout_left<=0 and not concussion.incapacitated():
 		# Immobile / heavily bleeding soldiers treat where they fell; mobile ones
 		# first try nearby cover, but do not indefinitely ignore a worsening wound.
-		var protected := not line_clear(global_position+Vector3.UP*0.6,target+Vector3.UP*1.5)
+		var protected := not cover_clear(global_position+Vector3.UP*0.6,target+Vector3.UP*1.5)
 		if bleeding>=3 or protected or blood_loss>0.15 or injury_age>5:
 			if treatment_time<=0:treatment_time=6.0
 	if treatment_time>0:

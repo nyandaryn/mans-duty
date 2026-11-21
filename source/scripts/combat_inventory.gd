@@ -171,7 +171,15 @@ func select_pack_item(uid: int) -> void:
  else:message.text="Діставання займає 3,4 с. ЛКМ — виміряти; K — прибрати далекомір."
  refresh()
 
+# Inside a vehicle (the BMP's seats, not the hatch): the magazines and the
+# first-aid kit only; the driver keeps his hands on the levers.
+func inside_vehicle() -> bool:
+ return is_instance_valid(game.bmp) and game.bmp.seat!="" and not game.bmp.head_out
+
 func use_pack_item() -> void:
+ if inside_vehicle() and game.player.backpack.item(source_box).get("kind","")!="medkit":
+  message.text="У машині з наплічника — лише пачки з набоями й аптечка. Дрон, далекомір і РПО — назовні або з люка."
+  return
  if game.player.backpack.item(source_box).get("kind","")=="rpo_a":
   if game.player.launcher.equip(source_box):hide_for_action()
   else:message.text="РПО-А недоступний: руки зайняті, поранення або контузія."
@@ -181,6 +189,9 @@ func use_pack_item() -> void:
 
 func begin_transfer() -> void:
  if destination.x<0 or not can_handle():return
+ if inside_vehicle() and game.bmp.seat=="driver":
+  message.text="Механік-водій тримає важелі: магазини споряджають у десанті або на зупинці, вийшовши з місця."
+  return
  var w: WeaponState=game.player.weapons[destination.x]
  var started := false
  if source_box>=0:started=transfer.begin_box(w,game.player.backpack,source_box,destination.y)

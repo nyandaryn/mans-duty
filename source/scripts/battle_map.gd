@@ -31,6 +31,11 @@ static var scenery: Dictionary={}
 # one over and only the small mesh of its chunk is rebuilt (knock_fence).
 static var fence_meshes: Dictionary={}
 static var fence_parts: Dictionary={}
+# The houses as they are built (Demolition brings them down): footprint,
+# height, paint, the solid body of a closed house, its span in the merged
+# block mesh. Kept on the district as meta "houses" after the build.
+static var houses: Array=[]
+static var current: ColorMesh
 
 # Towards the defenders: from each street to the next one north.
 static func north() -> Vector2:return Vector2(STREET.y,-STREET.x)
@@ -95,7 +100,7 @@ static func full_houses() -> Array:
  return chosen
 
 static func build(world: District) -> void:
- scenery.clear();fence_meshes.clear();fence_parts.clear()
+ scenery.clear();fence_meshes.clear();fence_parts.clear();houses.clear();current=null
  world.batch_cell=100.0
  world.campaign_definition=definition()
  var data := AvdiivkaData.shared()
@@ -116,6 +121,9 @@ static func build(world: District) -> void:
    var spec: Dictionary=full[i]
    rects.append([spec.point,Vector2(spec.size)*0.5+Vector2.ONE*4.5,float(spec.yaw)])
    walls.append([spec.point,Vector2(spec.size)*0.5,float(spec.yaw)])
+   var point: Vector2=spec.point
+   houses.append({"full":true,"center":Vector3(point.x,world.terrain.height_at(point),point.y),"half":Vector2(spec.size)*0.5,"yaw":float(spec.yaw),
+    "height":int(spec.floors)*2.9+2.0,"paint":CampaignWorld.WALL_COLORS[int(spec.variant)],"roof":CampaignWorld.ROOF_COLORS[int(spec.variant)],"hp":Demolition.HOUSE_HP,"down":false})
    continue
   # A footprint crossing the edge of the battlefield is left to the outer area.
   if absf(b[0])+maxf(b[2],b[3])*0.5>199 or absf(b[1])+maxf(b[2],b[3])*0.5>199:continue
@@ -195,11 +203,18 @@ static func build(world: District) -> void:
   occupied.append(at)
   made+=1
  var material:=ColorMesh.material(world)
+ var blocks: Dictionary={}
  for key in scenery:
   var instance:=MeshInstance3D.new()
   instance.name="Block_%d_%d" % [key.x,key.y]
   instance.mesh=scenery[key].build(material)
+  instance.set_meta("color_mesh",scenery[key])
   world.add_child(instance)
+  blocks[key]=instance
+ for house in houses:
+  if house.has("key"):house.block=blocks[house.key]
+ world.set_meta("houses",houses.duplicate())
+ houses.clear()
  scenery.clear()
  for key in fence_meshes:
   var instance:=MeshInstance3D.new()
@@ -223,6 +238,8 @@ static func knock_fence(body: Node) -> void:
  instance.mesh=mesh.build(instance.mesh.surface_get_material(0))
 
 static func chunk(at: Vector3) -> ColorMesh:
+ # A house goes whole into one block, so that it can be taken out of it.
+ if current!=null:return current
  var key:=Vector2i(floori(at.x/50.0),floori(at.z/50.0))
  if not scenery.has(key):scenery[key]=ColorMesh.new()
  return scenery[key]
@@ -245,7 +262,27 @@ static func blocked(at: Vector2, rects: Array, margin: float) -> bool:
 
 # A closed private house as it stands after months of shelling: walls with
 # windows and a door, a gable roof of slate or sheet metal, or a burnt shell.
+# Drawn into one block of the merged scenery and registered for Demolition.
 static func light_house(world: District, props: BattleProps, b: Array) -> void:
+ var key:=Vector2i(floori(float(b[0])/50.0),floori(float(b[1])/50.0))
+ if not scenery.has(key):scenery[key]=ColorMesh.new()
+ current=scenery[key]
+ var first:=current.vertices.size()
+ var made:=light_house_parts(world,props,b)
+ current=null
+ made.merge({"full":false,"key":key,"range":Vector2i(first,scenery[key].vertices.size()),"half":Vector2(float(b[2]),float(b[3]))*0.5,"yaw":float(b[4]),
+  "hp":Demolition.HOUSE_HP*(0.6 if str(b[6])=="S" else 1.0),"down":false})
+ made.body.set_meta("house",houses.size())
+ houses.append(made)
+
+# A beam between two points of the house, into its block.
+static func beam(props: BattleProps, a: Vector3, b: Vector3, radius: float, color: String) -> void:
+ var wa:=props.origin+props.basis*a;var wb:=props.origin+props.basis*b
+ var up:=(wb-wa).normalized()
+ var side:=up.cross(Vector3.FORWARD if absf(up.z)<0.9 else Vector3.RIGHT).normalized()
+ chunk(wa).box(Transform3D(Basis(side,up,side.cross(up)),(wa+wb)*0.5),Vector3(radius*2,wa.distance_to(wb),radius*2),Color(color))
+
+static func light_house_parts(world: District, props: BattleProps, b: Array) -> Dictionary:
  var w:float=b[2];var d:float=b[3];var yaw:float=b[4];var levels:int=b[5];var code:String=b[6]
  var center:=Vector2(b[0],b[1])
  var basis:=Basis(Vector3.UP,yaw)
@@ -266,7 +303,8 @@ static func light_house(world: District, props: BattleProps, b: Array) -> void:
  var paint:String=WALLS[rng.randi()%WALLS.size()]
  if shed:paint=["8a8678","6f6a5e","7d7a6c"][rng.randi()%3]
  if damaged and rng.randf()<0.5:paint=Color(paint).darkened(0.35).to_html(false)
- props.solid(Vector3(0,wall_h*0.5,0),Vector3(w,wall_h,d),"brick",paint)
+ var body:=props.solid(Vector3(0,wall_h*0.5,0),Vector3(w,wall_h,d),"brick",paint)
+ var made:={"body":body,"center":props.origin,"height":wall_h,"paint":paint,"roof":"6f7372"}
  blk(props,Vector3(0,wall_h*0.5,0),Vector3(w,wall_h,d),paint)
  if not shed:
   blk(props,Vector3(0,base+0.2,0),Vector3(w+0.06,0.6,d+0.06),"6b675c")
@@ -289,17 +327,19 @@ static func light_house(world: District, props: BattleProps, b: Array) -> void:
   props.origin.y=low
   for k in range(10):
    blk(props,Vector3(rng.randf_range(-w,w)*0.45,0.25,rng.randf_range(-d,d)*0.45),Vector3(rng.randf_range(0.4,1.2),rng.randf_range(0.2,0.5),rng.randf_range(0.4,1.0)),["8f8a7c","6e6a60","9a5a44"][k%3],Vector3(0,rng.randf()*TAU,0))
-  return
+  return made
  # Gable roof along the long side (ridge on the prism's Z axis).
  var long_x:=w>=d
  var span:=(d if long_x else w)+0.7
  var length:=(w if long_x else d)+0.6
  var rise:=minf(2.6,span*(0.30 if shed else 0.38))
  var cover:String=ROOFS[rng.randi()%ROOFS.size()]
+ made.roof=cover;made.height=wall_h+rise
  var roof_rot:=Vector3(0,PI*0.5 if long_x else 0.0,0)
  if shed:
   blk(props,Vector3(0,wall_h+0.06,0),Vector3(w+0.3,0.12,d+0.3),cover,Vector3(0.0 if long_x else 0.12,0,0.12 if long_x else 0.0))
-  return
+  made.height=wall_h+0.12
+  return made
  if damaged and rng.randf()<0.6:
   # Half of the roof blown off: the other half stands, rafters show.
   roof(props,Vector3(0,wall_h+rise*0.5,0)+(Vector3(length*0.25,0,0) if long_x else Vector3(0,0,length*0.25)),Vector3(span,rise,length*0.5),cover,paint,roof_rot)
@@ -308,13 +348,16 @@ static func light_house(world: District, props: BattleProps, b: Array) -> void:
    var at:=Vector3(t,0,0) if long_x else Vector3(0,0,t)
    for s in [-1,1]:
     var eave:=(Vector3(0,wall_h,s*span*0.5) if long_x else Vector3(s*span*0.5,wall_h,0))+at
-    props.rod(eave,at+Vector3(0,wall_h+rise,0),0.06,"2b2621")
+    beam(props,eave,at+Vector3(0,wall_h+rise,0),0.06,"2b2621")
   props.debris(maxf(w,d)*0.7,12)
  else:
   roof(props,Vector3(0,wall_h+rise*0.5,0),Vector3(span,rise,length),cover,paint,roof_rot)
  blk(props,Vector3(w*0.22,wall_h+rise*0.6,d*0.1),Vector3(0.5,1.4,0.5),"8d6755")
+ return made
 
-# Street frontage: picket and sheet fences with gates and blasted gaps.
+# Street frontage: profiled steel sheet and wooden picket fences with gates
+# and blasted gaps. Neither stops a rifle bullet: 0.5 mm of steel, boards.
+const SHEET := 0.0005
 static func fences(world: District, props: BattleProps, roads: Array, rects: Array) -> void:
  var rng:=props.rng
  for road in roads:
@@ -328,6 +371,7 @@ static func fences(world: District, props: BattleProps, roads: Array, rects: Arr
    var u:=along/length;var normal:=Vector2(-u.y,u.x)
    for s: float in [-1.0,1.0]:
     var color:String=FENCES[rng.randi()%FENCES.size()]
+    var steel:=color!="7a6a58"
     var t:=1.5
     while t<length-1.5:
      var mid:=a+u*(t+1.25)+normal*s*offset
@@ -343,9 +387,13 @@ static func fences(world: District, props: BattleProps, roads: Array, rects: Arr
       var first:=mesh.vertices.size()
       mesh.box(Transform3D(props.basis*Basis.from_euler(tilt),board),Vector3(2.45,1.36,0.04),Color(color))
       mesh.box(Transform3D(props.basis,props.origin+props.basis*Vector3(-1.2,0.75,0)),Vector3(0.07,1.5,0.07),Color("4a4a44"))
-      # Rifle fire does not cut these boards; 14 t of a BMP pushes them over.
-      var body:=props.solid(Vector3(0,0.68,0),Vector3(2.5,1.36,0.08),"wood",color)
+      # A rifle bullet goes through, a man is only hidden behind it; 14 t of
+      # a BMP or a near blast puts it over. The collider stands for the
+      # corrugation, the sheet itself is half a millimetre of steel.
+      var body:=props.solid(Vector3(0,0.68,0),Vector3(2.5,1.36,0.08),"steel" if steel else "wood",color)
       body.set_meta("crushable",true)
+      body.set_meta("screen",true)
+      if steel:body.set_meta("sheet_scale",SHEET/0.08)
       fence_parts[key].append([body,first,mesh.vertices.size()])
      t+=2.5
 

@@ -49,6 +49,7 @@ var file_mark := 0.0
 var yield_time := 0.0
 var file_mark_time := 0.0
 var mount_called := false
+var player_called := false
 # Where the hull has been: the file walks in its tracks round corners.
 var trail := PackedVector3Array()
 
@@ -112,7 +113,16 @@ func snap(point: Vector3) -> Vector3:
 
 # Running to the doors: no stopping for cover on the way.
 func run_to_door(actor: Hostile, index: int) -> void:
- move_to(actor,vehicle.exit_point(index),1.0)
+ # The hull is not on the walking map: from ahead of it or alongside, round
+ # its side to the stern first (straight at the doors he stuck at the bow).
+ var goal:=vehicle.exit_point(index)
+ var local:=vehicle.to_local(actor.global_position)
+ var half_width:=BmpArt.WIDTH*0.5
+ if local.z<BmpArt.HALF+0.4:
+  var side:=signf(local.x) if absf(local.x)>0.2 else (1.0 if index%2==1 else -1.0)
+  if absf(local.x)>half_width+0.9:goal=vehicle.to_global(Vector3(side*(half_width+1.3),0,BmpArt.HALF+1.3))
+  else:goal=vehicle.to_global(Vector3(side*(half_width+1.5),0,clampf(local.z,-BmpArt.HALF,BmpArt.HALF)))
+ move_to(actor,goal,1.0)
  actor.has_cover=false
  actor.cover_timer=maxf(actor.cover_timer,0.6)
 
@@ -191,10 +201,13 @@ func _physics_process(delta: float) -> void:
  if not state in ["field","board","wait","march","afoot"]:give_way(delta)
  vehicle.gunner.allowed=state in ["approach","file","assault","pickup","transfer","dismount"] or (state=="march" and vehicle.global_position.length()<500.0)
 
-# --- The start on the field (rifleman, sniper) ------------------------------
+# --- The start on the field (all but the BM-21 commander) ---------------------
 # The squad stands dismounted behind the stern of its vehicle in a half ring,
 # the vehicle in the column's place; on «По машинах!» they run to the doors
-# and climb in.
+# and climb in. A rifleman or a sniper stands in the ring of the first squad;
+# the driver's own men stand behind his vehicle.
+func player_in_ring() -> bool:return game.bmp.squad==self and BattleMode.field_class(game.player_class)
+
 func field_spot(i: int, count: int) -> Vector3:
  var angle:=(float(i)-(count-1)*0.5)*0.40
  return vehicle.to_global(Vector3(sin(angle)*6.0,0,BmpArt.HALF+3.2+cos(angle)*1.6))
@@ -202,7 +215,7 @@ func field_spot(i: int, count: int) -> Vector3:
 func form_up() -> void:
  var men:=aboard()
  # The player of the leading squad takes the last place in its ring.
- var count:=men.size()+(1 if game.bmp.squad==self else 0)
+ var count:=men.size()+(1 if player_in_ring() else 0)
  for i in range(men.size()):
   var actor:=men[i]
   vehicle.aboard.erase(actor)
@@ -215,9 +228,9 @@ func form_up() -> void:
  set_state("field")
 
 func tick_field() -> void:
- driver.stop()
+ if not player_led:driver.stop()
  var men:=on_foot()
- var count:=men.size()+(1 if game.bmp.squad==self else 0)
+ var count:=men.size()+(1 if player_in_ring() else 0)
  for i in range(men.size()):
   move_to(men[i],field_spot(i,count),1.5)
   men[i].has_cover=false
@@ -226,6 +239,8 @@ func tick_field() -> void:
 func mount_up() -> void:
  if state!="field":return
  boarded_clock=0.0
+ # The driver's men board as on his own «По машинах!».
+ if player_led:set_state("mount");return
  vehicle.open_doors(true)
  set_state("board")
 
@@ -526,7 +541,7 @@ func disperse() -> void:
  goal_sector=battle.sector
  set_state("assault")
  voice("assault")
- if index==0:game.squad.tell("Відділення %d спішилось і пішло на штурм" % (index+1))
+ if mine():game.squad.tell("Відділення %d спішилось і пішло на штурм" % (index+1))
 
 func tick_assault(delta: float) -> void:
  var men:=on_foot()
@@ -536,6 +551,11 @@ func tick_assault(delta: float) -> void:
  check_clock-=delta
  if check_clock>0.0:return
  check_clock=2.0
+ # The squad sits inside with nobody out (boarded and left behind by the
+ # fight): carried to the objective and put down there.
+ if men.is_empty() and not aboard().is_empty() and not vehicle.immobile and not battle.halted:
+  transfer()
+  return
  if battle.sector!=goal_sector:
   goal_sector=battle.sector
   overwatch=Vector3.INF
@@ -580,7 +600,15 @@ func support(delta: float) -> void:
 
 func tick_pickup() -> void:
  var men:=on_foot()
- if men.is_empty():set_state("assault");return
+ # Everyone in: off to the next objective once the last man is seated (it
+ # used to fall back to the assault here with the whole squad inside, and
+ # the vehicle drove from one fire position to the next with its men in).
+ if men.is_empty():
+  if aboard().is_empty():set_state("assault");return
+  if vehicle.troops.busy() or player_pending():return
+  vehicle.open_doors(false)
+  transfer()
+  return
  var rally:=centroid()
  # The vehicle comes only to a quiet place; until then the men fight on.
  if leg=="":
@@ -596,8 +624,8 @@ func tick_pickup() -> void:
   else:driver.stop()
   leg="pickup"
   state_time=0.0
-  mount_called=false
-  if index==0:game.squad.tell("БМП %d іде за десантом: «По місцях!»" % (index+1))
+  mount_called=false;player_called=false
+  if mine():game.squad.tell("БМП-%d іде за десантом: «По місцях!» — до своєї машини, вона позначена" % (index+1))
   return
  # The vehicle cannot get through to them: the men come to it where it is.
  if not (driver.arrived or driver.hold) and state_time>45.0 and absf(vehicle.speed())<0.5:driver.stop()
@@ -609,11 +637,11 @@ func tick_pickup() -> void:
    control(men[i],true)
    run_to_door(men[i],i)
    try_board(men[i],i)
-  if (aboard().size()==living() or (state_time>PICKUP_PATIENCE and not aboard().is_empty())) and not vehicle.troops.busy():
+  if (aboard().size()==living() or (state_time>PICKUP_PATIENCE and not aboard().is_empty())) and not vehicle.troops.busy() and not player_pending():
    for actor in on_foot():control(actor,false)
    vehicle.open_doors(false)
    transfer()
-  elif state_time>PICKUP_PATIENCE*1.5:
+  elif state_time>PICKUP_PATIENCE*1.5 and aboard().is_empty():
    for actor in on_foot():control(actor,false)
    vehicle.open_doors(false)
    set_state("assault")
@@ -630,13 +658,32 @@ func transfer() -> void:
  driver.set_route(route,BmpRoutes.FIELD_SPEED,3.0)
  leg="transfer"
  set_state("transfer")
- if index==0:game.squad.tell("Відділення %d на броні: до наступної цілі" % (index+1))
+ if mine():
+  if game.bmp.seat=="troop":game.squad.tell("Відділення %d на броні: до наступної цілі" % (index+1))
+  else:game.squad.tell("БМП-%d поїхала до наступної цілі без тебе" % (index+1))
+
+# The squad of the player.
+func mine() -> bool:return is_instance_valid(game.bmp) and game.bmp.squad==self and not player_led
+
+# The vehicle of the player's squad waits with the doors open while he is
+# alive and on his way to it; not for ever, and not for a man far off.
+func player_pending() -> bool:
+ if not mine() or game.bmp.seat=="troop":return false
+ var p=game.player
+ if not is_instance_valid(p) or p.health<=0 or p.get_meta("battle_out",false):return false
+ if state_time>PICKUP_PATIENCE+45.0 or p.global_position.distance_to(vehicle.global_position)>260.0:return false
+ if not player_called and aboard().size()>=living():
+  player_called=true
+  game.squad.tell("БМП-%d чекає з відчиненими дверима: бракує тебе · F біля кормових дверей" % (index+1))
+ return true
 
 func tick_transfer() -> void:
  if battle.halted:driver.stop();return
  driver.hold=false
  driver.cap=INF
- if driver.arrived or (state_time>120.0 and absf(vehicle.speed())<0.3):begin_dismount("file")
+ # At the place, or as good as there, or too long on the way: out here.
+ var near:=drop!=Vector3.INF and vehicle.global_position.distance_to(drop)<10.0
+ if driver.arrived or near or (state_time>120.0 and absf(vehicle.speed())<0.3) or state_time>180.0:begin_dismount("file")
 
 # The vehicle is lost: whoever is inside gets out as he can, the squad goes
 # on as infantry.
@@ -662,6 +709,7 @@ func bail_out() -> void:
 func tick_player(delta: float) -> void:
  vehicle.gunner.allowed=true
  match state:
+  "field":tick_field()
   "dismount":tick_dismount(delta)
   "file":keep_file(on_foot())
   "guard":

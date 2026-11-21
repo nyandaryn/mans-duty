@@ -6,6 +6,7 @@ var navigation_base := PackedByteArray()
 var navigation_weights := PackedFloat32Array()
 var navigation_regions := NavigationRegions.new()
 var navigation_obstacles := NavigationObstacles.new()
+var navigation_rubble := false
 var navigation_dirty: Array[Rect2i]=[]
 var navigation_full_pending := false
 var navigation_full_rebuilds := 0
@@ -1034,7 +1035,10 @@ func refresh_campaign_cells() -> void:
 				else:navigation_regions.open_cell(cell)
 	# Destruction only opens space. Explicitly added obstacles may split a
 	# region, so that exceptional case needs fresh connectivity information.
-	if closed:navigation_regions.build(grid)
+	# Rubble of a house only closes its own footprint: the regions stay (a
+	# split they miss costs one failed search, the rebuild a long frame).
+	if closed and not navigation_rubble:navigation_regions.build(grid)
+	navigation_rubble=false
 	navigation_local_updates+=1
 	navigation_last_cells=visited.size()
 

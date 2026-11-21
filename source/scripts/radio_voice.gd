@@ -52,10 +52,10 @@ func reset() -> void:
 	if is_instance_valid(output):output.stop()
 	if is_instance_valid(caption):caption.hide()
 
-# The orders reach the player's own squad: the rifleman and the sniper in
-# the great assault, the BMP driver who leads his squad anywhere.
+# The orders reach the player's own squad: the rifleman, the sniper and the
+# mortarman in the great assault, the BMP driver who leads his squad anywhere.
 func listening() -> bool:
-	return game.player_class=="bmp" or (game.battle.active and game.player_class in ["rifleman","sniper"])
+	return game.player_class=="bmp" or (game.battle.active and game.player_class in ["rifleman","sniper","mortarman"])
 
 func say(id: String) -> void:
 	if not LINES.has(id) or not listening():return

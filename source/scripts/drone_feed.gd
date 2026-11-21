@@ -17,6 +17,8 @@ const FEED_SIZE := Vector2i(400,250)
 const FEED_RATE := 15.0
 const SMALL := [0.012,0.44,0.305,0.855]
 const LARGE := [0.012,0.30,0.345,0.865]
+# In the driver's seat the instruments take the lower left: the tablet goes right.
+const LARGE_RIGHT := [0.655,0.30,0.988,0.865]
 const BARRAGE_WIDTH := 560
 var game: Node3D
 var enabled := true
@@ -44,6 +46,7 @@ var last_relay := -10.0
 var relayed := 0
 # "" (hidden), "drone" or "barrage".
 var mode := ""
+var on_right := false
 
 func setup(owner_game: Node3D, parent: Control) -> void:
  game=owner_game
@@ -144,7 +147,8 @@ func toggle() -> void:
 func wanted_mode() -> String:
  if not enabled or not game.running or game.paused or not is_instance_valid(game.player):return ""
  var goggles: bool=game.player.field_rig.mode=="goggles"
- if battery()!=null and not goggles and game.bmp.seat=="":return "barrage"
+ # The driver sees it in his seat too; a passenger is not in the vehicle yet.
+ if battery()!=null and not goggles and game.bmp.seat!="troop":return "barrage"
  var unit := drone()
  if unit!=null and not unit.piloting and unit.health>0 and not goggles:return "drone"
  return ""
@@ -157,8 +161,7 @@ func switch(next: String) -> void:
   engine_speaker.stop()
   for output in speakers:output.stop()
  visible=next!=""
- var box: Array=LARGE if next=="barrage" else SMALL
- anchor_left=box[0];anchor_top=box[1];anchor_right=box[2];anchor_bottom=box[3]
+ place_box()
  village_header.visible=next=="barrage";village_frame.visible=next=="barrage"
  static_noise.visible=next=="drone"
  if next=="barrage":
@@ -190,6 +193,7 @@ func _process(delta: float) -> void:
  if next!=mode:switch(next)
  if mode=="":return
  if mode=="barrage":
+  if (game.bmp.seat=="driver")!=on_right:place_box()
   show_barrage(delta)
   return
  var unit := drone()
@@ -207,6 +211,11 @@ func _process(delta: float) -> void:
  var minutes := unit.battery*ReconDrone.FLIGHT_SECONDS/60.0
  var bearing := MortarBallistics.mils_text(MortarBallistics.azimuth(-unit.camera.global_basis.z))
  telemetry.text="АКБ %d %% ≈%d хв · ЗВ’ЯЗОК %d %% · %s\nВИСОТА %.0f м · АЗ %s · ДО ДРОНА %.0f м" % [roundi(unit.battery*100),floori(minutes),roundi(unit.signal_strength*100),"НЕМАЄ СИГНАЛУ" if lost else ("ПОСАДКА" if unit.battery<=0.04 else "ЗАВИС"),unit.floor_height,bearing,unit.global_position.distance_to(game.player.global_position)]
+
+func place_box() -> void:
+ on_right=mode=="barrage" and game.bmp.seat=="driver"
+ var box: Array=(LARGE_RIGHT if on_right else LARGE) if mode=="barrage" else SMALL
+ anchor_left=box[0];anchor_top=box[1];anchor_right=box[2];anchor_bottom=box[3]
 
 func show_barrage(delta: float) -> void:
  var unit:=battery()

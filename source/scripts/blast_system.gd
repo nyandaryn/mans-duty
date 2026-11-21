@@ -175,6 +175,8 @@ func transmission(from: Vector3, to: Vector3) -> float:
   var hit := get_world_3d().direct_space_state.intersect_ray(query)
   if hit.is_empty():return gain
   var material: String=hit.collider.get_meta("ballistic_material","")
+  # Fragments go through a fence of sheet steel as through boards.
+  if hit.collider.has_meta("sheet_scale"):material="wood"
   if material not in ["glass","fabric","wood"]:return 0
   gain*=0.75 if material=="glass" else 0.65 if material=="fabric" else 0.35
   excluded.append(hit.rid)
@@ -227,9 +229,13 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
   bot.hear(where)
   var near: float=bot.global_position.distance_to(where)
   if near<reach*1.6:bot.shell_burst(where,clampf(1-near/(reach*1.6),0,1))
+ # Houses brought down, fences put over (after the exposure above: a wall
+ # that falls now still sheltered those behind it).
+ Demolition.blast(game,where,"grad" if grad else ("cannon" if cannon else ("mine" if mine else "rpo")))
  # Reuse bounded local destruction; never traverse every scene object.
  var sphere := SphereShape3D.new();sphere.radius=6.0 if grad else (1.5 if cannon else 3.0)
  var query := PhysicsShapeQueryParameters3D.new();query.shape=sphere;query.transform.origin=where;query.collision_mask=1
+ if is_instance_valid(game.district):query.exclude=Demolition.ground(game.district)
  var seen := {}
  for contact in get_world_3d().direct_space_state.intersect_shape(query,24):
   var body: Object=contact.collider

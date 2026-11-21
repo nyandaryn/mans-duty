@@ -672,6 +672,7 @@ func setup_audio() -> void:
 	sounds["mortar_launch"]=Mortar.sound("launch")
 	sounds["mine_whistle"]=Mortar.sound("whistle")
 	sounds["mine_blast"]=Mortar.sound("blast")
+	sounds["collapse"]=Demolition.sound()
 	for i in range(32):
 		var output := AudioStreamPlayer.new()
 		add_child(output)

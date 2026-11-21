@@ -43,6 +43,11 @@ var work_notice := ""
 # World point the hands work at (the mortar part being fitted); INF — none.
 var work_target := Vector3.INF
 var work_notice_left := 0.0
+# On a vehicle's bench the hands work in the lap, under a pivot of the seat
+# (BmpCommand), drawn with the compartment; the pack comes up from the floor
+# between the feet instead of off the back.
+var seated := false
+var draw_layer := ScopeSight.FIRST_PERSON_LAYER
 
 func setup(owner_operator: Operator) -> void:
  operator=owner_operator
@@ -57,6 +62,29 @@ func setup(owner_operator: Operator) -> void:
  visible=false
 
 func transfer() -> MagazineTransfer:return operator.game.inventory.transfer
+
+func seat_in(holder: Node3D, layer: int) -> void:
+ if get_parent()!=holder:
+  get_parent().remove_child(self)
+  holder.add_child(self)
+ transform=Transform3D.IDENTITY
+ seated=true
+ if draw_layer!=layer:draw_layer=layer;paint(self)
+
+func stand_up() -> void:
+ if not seated:return
+ seated=false
+ get_parent().remove_child(self)
+ operator.camera.add_child(self)
+ transform=Transform3D.IDENTITY
+ draw_layer=ScopeSight.FIRST_PERSON_LAYER
+ paint(self)
+
+func paint(node: Node) -> void:
+ if node is VisualInstance3D:node.layers=draw_layer
+ for child in node.get_children():
+  if child is ReconDrone:continue
+  paint(child)
 func active() -> bool:return mode!="" or transfer().active or (operator.launcher!=null and operator.launcher.active())
 func busy() -> bool:
  return (mode!="" and mode not in ["rangefinder","pouch","pouch_stow"]) or transfer().active or (operator.launcher!=null and operator.launcher.active() and operator.launcher.mode!="ready")
@@ -224,7 +252,7 @@ func rebuild(key: String, weapon_id: String) -> void:
   cartridge.add_child(round_mesh)
   debris.free()
  else:item_prop=PackArt.item_model(kind);add_child(item_prop)
- ScopeSight.set_first_person(self)
+ paint(self)
 
 func make_magazine(id: String) -> Node3D:
  var baked: Node3D=load("res://assets/models/"+("ak74m" if id=="ak74" else id)+".scn").instantiate()
@@ -235,10 +263,12 @@ func make_magazine(id: String) -> Node3D:
 
 func animate_access(progress: float) -> void:
  # Reach over shoulder, slide the pack forward, undo the lid, reach into it.
+ # Seated, the pack stands on the floor between the feet: lift it onto the
+ # knees.
  pack.visible=true
  var pull := smoothstep(0,0.32,progress)
- pack.position=Vector3(0.48,-0.8,0.18).lerp(Vector3(-0.17,-0.42,-0.67),pull)
- pack.rotation=Vector3(-0.25,0.3,-0.3*(1-pull))
+ pack.position=(Vector3(0.02,-0.78,-0.32) if seated else Vector3(0.48,-0.8,0.18)).lerp(Vector3(-0.17,-0.42,-0.67),pull)
+ pack.rotation=Vector3(-0.25,0.3*pull if seated else 0.3,-0.3*(1-pull))
  pack.get_node("Lid").rotation.x=-smoothstep(0.35,0.60,progress)*1.8
  left.position=pack.position+Vector3(-0.14,0.13,0.08)
  right.position=Vector3(0.25,-0.12,0.02).lerp(pack.position+Vector3(0.05,0.20,0),smoothstep(0.08,0.55,progress))
@@ -322,7 +352,7 @@ func animate() -> void:
   if visual_key!="goggles":
    visual_key="goggles"
    if is_instance_valid(item_prop):item_prop.free()
-   item_prop=DroneArt.goggles();add_child(item_prop);ScopeSight.set_first_person(self)
+   item_prop=DroneArt.goggles();add_child(item_prop);paint(self)
   pack.visible=false
   if is_instance_valid(target_mag):target_mag.visible=false
   if is_instance_valid(source_mag):source_mag.visible=false

@@ -623,7 +623,7 @@ func ram() -> void:
 
 static func crushable(body: DestructibleSurface) -> bool:
  if body.breaking:return false
- # Fence panels of the great assault: bullets do not cut them, a hull does.
+ # Fence panels of the great assault: a hull puts them over.
  if body.has_meta("crushable"):return true
  if body.has_meta("indestructible"):return false
  var shape_node:=body.get_child(0) as CollisionShape3D
@@ -632,20 +632,7 @@ static func crushable(body: DestructibleSurface) -> bool:
  var thin:=minf(size.x,minf(size.y,size.z))
  return size.x*size.y*size.z<0.5 or (thin<0.13 and size.y<2.6)
 
-func flatten(body: DestructibleSurface, direction: Vector3) -> void:
- var district: Node3D=body.district
- if not is_instance_valid(district):return
- body.breaking=true
- var shape_node: CollisionShape3D=body.get_child(0)
- var size: Vector3=shape_node.shape.size
- var bounds:=AABB(-size/2,size)
- district.fragment(body.global_position,size,body.tint,body.get_meta("ballistic_material","wood"),direction,body.global_basis)
- if body.has_meta("fence_mesh"):BattleMap.knock_fence(body)
- elif body.batch!=null and body.batch_index>=0:body.batch.set_instance_transform(body.batch_index,Transform3D(Basis.from_scale(Vector3.ZERO),Vector3.ZERO))
- body.collision_layer=0;body.collision_mask=0
- district.refresh_navigation(body.global_transform*bounds,body.get_instance_id(),[])
- body.queue_free()
- game.spatial_shot("bolt",body.global_position,-6)
+func flatten(body: DestructibleSurface, direction: Vector3) -> void:Demolition.flatten(game,body,direction)
 
 # --- Damage -----------------------------------------------------------------
 func damage(amount: float, where: Vector3) -> void:

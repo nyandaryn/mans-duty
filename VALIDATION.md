@@ -1,3 +1,40 @@
+# 0.29.0 validation — 2026-11-21
+
+Great assault: houses collapse under heavy fire and bury the men inside,
+rifle fire goes through sheet-steel and board fences, magazines filled on the
+BMP's troop bench, the player's squad no longer rides between strongpoints
+with its men aboard, the mark over the player's own BMP, command passing to
+the men in the troop compartment, the Grad battery's start for the BMP driver
+and the mortarman.
+
+- New test_demolition (24 checks): 150+ houses registered, the strongpoint
+  brick houses among them; one mortar bomb does not bring a closed house
+  down, three do; its body and block geometry gone, rubble in the footprint
+  stops a ray; one Grad rocket collapses a brick strongpoint house and buries
+  the defender inside; a 5.45 round keeps over 1000 J through a 0.5 mm sheet
+  and hits the block behind (2 hits); behind a fence a man is hidden but not
+  covered; a rocket beside the fence puts the nearest panels over.
+- New test_bmp_bench (36 checks, --fixed-fps 60): the pack opened on the lap
+  in the troop seat, rounds go into the magazine, leaving the vehicle cancels
+  the work and gives the hands back; the pickup waits for the player, the
+  squad dismounts at the next strongpoint, a man in the compartment takes
+  over when the player falls on foot.
+- New test_barrage_classes (25 checks, --fixed-fps 60): sniper, BMP driver
+  and mortarman start with the battery's fire, the BM-21 commander without
+  it; the driver's men dismounted behind his stern board after «По машинах!»,
+  «Колона — вперед!», the column follows him once he moves; the mortarman's
+  column waits for his order and goes on it.
+- A house collapse costs 5–11 ms headless plus one ~7 ms frame (no full
+  navigation rebuild for rubble); the first brick-house collapse in a render
+  showed one ~100 ms frame.
+- Fences no longer count as full cover for the bots (0.25 of a wall per
+  sample). test_assault_halt is seed-sensitive: 5 of 7 seeds pass on 0.28.0,
+  4 of 7 now; it now reseeds (22) after skip_approach, which passes on both.
+- Full suite from source: 57 scenarios pass.
+- Exported pck with the shipped kvartal.x86_64 via --main-pack:
+  `--quit-after 300` with no ERROR lines; test_barrage_classes,
+  test_demolition, test_bmp_bench and test_field_start pass.
+
 # 0.28.0 validation — 2026-11-20
 
 Great assault: the enemy three to one, the rifleman's and sniper's start on

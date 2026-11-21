@@ -99,6 +99,9 @@ func step_projectiles(delta: float) -> void:
 			var material: String=body.get_meta("ballistic_material","")
 			if exit==null or material.is_empty():break
 			var thickness: float=hit.position.distance_to(exit)
+			# A sheet on a thicker collider (the corrugation of a fence): the metal
+			# along the path, oblique hits longer as through the collider.
+			thickness*=float(body.get_meta("sheet_scale",1.0))
 			var before := Penetration.energy(bullet.weapon,next[1].length())
 			var after := Penetration.remaining(bullet.weapon,next[1].length(),material,thickness)
 			if body.has_method("strike"):body.strike(hit.position,direction,before-after,after>1.0)

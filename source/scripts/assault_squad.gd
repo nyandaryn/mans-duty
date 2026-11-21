@@ -152,7 +152,11 @@ func protection(actor: Hostile, point: Vector3, height: float, concealment: bool
  var covered := 0.0
  for offset in [Vector3.ZERO,side,-side]:
   var sample: Vector3=point+Vector3.UP*height+offset
-  if not actor.line_clear(threat,sample):covered+=1.0/3
+  # A fence panel hides a man (three quarters of a wall's worth), it does not
+  # stop a bullet.
+  var between: int=actor.obstruction(threat,sample)
+  if between==2:covered+=1.0/3
+  elif between==1:covered+=0.25
   elif concealment and game.district.foliage_visibility(threat,sample)<=0:covered+=0.22
  return covered
 

@@ -68,6 +68,7 @@ var prep_time := 0.0
 var fire_at := -1.0
 var done_at := -1.0
 var held_said := false
+var drive_warned := false
 var battery: GradBattery
 # Marks over the player's squad and over his vehicle when it is boarded.
 var marks: Array[Sprite3D]=[]
@@ -119,7 +120,9 @@ func start() -> void:
  # trees by the highway; the player's own vehicle, if he drives one, leads.
  vehicle_grid=BmpRoutes.vehicle_grid(game.district)
  for i in range(1 if game.player_class=="bmp" else 0,squad_count(game.battle_size)):deploy_squad(i)
- if field_class(game.player_class) and not mech.is_empty():prep="barrage"
+ # Every class but the BM-21 commander starts with the battery's fire; the
+ # column moves off after it.
+ if barrage_class(game.player_class) and (not mech.is_empty() or game.player_class=="bmp"):prep="barrage"
  game.bmp.start_battle(self)
  if game.player_class in ["mortarman","grad"]:
   set_halt(true);awaiting=true
@@ -130,24 +133,35 @@ func start() -> void:
 
 static func enemies(size: int) -> int:return size*ENEMY_RATIO
 
+# On foot with the squad by its vehicle at the start.
 static func field_class(id: String) -> bool:return id in ["rifleman","sniper"]
+# The start with the battery's fire: all but the BM-21 commander, who is
+# himself the fire.
+static func barrage_class(id: String) -> bool:return id in ["rifleman","sniper","bmp","mortarman"]
 
 # --- The start on the field: the battery's fire, then «По машинах!» ----------
 func begin_field() -> void:
- prep="barrage";prep_time=0.0;fire_at=-1.0;done_at=-1.0;held_said=false
+ prep="barrage";prep_time=0.0;fire_at=-1.0;done_at=-1.0;held_said=false;drive_warned=false
  column_go=false
  for squad in mech:squad.form_up()
- game.bmp.stand_by_vehicle()
+ if field_class(game.player_class):game.bmp.stand_by_vehicle()
  game.district.operation_area.stream(mech[0].vehicle.global_position,40)
  battery=GradBattery.new()
  add_child(battery)
  battery.setup(game,self)
- game.squad.tell("Відділення спішене біля БМП-1 · чекай команди · на КПК — «Гради» і село")
+ match game.player_class:
+  "bmp":game.squad.tell("Колона стоїть, десант спішений: спершу б'ють «Гради» · на КПК — «Гради» і село · рушай після «Колона — вперед!»")
+  "mortarman":game.squad.tell("Спершу б'ють «Гради» · на КПК — «Гради» і село · потім десант сідає, і колона чекає твоєї команди · G — розрахунок")
+  _:game.squad.tell("Відділення спішене біля БМП-1 · чекай команди · на КПК — «Гради» і село")
 
 func barrage_shown() -> bool:return prep=="barrage" and is_instance_valid(battery)
 
 func tick_prep(delta: float) -> void:
  prep_time+=delta
+ # The driver at the head of the column is told once to stand fast.
+ if game.player_class=="bmp" and not drive_warned and is_instance_valid(game.bmp.vehicle) and absf(game.bmp.vehicle.speed())>1.5:
+  drive_warned=true
+  game.squad.tell("Стояти! Колона рушає лише після «Колона — вперед!»" if prep=="barrage" else "Стояти! Твій десант ще сідає")
  if prep=="barrage":
   if not held_said and prep_time>1.5:held_said=true;game.radio_voice.say("hold")
   if fire_at<0.0 and battery.all_ready() and prep_time>8.0:
@@ -163,6 +177,8 @@ func tick_prep(delta: float) -> void:
  var boarded:=true
  for squad in mech:
   if squad.state in ["field","board"]:boarded=false
+  # The driver's own men climb into his vehicle while it stands.
+  if squad.player_led and squad.state=="mount" and prep_time<MOUNT_PATIENCE:boarded=false
  if boarded:finish_prep()
 
 func begin_mount() -> void:
@@ -173,17 +189,25 @@ func begin_mount() -> void:
  for vehicle in battery.launchers:
   if is_instance_valid(vehicle):vehicle.engine_sound.stop();vehicle.process_mode=Node.PROCESS_MODE_DISABLED
  battery.process_mode=Node.PROCESS_MODE_DISABLED
- game.squad.tell("«По машинах!» · БМП-1 — твоя машина · F біля кормових дверей")
+ match game.player_class:
+  "bmp":game.squad.tell("«По машинах!» · стій, поки твій десант сідає: двері відчинені")
+  "mortarman":game.squad.tell("«По машинах!» · десант сідає в БМП")
+  _:game.squad.tell("«По машинах!» · БМП-1 — твоя машина · F біля кормових дверей")
 
 # The player's squad keeps its doors open for him.
 func waiting_for_player(squad: MechSquad) -> bool:
- return prep=="mount" and game.bmp.squad==squad and game.bmp.seat!="troop" and prep_time<MOUNT_PATIENCE and is_instance_valid(game.player) and game.player.health>0 and not game.player.get_meta("battle_out",false)
+ return field_class(game.player_class) and prep=="mount" and game.bmp.squad==squad and game.bmp.seat!="troop" and prep_time<MOUNT_PATIENCE and is_instance_valid(game.player) and game.player.health>0 and not game.player.get_meta("battle_out",false)
 
 func finish_prep() -> void:
  prep=""
  column_go=not halted
+ # The mortarman's assault waits for his word; the column with it.
+ if halted:
+  game.squad.tell("Десант на броні · колона чекає твоєї команди · G — розрахунок")
+  return
  game.radio_voice.say("column")
- if game.bmp.seat!="troop":game.squad.tell("Колона рушила без тебе")
+ if game.player_class=="bmp":game.squad.tell("«Колона — вперед!» · ти ведеш: польовою дорогою до траси й на північ, до села ~2 км")
+ elif field_class(game.player_class) and game.bmp.seat!="troop":game.squad.tell("Колона рушила без тебе")
 
 # --- Marks over the player's squad ------------------------------------------------
 static func mark_image() -> ImageTexture:
@@ -199,6 +223,11 @@ static func mark_image() -> ImageTexture:
  return mark_texture
 
 func mark_squad() -> void:
+ for mark in marks:
+  if is_instance_valid(mark):mark.queue_free()
+ marks.clear()
+ if is_instance_valid(vehicle_mark):vehicle_mark.queue_free()
+ vehicle_mark=null
  var squad: MechSquad=game.bmp.squad
  if not is_instance_valid(squad):return
  for actor in squad.members:
@@ -232,10 +261,17 @@ func update_marks() -> void:
   if not is_instance_valid(mark):continue
   var actor:=mark.get_parent() as Hostile
   mark.visible=not seated and operational(actor) and actor.vehicle==null
+ # The vehicle of the squad is marked all the time the player is out of
+ # it, louder when it waits for him.
  if is_instance_valid(vehicle_mark):
   var squad: MechSquad=game.bmp.squad
   var boarding: bool=is_instance_valid(squad) and (waiting_for_player(squad) or (squad.state=="pickup" and squad.vehicle.doors>0.5))
-  vehicle_mark.visible=not seated and boarding and not squad.vehicle.destroyed
+  var text:="БМП-%d · ПО МАШИНАХ" % (squad.index+1) if boarding else "БМП-%d · ТВОЯ" % (squad.index+1)
+  if vehicle_mark.text!=text:
+   vehicle_mark.text=text
+   vehicle_mark.modulate=Color(0.65,1.0,0.6) if boarding else Color(0.65,1.0,0.6,0.7)
+   vehicle_mark.font_size=40 if boarding else 30
+  vehicle_mark.visible=not seated and not squad.vehicle.destroyed and is_instance_valid(game.player) and not game.player.get_meta("battle_out",false)
 
 static func squad_count(size: int) -> int:return maxi(1,int(size/SQUAD))
 
@@ -272,7 +308,12 @@ func skip_approach() -> void:
   if is_instance_valid(battery):battery.queue_free()
   battery=null
  for squad in mech:
-  if squad.player_led:continue
+  if squad.player_led:
+   # The driver's men back in his vehicle.
+   for actor in squad.on_foot():squad.control(actor,false);squad.vehicle.board(actor)
+   squad.vehicle.open_doors(false)
+   if squad.state in ["field","mount"]:squad.set_state("mounted")
+   continue
   var vehicle:=squad.vehicle
   var spot:=formation_base(true,0)+BattleMap.offset(float(squad.index%3-1)*34.0,38.0+float(squad.index/3)*14.0)
   spot.y=game.district.ground_height(spot)
@@ -298,7 +339,7 @@ func skip_approach() -> void:
  # A passenger gets out with them; one still on the field by the column
  # is put behind his vehicle as if he had got out there.
  if game.bmp.seat=="troop":game.bmp.leave()
- elif afoot and is_instance_valid(game.bmp.vehicle):
+ elif afoot and is_instance_valid(game.bmp.vehicle) and game.bmp.seat=="":
   var spot:Vector3=game.bmp.vehicle.exit_point(0)+game.bmp.vehicle.global_basis.z*0.6
   spot.y=game.district.ground_height(spot)+0.05
   game.player.global_position=spot
@@ -316,10 +357,10 @@ func skip_field() -> void:
    squad.control(actor,false)
    squad.vehicle.board(actor)
   squad.vehicle.open_doors(false)
-  if squad.state in ["field","board"]:squad.set_state("wait")
+  if squad.state in ["field","board","mount"]:squad.set_state("mounted" if squad.player_led else "wait")
  prep=""
  column_go=not halted
- if is_instance_valid(game.bmp.vehicle) and game.bmp.seat=="":game.bmp.enter("troop")
+ if is_instance_valid(game.bmp.vehicle) and game.bmp.seat=="" and field_class(game.player_class):game.bmp.enter("troop")
 
 # Column order: each squad follows the one before it.
 func register_squad(squad: MechSquad) -> void:
@@ -338,7 +379,12 @@ func place_vehicle(vehicle: BmpVehicle, at: Transform3D) -> void:
 
 func set_halt(value: bool) -> void:
  halted=value
- if not value:awaiting=false;column_go=true
+ if not value:
+  # The first word of the mortarman sends the column waiting at the start.
+  if awaiting and prep=="":
+   for squad in mech:
+    if squad.state=="wait":game.radio_voice.say("column");break
+  awaiting=false;column_go=prep==""
  for actor in game.allies:
   # The men in the vehicles get their halt line where they dismount.
   if not actor.get_meta("battle_managed",false) or not operational(actor) or actor.vehicle!=null:continue
@@ -767,7 +813,16 @@ func successor() -> Hostile:
   if actor.get_meta("crew_role","")=="assistant":helper=actor;continue
   var distance:float=actor.global_position.distance_to(from)
   if distance<best_distance:best=actor;best_distance=distance
- return best if best!=null else helper
+ if best!=null or helper!=null:return best if best!=null else helper
+ # Nobody left on foot: a man still riding in a troop compartment (not the
+ # vehicle's crew) takes over there.
+ for squad in mech:
+  if not is_instance_valid(squad.vehicle) or squad.vehicle.destroyed:continue
+  for actor in squad.aboard():
+   if not operational(actor) or actor.get_meta("bmp_role","")!="":continue
+   var distance:float=squad.vehicle.global_position.distance_to(from)
+   if distance<best_distance:best=actor;best_distance=distance
+ return best
 
 func living(friendly: bool) -> int:
  var count:=0
@@ -785,7 +840,7 @@ func player_fell() -> bool:
  if successor()==null:return false
  respawn_left=TAKEOVER_TIME
  game.crew.player_fell(game.player.global_position)
- game.inventory.close();game.close_panels();game.player.field_rig.cancel()
+ game.inventory.close();game.close_panels();game.player.field_rig.stand_up();game.player.field_rig.cancel()
  game.player.launcher.cancel();game.player.set_physics_process(false);game.player.set_process_unhandled_input(false)
  game.player.set_meta("battle_out",true);game.player.collision_layer=0;game.player.collision_mask=0
  for area in game.player.find_children("*","Area3D",true,false):area.collision_layer=0
@@ -798,12 +853,27 @@ func respawn_player() -> void:
  var body:=successor()
  if body==null:
   complete(false,"Командир вибув. Живих бійців не лишилося.");return
+ # His squad becomes the player's: its vehicle and the marks over its men.
+ var own: MechSquad=null
+ for squad in mech:
+  if body in squad.members:own=squad
+ var ride: BmpVehicle=body.vehicle as BmpVehicle
+ if ride!=null:
+  ride.aboard.erase(body);ride.troops.forget(body)
  var point:=body.global_position+Vector3.UP*0.05;var yaw:=body.rotation.y
+ if ride!=null:point=ride.global_position+Vector3.UP*0.5
  game.allies.erase(body);game.squad.selected=-1;body.queue_free()
+ if own!=null:own.members.erase(body)
  var old:Operator=game.player
  game.bmp.vacate()
  var next:=Operator.new();game.add_child(next);game.player=next;next.position=point;next.rotation.y=yaw;next.setup(game,game.primary,game.secondary);next.sensitivity=game.sensitivity
  old.queue_free();game.damage_flash=0;game.hearing.reset();game.squad.trail=PackedVector3Array([point])
+ if own!=null and is_instance_valid(own.vehicle) and not own.vehicle.destroyed and not game.player_class in ["mortarman","grad","bmp"]:
+  game.bmp.squad=own;game.bmp.vehicle=own.vehicle
+  mark_squad()
+  if ride==own.vehicle:
+   game.bmp.enter("troop")
+   game.squad.tell("Ти — у десанті БМП-%d, на місці бійця · F — вийти на зупинці" % (own.index+1))
 
 func complete(won: bool, reason: String) -> void:
  finished=true;result_reason=reason
@@ -842,8 +912,13 @@ func status() -> String:
 
 func prep_status() -> String:
  var line:="ВИХІДНИЙ РУБІЖ · ВІДДІЛЕННЯ СПІШЕНЕ БІЛЯ БМП · ЧЕКАЙ КОМАНДИ"
+ if game.player_class=="bmp":line="ВИХІДНИЙ РУБІЖ · КОЛОНА СТОЇТЬ · РУШАЙ ПІСЛЯ «КОЛОНА — ВПЕРЕД!»"
+ elif game.player_class=="mortarman":line="ВИХІДНИЙ РУБІЖ · ПЕРШИМИ Б'ЮТЬ «ГРАДИ» · ПОТІМ ШТУРМ ЧЕКАЄ ТВОЄЇ КОМАНДИ"
  if prep=="mount":
-  line="«ПО МАШИНАХ!» · %s" % ("ТИ В ДЕСАНТІ БМП-1 · КОЛОНА ЧЕКАЄ ПОСАДКИ" if game.bmp.seat=="troop" else "F БІЛЯ КОРМОВИХ ДВЕРЕЙ БМП-1")
+  match game.player_class:
+   "bmp":line="«ПО МАШИНАХ!» · СТІЙ: ТВІЙ ДЕСАНТ СІДАЄ"
+   "mortarman":line="«ПО МАШИНАХ!» · ДЕСАНТ СІДАЄ В БМП"
+   _:line="«ПО МАШИНАХ!» · %s" % ("ТИ В ДЕСАНТІ БМП-1 · КОЛОНА ЧЕКАЄ ПОСАДКИ" if game.bmp.seat=="troop" else "F БІЛЯ КОРМОВИХ ДВЕРЕЙ БМП-1")
  elif is_instance_valid(battery):
   if not battery.ordered:line+="\n«ГРАДИ» НАВОДЯТЬСЯ: ГОТОВІ %d / 3" % battery.ready_count()
   elif not battery.finished():line+="\n«ГРАДИ» ВЕДУТЬ ВОГОНЬ ПО ОП-1…3 · РАКЕТ У ПОВІТРІ %d" % battery.in_flight()

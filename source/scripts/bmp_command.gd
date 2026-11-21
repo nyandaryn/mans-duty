@@ -37,6 +37,14 @@ var press := ""
 var lean := 0.0
 var lean_device := -1
 var target := {}
+# Magazines filled on the bench (the field inventory, TAB): the hands in the
+# lap under this pivot of the troop compartment, the eyes down on them while
+# the work begins.
+var lap: Node3D
+var was_working := false
+var glance := 0.0
+const LAP_PITCH := -0.55
+const WORK_LOOK := Vector2(0.0,-0.80)
 
 func setup(owner_game: Node3D, ui_root: Control) -> void:
  game=owner_game
@@ -135,7 +143,8 @@ func start_battle(battle: BattleMode) -> void:
   take_personal_squad()
   for actor in squad.members+vehicle.crew:actor.set_meta("battle_group",0)
   enter("driver")
-  game.squad.tell("Ти ведеш колону: %d БМП за тобою · I — маса, X — стартер · польовою дорогою до траси й на північ, до села ~2 км" % (battle.mech.size()-1))
+  if battle.prep=="":game.squad.tell("Ти ведеш колону: %d БМП за тобою · I — маса, X — стартер · польовою дорогою до траси й на північ, до села ~2 км" % (battle.mech.size()-1))
+  else:game.squad.tell("Ти — механік-водій головної БМП: %d за тобою · I — маса, X — стартер · стоїмо, поки б'ють «Гради»" % (battle.mech.size()-1))
   return
  if game.player_class in ["mortarman","grad"] or battle.mech.is_empty():return
  squad=battle.mech[0]
@@ -243,6 +252,7 @@ func enter(id: String) -> void:
 
 func release_player() -> void:
  var player: Operator=game.player
+ player.field_rig.stand_up()
  player.anchor=Callable();head_out=false
  player.set_physics_process(true);player.set_process(true);player.set_process_unhandled_input(true)
  player.collision_layer=2;player.collision_mask=1|4|64
@@ -395,6 +405,7 @@ func set_head_out(on: bool) -> void:
   player.set_physics_process(true);player.set_process(true);player.set_process_unhandled_input(true)
   # Head and shoulders over the armour can be hit.
   for i in range(mini(areas.size(),hitbox_layers.size())):areas[i].collision_layer=hitbox_layers[i]
+  player.field_rig.stand_up()
   player.viewmodel.show()
   player.camera.make_current()
   vehicle.troop_hatch_open=true
@@ -426,6 +437,7 @@ func _process(delta: float) -> void:
    # What the middle of the view rests on, for the next press and the
    # prompt under the dot.
    target=cabin.pick(vehicle.seat_camera) if lean<=0.0 and not exiting() else {}
+   bench_work(delta)
   # Pinned again after all the physics of the frame: the hull must not
   # slide a step ahead of the eyes in the hatch.
   else:
@@ -466,6 +478,41 @@ func _process(delta: float) -> void:
  var notice:=vehicle.notice if vehicle.notice_left>0 else ""
  if notice!="" and instruments.visible:instruments.text+="\n"+notice
 
+# The operator's own frame is off on the seat: the field kit is ticked here,
+# its hands put in the lap of the bench and drawn with the compartment.
+func bench_work(delta: float) -> void:
+ var rig: FieldRig=game.player.field_rig
+ var tx: MagazineTransfer=game.inventory.transfer
+ # Out through the doors with the squad: the magazine goes into the pouch
+ # as it is.
+ if exiting() and tx.active:
+  tx.cancel()
+  game.squad.tell("Спорядження магазина перервано: вихід із машини")
+ var working: bool=station()=="troop" and not exiting() and rig.active()
+ if working:
+  var cabin:=vehicle.cabin()
+  var part:=cabin.holder("troop")
+  if not is_instance_valid(lap) or lap.get_parent()!=part:
+   if is_instance_valid(lap):lap.queue_free()
+   lap=Node3D.new();lap.name="PassengerLap";part.add_child(lap)
+  lap.transform=Transform3D(Basis(Vector3.UP,cabin.facing("troop"))*Basis(Vector3.RIGHT,LAP_PITCH),cabin.eye("troop")+Vector3(0,-0.04,0))
+  rig.seat_in(lap,BmpArt.INTERIOR_LAYER)
+  # The eyes go down to the hands as the work begins.
+  if tx.active and not was_working:glance=0.6
+ elif rig.seated:rig.stand_up()
+ was_working=working and tx.active
+ if glance>0.0:
+  glance=maxf(0.0,glance-delta)
+  look=look.lerp(WORK_LOOK,clampf(delta*6.0,0.0,1.0))
+ rig.tick(delta)
+
+func work_text() -> String:
+ var tx: MagazineTransfer=game.inventory.transfer
+ if not tx.active:return ""
+ if tx.box_bag!=null and tx.draw_left>0:return "ПАЧКА З НАПЛІЧНИКА"
+ if tx.moved>=tx.planned:return "МАГАЗИН У ПІДСУМОК"
+ return "СПОРЯДЖЕННЯ МАГАЗИНА · %d / %d · TAB — ІНВЕНТАР, «ЗУПИНИТИ»" % [int(tx.destination.rounds),int(tx.weapon.data.capacity)]
+
 func read_controls(delta: float) -> void:
  var v:=vehicle
  if game.commands_open:
@@ -500,7 +547,9 @@ func hint_text() -> String:
   return "W ПАЛИВО  S ГАЛЬМО  A/D ШТУРВАЛ  SHIFT ГОЛОВНИЙ ФРИКЦІОН  Q/E ПЕРЕДАЧА  I МАСА  X СТАРТЕР  SPACE СТОЯНКОВЕ\nV ЛЮК  R РАДІО  %s  1 ДЕСАНТ  2 ПО МІСЦЯХ  3 ЗА БМП  4 ШТУРМ РОЗСИПОМ  G КОМАНДИ  F ВИЙТИ" % ("ПКМ ЩИТОК" if vehicle.hatch_open else "МИША ОГЛЯД  ПКМ НА ПРИЗМІ — ДИВИТИСЯ, НА ЩИТКУ — ЩИТОК")
  if exiting():return "ВИХІД ЧЕРЕЗ ПРАВІ ДВЕРІ…"
  if head_out:return "ЛКМ ВОГОНЬ  ПКМ ПРИЦІЛ  R ПЕРЕЗАРЯДИТИ  ·  V — СХОВАТИСЯ В ДЕСАНТНЕ ВІДДІЛЕННЯ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
- return "МИША — ОГЛЯД  ·  ПКМ НА ПРИЗМІ — ДИВИТИСЯ  ·  V — ВИГЛЯНУТИ З ЛЮКА З АВТОМАТОМ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
+ var work:=work_text()
+ if work!="":return work+"\nМИША — ОГЛЯД  ·  F — ВИЙТИ (НА ЗУПИНЦІ)"
+ return "МИША — ОГЛЯД  ·  ПКМ НА ПРИЗМІ — ДИВИТИСЯ  ·  V — ВИГЛЯНУТИ З ЛЮКА З АВТОМАТОМ  ·  TAB — СПОРЯДИТИ МАГАЗИНИ  ·  F — ВИЙТИ (НА ЗУПИНЦІ)  ·  M — КАРТА"
 
 # The passenger climbs in through an open door of his squad's vehicle.
 func troop_prompt() -> String:
@@ -520,7 +569,7 @@ func station_prompt() -> String:
 
 func squad_status() -> String:
  if not is_instance_valid(squad):return ""
- var phase: String={"mounted":"ДЕСАНТ У МАШИНІ","dismount":"СПІШУВАННЯ","guard":"КРУГОВА ОБОРОНА ЗА КОРМОЮ","file":"КОЛОНОЮ ЗА БМП","assault":"ШТУРМ РОЗСИПОМ","mount":"ПОСАДКА","afoot":"ПІШКИ, БЕЗ МАШИНИ"}.get(squad.state,squad.state.to_upper())
+ var phase: String={"field":"СПІШЕНІ БІЛЯ МАШИНИ","mounted":"ДЕСАНТ У МАШИНІ","dismount":"СПІШУВАННЯ","guard":"КРУГОВА ОБОРОНА ЗА КОРМОЮ","file":"КОЛОНОЮ ЗА БМП","assault":"ШТУРМ РОЗСИПОМ","mount":"ПОСАДКА","afoot":"ПІШКИ, БЕЗ МАШИНИ"}.get(squad.state,squad.state.to_upper())
  return "ВІДДІЛЕННЯ · %s · У МАШИНІ %d · ПІШКИ %d · ДО БОЮ ЗДАТНІ %d" % [phase,squad.aboard().size(),squad.on_foot().size(),squad.living()]
 
 func column_text() -> String:
