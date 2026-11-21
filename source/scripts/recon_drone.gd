@@ -33,10 +33,20 @@ var zoom := 1.0
 var base_fov := 95.0
 var return_camera: Camera3D
 var on_lost := Callable()
+# Whose it is: the attackers fly the drones; the defenders shoot at them.
+var friendly := true
+# Shot down: it drops out of the air tumbling; the goggles show the fall
+# a moment before the picture is gone.
+var downed := 0.0
+var spin_axis := Vector3.RIGHT
+# Rounds going past: the pilot is told he is being shot at.
+var fired_on := 0.0
+const FALL_SHOWN := 1.2
 
 func setup(owner_operator: Operator, entry: Dictionary) -> void:
  operator=owner_operator
  top_level=true
+ add_to_group("drones")
  collision_layer=32
  collision_mask=1|2|4|8
  floor_max_angle=deg_to_rad(56)
@@ -88,6 +98,9 @@ func handle_input(event: InputEvent) -> void:
  if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_F:
   if landed:armed=false;notice="МОТОРИ ВИМКНЕНО · J — ЗНЯТИ ОКУЛЯРИ"
   else:notice="СПЕРШУ ПОСАДИ ДРОН · CTRL — ЗНИЖЕННЯ"
+
+# In the air under power: what the enemy hears and shoots at.
+func flying() -> bool:return armed and health>0 and not landed
 
 func ground_clearance() -> float:
  var ray := PhysicsRayQueryParameters3D.create(global_position,global_position+Vector3.DOWN*200,1,[get_rid()])
@@ -148,7 +161,8 @@ func _physics_process(delta: float) -> void:
   var collision := get_slide_collision(i)
   var impact := maxf(0,-before.dot(collision.get_normal()))
   if impact>5.5:health=maxf(0,health-(impact-5.5)*0.12)
- if health<=0:armed=false;notice="ДРОН ПОШКОДЖЕНО"
+ if health<=0 and downed<=0.0:armed=false;notice="ДРОН ПОШКОДЖЕНО"
+ fired_on=maxf(0.0,fired_on-delta)
  var local_velocity := Basis(Vector3.UP,yaw).inverse()*velocity
  # Rest on the supporting slope; level the airframe as the motors lift it.
  var target_basis := Basis(Vector3.UP,yaw)
@@ -156,7 +170,10 @@ func _physics_process(delta: float) -> void:
   var normal := get_floor_normal()
   var back := (target_basis.z-normal*target_basis.z.dot(normal)).normalized()
   target_basis=Basis(normal.cross(back).normalized(),normal,back)
- quaternion=quaternion.slerp(target_basis.get_rotation_quaternion(),1-exp(-delta*8))
+ if downed>0.0 and not landed:
+  # Falling with a motor or a prop shot away: it turns over.
+  rotate(spin_axis,delta*7.0)
+ else:quaternion=quaternion.slerp(target_basis.get_rotation_quaternion(),1-exp(-delta*8))
  model.rotation.x=lerpf(model.rotation.x,-local_velocity.z*0.035,1-exp(-delta*6))
  model.rotation.z=lerpf(model.rotation.z,-local_velocity.x*0.035,1-exp(-delta*6))
  camera.rotation=Vector3(camera_pitch+model.rotation.x*0.3,0,model.rotation.z*0.25)
@@ -165,13 +182,36 @@ func _physics_process(delta: float) -> void:
  elif not armed and motor_sound.playing:motor_sound.stop()
  motor_sound.pitch_scale=1.0+velocity.length()*0.025
  motor_sound.volume_db=-9+linear_to_db(maxf(operator.game.volume,0.0001))
- if piloting and (health<=0 or (battery<=0 and landed)):
+ if downed>0.0:downed+=delta
+ if piloting and ((health<=0 and (downed<=0.0 or downed>FALL_SHOWN or landed)) or (battery<=0 and landed)):
   if on_lost.is_valid():on_lost.call()
   else:operator.field_rig.cancel()
 
+# A rifle round through it, or fragments of a burst nearby: a quadcopter of
+# this class does not fly on with a motor, a prop arm or the battery hit.
 func receive_hit(amount: float, _zone: String, _incoming: Vector3, _point: Vector3) -> void:
+ if health<=0:return
+ var airborne:=armed and not landed
  health=maxf(0,health-amount/25.0)
- if health<=0:armed=false
+ if health>0:return
+ armed=false
+ if airborne:
+  downed=0.001
+  spin_axis=Vector3(randf_range(-1,1),randf_range(-0.3,0.3),randf_range(-1,1)).normalized()
+  notice="ДРОН ЗБИТО"
+  if is_instance_valid(operator) and operator.field_rig!=null:operator.field_rig.drone_notice="Дрон збито."
+  if is_instance_valid(operator) and is_instance_valid(operator.game):
+   operator.game.spatial_shot("bolt",global_position,-4)
+   GradEffects.shared(operator.game).puff(global_position,0.6,0.35,Vector3(0,-0.4,0))
+
+# A round past it, close: the pilot sees the warning on the goggles.
+func near_miss() -> void:
+ if health>0:fired_on=2.0
+
+# The red line across the picture: shot down, or rounds going past.
+func alarm() -> String:
+ if downed>0.0:return "ДРОН ЗБИТО"
+ return "ПО ДРОНУ ВЕДУТЬ ВОГОНЬ" if fired_on>0.0 else ""
 
 func can_recover() -> bool:
  if not landed or armed or global_position.distance_to(operator.camera.global_position)>2.3:return false

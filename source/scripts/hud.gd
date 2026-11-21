@@ -132,6 +132,10 @@ func draw_drone_view() -> void:
 	for side in [-1,1]:draw_line(center+Vector2(side*10,0),center+Vector2(side*45,0),ink,1)
 	draw_line(center+Vector2(0,-8),center+Vector2(0,8),ink,1)
 	draw_string(font,Vector2(40,size.y-95),drone.notice,HORIZONTAL_ALIGNMENT_LEFT,-1,16,ink)
+	var alarm := drone.alarm()
+	if alarm!="":
+		var blink := 0.55+0.45*absf(sin(float(Time.get_ticks_msec())*0.008))
+		draw_string(font,Vector2(0,size.y*0.30),alarm,HORIZONTAL_ALIGNMENT_CENTER,size.x,26,Color(0.92,0.32,0.26,blink))
 	draw_string(font,Vector2(40,size.y-65),"WASD — РУХ · МИША — КУРС / КАМЕРА · SPACE / CTRL — ВИСОТА · SHIFT — ШВИДШЕ",HORIZONTAL_ALIGNMENT_LEFT,-1,15,ink)
 	draw_string(font,Vector2(40,size.y-39),"J — ЗНЯТИ ОКУЛЯРИ (ДРОН ЗАВИСНЕ, КАРТИНКА — НА НАРУЧНОМУ ЕКРАНІ, U) · F — МОТОРИ ПІСЛЯ ПОСАДКИ",HORIZONTAL_ALIGNMENT_LEFT,-1,15,ink)
 	if drone.signal_strength<0.3:

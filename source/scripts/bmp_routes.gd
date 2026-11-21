@@ -81,6 +81,47 @@ static func vehicle_grid(district: Node3D) -> AStarGrid2D:
    else:grid.set_point_weight_scale(cell,source.get_point_weight_scale(cell)*(MARGIN_COST if near[z*w+x]==1 else 1.0))
  return grid
 
+# Ruins are open to the tracks: a collapsed house leaves a heap a vehicle
+# drives over (Demolition.rubble), dear to cross, as it crawls over it. The
+# cells round the heap are worked out again from the terrain and the
+# obstacles still standing, heaps left out.
+const RUBBLE_COST := 3.0
+static func open_rubble(district: Node3D, grid: AStarGrid2D, bounds: AABB) -> void:
+ if grid==null or district.navigation_base.is_empty():return
+ var region:=grid.region
+ var scale: float=district.navigation_scale
+ var inner: Rect2i=district.navigation_rect(bounds).grow(MARGIN+1).intersection(region)
+ var outer: Rect2i=inner.grow(MARGIN).intersection(region)
+ var w: int=outer.size.x;var h: int=outer.size.y
+ if w<=0 or h<=0:return
+ var area:=AABB(Vector3(outer.position.x/scale,-100,outer.position.y/scale),Vector3(w/scale,200,h/scale))
+ var standing: Array=district.navigation_obstacles.near(area).filter(func(record):return not record.get("rubble",false))
+ var solid:=PackedByteArray();solid.resize(w*h)
+ for z in range(h):
+  for x in range(w):
+   var cell: Vector2i=outer.position+Vector2i(x,z)
+   var blocked: bool=district.navigation_base[(cell.y-region.position.y)*region.size.x+cell.x-region.position.x]==1
+   if not blocked:
+    var point:=Vector3(cell.x/scale,0,cell.y/scale)
+    point.y=district.ground_height(point)
+    for record in standing:
+     if NavigationObstacles.blocks(record,point,cell):blocked=true;break
+   solid[z*w+x]=1 if blocked else 0
+ var closed:=dilate(solid,w,h,CLEARANCE)
+ var near:=dilate(solid,w,h,MARGIN)
+ var heaps: Dictionary=district.get_meta("rubble_cells",{})
+ for z in range(inner.position.y,inner.end.y):
+  for x in range(inner.position.x,inner.end.x):
+   var cell:=Vector2i(x,z)
+   var i: int=(z-outer.position.y)*w+x-outer.position.x
+   grid.set_point_solid(cell,closed[i]==1)
+   if closed[i]==1:continue
+   var weight: float=district.navigation_weights[(z-region.position.y)*region.size.x+x-region.position.x]
+   grid.set_point_weight_scale(cell,weight*(MARGIN_COST if near[i]==1 else 1.0)*(RUBBLE_COST if heaps.has(cell) else 1.0))
+
+static func on_rubble(district: Node3D, point: Vector3) -> bool:
+ return district.has_meta("rubble_cells") and district.get_meta("rubble_cells").has(district.navigation_cell(point))
+
 # Square dilation of a mask, separable: rows, then columns.
 static func dilate(mask: PackedByteArray, w: int, h: int, reach: int) -> PackedByteArray:
  var rows:=PackedByteArray();rows.resize(w*h)
@@ -152,10 +193,13 @@ static func sight_blocked(space: PhysicsDirectSpaceState3D, from: Vector3, to: V
  return not space.intersect_ray(query).is_empty()
 
 # Room for the hull to turn: free cells two out in every direction of the
-# vehicle's grid (where the walls are already grown by half the hull).
+# vehicle's grid (where the walls are already grown by half the hull), off
+# the ruins.
 static func roomy(grid: AStarGrid2D, district: Node3D, point: Vector3) -> bool:
  var c:=cell_of(district,point)
  if not grid.is_in_boundsv(c) or grid.is_point_solid(c):return false
+ # Not on a heap of rubble: crossed, never stopped on.
+ if on_rubble(district,point):return false
  for d in [Vector2i(2,0),Vector2i(-2,0),Vector2i(0,2),Vector2i(0,-2),Vector2i(2,2),Vector2i(-2,2),Vector2i(2,-2),Vector2i(-2,-2)]:
   var n:Vector2i=c+d
   if not grid.is_in_boundsv(n) or grid.is_point_solid(n):return false

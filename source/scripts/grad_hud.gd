@@ -317,6 +317,8 @@ func draw_drone() -> void:
   text(Vector2(30,size.y-110),"ЛД %.0f м · %s · h %.0f м" % [reading.distance,command.data.coordinates_text(p),command.data.altitude(p.y)],17,AMBER)
  text(Vector2(30,size.y-84),"T — ПОЗНАЧИТИ ЦІЛЬ · КОЛЕСО — ЗУМ · WASD / SPACE / CTRL — ПОЛІТ · SHIFT — ШВИДКО · J — ДО ПУЛЬТА",14,ink)
  if d.notice!="":text(Vector2(30,size.y-58),d.notice,15,ink)
+ var alarm:=d.alarm()
+ if alarm!="":text(Vector2(0,size.y*0.30),alarm,24,Color(RED,0.55+0.45*absf(sin(float(Time.get_ticks_msec())*0.008))),HORIZONTAL_ALIGNMENT_CENTER,size.x)
  var y:=maxf(100.0,top()-20.0)
  for t in command.targets:
   text(Vector2(size.x-330,y),"%s  %s" % [t.name,command.data.coordinates_text(t.point)],13,ink);y+=18

@@ -230,12 +230,7 @@ static func build(world: District) -> void:
 
 # A fence panel pushed over: its board and post leave the merged mesh.
 static func knock_fence(body: Node) -> void:
- var instance: MeshInstance3D=body.get_meta("fence_mesh",null)
- if not is_instance_valid(instance):return
- var mesh: ColorMesh=instance.get_meta("color_mesh")
- var span: Vector2i=body.get_meta("fence_range")
- for i in range(span.x,span.y):mesh.vertices[i]=mesh.vertices[span.x]
- instance.mesh=mesh.build(instance.mesh.surface_get_material(0))
+ Demolition.take_out(body.get_meta("fence_mesh",null),body.get_meta("fence_range"))
 
 static func chunk(at: Vector3) -> ColorMesh:
  # A house goes whole into one block, so that it can be taken out of it.

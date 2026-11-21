@@ -58,6 +58,10 @@ func step_projectiles(delta: float) -> void:
 	if not is_instance_valid(game) or not game.running or game.paused:return
 	var space := game.get_world_3d().direct_space_state
 	if not indexed:index_soldiers()
+	# Drones in the air: a round going close past one is a warning to its pilot.
+	var drones: Array=[]
+	for drone in game.get_tree().get_nodes_in_group("drones"):
+		if drone.flying():drones.append(drone)
 	for index in range(projectiles.size()-1,-1,-1):
 		var bullet: Dictionary=projectiles[index]
 		var position: Vector3=bullet.position
@@ -142,6 +146,10 @@ func step_projectiles(delta: float) -> void:
 						# A near miss is one impulse per bullet, independent of substep size.
 						bullet.suppressed[identity]=true
 						bot.suppress(position,0.8)
+		for drone in drones:
+			if not (shooter is Hostile) or shooter.friendly==drone.friendly:continue
+			var at: Vector3=drone.global_position
+			if Geometry3D.get_closest_point_to_segment(at,position,segment_end).distance_to(at)<4.0:drone.near_miss()
 		if not hit.is_empty():
 			var actor: Object=hit.collider.get_meta("actor") if hit.collider.has_meta("actor") else null
 			var energy_factor := clampf(next[1].length_squared()/(float(bullet.speed)*float(bullet.speed)),0.0,1.0)

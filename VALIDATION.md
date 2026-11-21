@@ -1,3 +1,31 @@
+# 0.30.0 validation — 2026-11-21
+
+The BMP-2 over the ruins of fallen houses, overcast weather in Avdiivka,
+drones brought down by rifle fire and bursts, the enemy firing at our drones.
+
+- New test_rubble_drive (19 checks, --fixed-fps 60): the heap of a house a
+  Grad rocket brought down is a convex mound ≈0.92 m high with 14° sides; a
+  rifle round stops in it; the walking map stays closed under it, the vehicle
+  grid opens at RUBBLE_COST 3 and a route across the ruins is under 1.3× the
+  straight line; a BMP crawls over (top 0.82 m, tilt 14°, ≈3.1 m/s on the
+  heap) and runs over at 21 km/h (tilt 15°) without touching its belly; every
+  heap ≤14°; a wall corner stub is rammed and taken out of the mesh.
+- New test_drone_shot (16 checks, --fixed-fps 60): one 5.45 round brings a
+  hovering drone down, it tumbles (>0.6 rad) and lands; the goggles show the
+  fall for ≈1.2 s, then lose the picture; an enemy ignores a landed drone, one
+  of his own side and one beyond sight; facing one of ours at 23 m he notices
+  it in 0.3–0.7 s, fires about 0.6 s later and brings it down in 1.2–3.5 s
+  (2–7 rounds over seeds 404/11/22/33/44); the pilot is warned; he stops
+  firing at a drone that is down; a burst nearby brings one down.
+- Avdiivka overcast (sky, ambient, fog, saturation 0.6, brightness 0.9, sun
+  0.26) checked in windowed renders; render_ruins (heap, street, BMP climbing
+  and on top) and render_drone_fire (the enemy aiming up, the goggles warning,
+  the tumbling picture) looked right.
+- Full suite from source: 58 scenarios pass.
+- Exported pck with the shipped kvartal.x86_64 via --main-pack:
+  `--quit-after 300` with no ERROR lines; test_rubble_drive, test_drone_shot,
+  test_demolition, test_field_start and test_recon_drone pass.
+
 # 0.29.0 validation — 2026-11-21
 
 Great assault: houses collapse under heavy fire and bury the men inside,

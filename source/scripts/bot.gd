@@ -128,6 +128,20 @@ var n_capsule: CapsuleShape3D
 var sight_points: Array[Node3D]=[]
 var shape_down := -1.0
 var shape_stance := -1.0
+# A drone of the other side: heard close by or seen in the air, noticed after
+# a moment, then shot at with a lead when no man of the other side in sight
+# nearer than DRONE_FIRST comes first and the shells do not keep heads down.
+# A small quadcopter is heard over the battle within some 50 m and seen
+# against the sky to about 120 m; high up it is a speck a rifle rarely hits.
+const DRONE_HEARD := 50.0
+const DRONE_SIGHT := 120.0
+const DRONE_FIRST := 60.0
+var drone_target: ReconDrone
+var drone_notice := 0.0
+var drone_lost := 0.0
+var drone_aim := Vector3.INF
+var drone_aim_time := 0.0
+var drone_lead := 1.0
 
 func setup(owner_game: Node3D, spawn: Vector3) -> void:
 	game=owner_game
@@ -467,6 +481,7 @@ func _tick(delta: float) -> void:
 				radio_timer=2.0
 				for ally in (game.allies if friendly else game.bots):
 					if ally!=self and ally.global_position.distance_to(global_position)<85:ally.report_contact(target)
+		if not friendly:spot_drone(eye,think_timer)
 		if friendly:
 			if cover_timer<=0 and (order in ["engage","assault"] or follow_concealment or (alerted and contact_age<15) or under_fire_time>0):find_cover()
 		elif alerted and cover_timer<=0 and (flank_timer<=0 or suppression>1.4) and (not has_cover or suppression>0.4 or contact_age>7):find_cover()
@@ -503,6 +518,14 @@ func _tick(delta: float) -> void:
 			cover_timer=8
 			no_sight_time=0
 	var hide := at_cover and ((friendly and under_fire_time>0 and squad_role!="cover") or shelled>0 or suppression>1.4 or reload_active or (squad_role!="cover" and fmod(peek_clock,4.8)<2.3))
+	var drone_fire := drone_engaged() and not (sees_player and distance<DRONE_FIRST) and shelled<=0 and suppression<=1.4 and not reload_active and wound_timer<=0 and arm_wound<0.5 and collapse<0.01 and treatment_time<=0
+	if drone_fire:
+		hide=false
+		var at: Vector3=drone_target.global_position
+		drone_aim=at+drone_target.velocity*(n_head.global_position.distance_to(at)/760.0)*drone_lead
+	else:
+		drone_aim=Vector3.INF
+		drone_aim_time=0.0
 	# A halted assault waits under cover; peeking resumes only on contact.
 	# Within arm's reach of the chosen cover counts as being there.
 	var holding: bool=friendly and has_cover and global_position.distance_to(cover_point)<4.0 and game.squad.holding(self)
@@ -513,6 +536,9 @@ func _tick(delta: float) -> void:
 	# Fire discipline in a halted assault: aimed shots at seen enemies only.
 	suppressive_fire=squad_role=="cover" and not sees_player and suppress_age<8 and not reload_active and not holding
 	blind_fire=at_cover and not sees_player and (suppression>0.7 or suppressive_fire) and suppress_age<8 and (peek_side!=0 or peek_top) and not reload_active and not holding
+	if drone_fire:
+		blind_fire=false
+		suppressive_fire=false
 	if at_cover and not hide and peek_side!=0:desired_stance=0.8
 	if blind_fire:desired_stance=1.0
 	if friendly and (follow_crouch or (follow_concealment and has_cover) or under_fire_time>0):desired_stance=maxf(desired_stance,1.0)
@@ -524,7 +550,7 @@ func _tick(delta: float) -> void:
 		# when no cover is near; they rise to a knee to fire.
 		var lie := (at_cover and cover_requires_prone and hide) or (shelled>0 and not has_cover)
 		tactical_prone=move_toward(tactical_prone,1.0 if lie else 0.0,delta*3)
-	var aiming := alerted and not hide and not reload_active and wound_timer<=0 and arm_wound<0.5 and contact_age<8
+	var aiming := (alerted and not hide and not reload_active and wound_timer<=0 and arm_wound<0.5 and contact_age<8) or drone_fire
 	aim_weight=move_toward(aim_weight,1.0 if aiming else 0.0,delta*3)
 	if aiming and sees_player:aim_time+=delta
 	else:aim_time=maxf(0,aim_time-delta*3)
@@ -576,10 +602,14 @@ func _tick(delta: float) -> void:
 	velocity.y-=19*delta
 	slide(delta)
 	var look: Vector3=game.squad.look_direction(self,direction) if friendly else (target-position if alerted else direction)
+	if drone_fire:look=drone_aim-position
 	if look.length()>0.1:
 		var desired := atan2(-look.x,-look.z)
 		rotation.y+=clampf(angle_difference(rotation.y,desired),-delta*2.2,delta*2.2)
 	animate_pose(delta,direction.length()>0.1)
+	if drone_fire:
+		fire_at_drone(delta)
+		return
 	var ready := sees_player and reaction_left<=0 and not hide and aim_time>(0.18 if panic_time>0 else 0.65+distance*0.004)*(1+concussion.severity*3)
 	if sprinting or reaction_left>0 or not (ready or blind_fire or suppressive_fire) or arm_wound>=0.5 or wound_timer>0 or weapon.phase!="":
 		shoot_timer=maxf(0,shoot_timer)
@@ -636,6 +666,8 @@ func animate_pose(delta: float, moving: bool) -> void:
 	if weapon.phase=="rack":bolt.position.z=sin(clampf(weapon.clock/weapon.phase_duration(),0,1)*PI)*0.075
 	var aim_pitch := 0.0
 	if alerted:aim_pitch=clampf(atan2((target.y+known_height-0.12)-global_position.y-(1.52-0.065-stance*0.365),maxf(1,global_position.distance_to(target))),-0.45,0.45)
+	# Up at a drone, steeply.
+	if drone_aim!=Vector3.INF:aim_pitch=clampf(atan2(drone_aim.y-global_position.y-(1.52-0.065-stance*0.365),maxf(1,Vector2(drone_aim.x-global_position.x,drone_aim.z-global_position.z).length())),-0.45,1.25)
 	rifle.position=Vector3(lerpf(0.14,0.11,aim_weight),1.27+aim_weight*0.25+(0.65 if blind_fire and peek_top else 0),lerpf(-0.28,-0.34,aim_weight))
 	if blind_fire and peek_side!=0:rifle.position.x+=peek_side*0.60
 	rifle.rotation=Vector3(aim_pitch+shot_kick+recoil_offset.y,recoil_offset.x,-0.35 if reload_active else (-peek_side*0.35 if blind_fire else 0))
@@ -651,7 +683,7 @@ func animate_pose(delta: float, moving: bool) -> void:
 	# Positive X tips the face upward: cap extension and keep the chin tucked.
 	var head: Node3D=n_head
 	head.position=Vector3(0.04*aim_weight,1.50-0.07*aim_weight,-0.02*aim_weight)
-	head.rotation=Vector3(clampf(aim_pitch*0.55-0.06*aim_weight,-0.28,0.10),0,-0.14*aim_weight)
+	head.rotation=Vector3(clampf(aim_pitch*0.55-0.06*aim_weight,-0.28,0.10 if drone_aim==Vector3.INF else 0.6),0,-0.14*aim_weight)
 	if tactical_prone>collapse:head.rotation.x=lerpf(head.rotation.x,1.25,tactical_prone)
 	# Hands, magazine and dressing are not part of the distant crowd model;
 	# the rifle, head and legs above still carry the hitboxes and the muzzle.
@@ -729,6 +761,78 @@ func shoot(player: Node3D, distance: float) -> bool:
 	game.eject_case(n_rifle.to_global(Vector3(0.04,0.01,0)),n_rifle.global_basis,"ak74")
 	shot_kick=0.045
 	recoil_offset+=Vector2(randf_range(-0.008,0.008),0.021)*(0.65 if stance>0.5 else 1.0)*(1.8 if blind_fire else 1.0)
+	return true
+
+# Drones of the other side in the air, heard within DRONE_HEARD or seen in
+# front or overhead against the sky: the nearest is noticed after a moment
+# (sooner close by), and forgotten three seconds after it is out of sight.
+func spot_drone(eye: Vector3, interval: float) -> void:
+	var best: ReconDrone=null
+	var best_distance := DRONE_SIGHT
+	for node in get_tree().get_nodes_in_group("drones"):
+		var drone: ReconDrone=node
+		if drone.friendly==friendly or not drone.flying():continue
+		var at: Vector3=drone.global_position
+		var distance := eye.distance_to(at)
+		if distance>=best_distance:continue
+		var toward := eye.direction_to(at)
+		if distance>DRONE_HEARD and (-global_basis.z).dot(toward)<0.3 and toward.y<0.5:continue
+		if not line_clear(eye,at) or game.district.foliage_visibility(eye,at)<=0:continue
+		best=drone
+		best_distance=distance
+	if best==null:
+		drone_lost+=interval
+		if drone_lost>3.0:
+			drone_target=null
+			drone_notice=0.0
+		return
+	drone_lost=0.0
+	if best!=drone_target:
+		drone_target=best
+		drone_notice=0.0
+	var rate := 2.4 if best_distance<40.0 else lerpf(1.6,0.35,(best_distance-40.0)/(DRONE_SIGHT-40.0))
+	drone_notice=minf(1.5,drone_notice+interval*rate*(1.3 if alerted else 1.0))
+
+func drone_engaged() -> bool:
+	return not friendly and is_instance_valid(drone_target) and drone_target.flying() and drone_notice>=1.0 and drone_lost<1.0
+
+# Bursts at the drone once the rifle is up and on it; each burst with its
+# own guess of the lead.
+func fire_at_drone(delta: float) -> void:
+	drone_aim_time+=delta
+	if sprinting or drone_aim_time<0.6 or weapon.phase!="" or shoot_timer>0.000001:return
+	if burst_left<=0:
+		burst_left=randi_range(3,5)
+		drone_lead=randf_range(0.5,1.3)
+		shoot_timer=0
+	while burst_left>0 and shoot_timer<=0.000001:
+		if not shoot_drone():
+			burst_left=0
+			shoot_timer=0.3
+			break
+		burst_left-=1
+		shoot_timer+=float(weapon.data.interval) if burst_left>0 else randf_range(0.6,1.3)
+
+func shoot_drone() -> bool:
+	if not concussion.can_fire() or dead or reaction_left>0 or sprinting or wound_timer>0 or treatment_time>0 or collapse>0.01 or arm_wound>=0.5:return false
+	var origin: Vector3=n_muzzle.global_position
+	var shoulder := global_position+Vector3.UP*(1.35-stance*0.19)
+	if not line_clear(shoulder,origin) or not line_clear(origin,drone_aim):return false
+	var muzzle_forward: Vector3=-n_rifle.global_basis.z
+	if muzzle_forward.dot(origin.direction_to(drone_aim))<0.72:return false
+	if not safe_fire_lane(origin,drone_aim):return false
+	if not weapon.fire():return false
+	since_shot=0
+	# A small target moving across the sky: wider than at a man, wider the
+	# further it is, and wider still until the rifle has followed it a while.
+	var spread := 0.011+0.006*minf(2.0,origin.distance_to(drone_aim)/60.0)+suppression*0.006+concussion.severity*0.05+(0.012 if drone_aim_time<1.4 else 0.0)
+	var direction := origin.direction_to(drone_aim)+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randf_range(-spread,spread),randf_range(-spread,spread),randf_range(-spread,spread))
+	game.ballistics.launch(origin,direction.normalized(),"ak74",68,self)
+	game.spatial_shot("ak74",origin)
+	game.alert_opponents(self,origin)
+	game.eject_case(n_rifle.to_global(Vector3(0.04,0.01,0)),n_rifle.global_basis,"ak74")
+	shot_kick=0.045
+	recoil_offset+=Vector2(randf_range(-0.008,0.008),0.021)*(0.65 if stance>0.5 else 1.0)
 	return true
 
 func receive_hit(amount: float, zone: String, incoming: Vector3, _point: Vector3) -> void:

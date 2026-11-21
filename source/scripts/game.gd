@@ -31,6 +31,8 @@ var player_class := "rifleman"
 var world_root: Node3D
 var menu_camera: Camera3D
 var sunlight: DirectionalLight3D
+var sky_environment: Environment
+var sky_material: ProceduralSkyMaterial
 var running := false
 var squad_tick := 0.0
 var paused := false
@@ -179,6 +181,8 @@ func setup_environment() -> void:
 	sky_mat.ground_bottom_color=Color("5a6555")
 	sky.sky_material=sky_mat
 	resource.sky=sky
+	sky_environment=resource
+	sky_material=sky_mat
 	resource.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR
 	resource.ambient_light_color=Color("c4d2e4")
 	resource.ambient_light_energy=0.30
@@ -197,12 +201,43 @@ func setup_environment() -> void:
 	sunlight.directional_shadow_max_distance=90.0
 	sunlight.shadow_blur=1.3
 	add_child(sunlight)
+	apply_weather(false)
 	menu_camera=Camera3D.new()
 	menu_camera.fov=65
 	add_child(menu_camera)
 	menu_camera.position=Vector3(5,10,39)
 	menu_camera.look_at(Vector3(0,4,-4))
 	menu_camera.current=true
+
+# Weather of the map. A clear day by default; on the Avdiivka maps (the great
+# assault and the BMP and Grad courses near it) a low, unbroken overcast of
+# late autumn: a grey sky with no sun in it, dim flat light, faint shadows,
+# grey haze over the distance and washed-out colours.
+func apply_weather(overcast: bool) -> void:
+	if sky_environment==null or not is_instance_valid(sunlight):return
+	var sky := sky_material
+	sky.sky_top_color=Color("5f6469") if overcast else Color("7897b0")
+	sky.sky_horizon_color=Color("7f8488") if overcast else Color("c6d1dc")
+	sky.ground_horizon_color=Color("73787b") if overcast else Color("b2bdc7")
+	sky.ground_bottom_color=Color("464a46") if overcast else Color("5a6555")
+	sky.sky_energy_multiplier=0.75 if overcast else 1.0
+	sky_environment.ambient_light_color=Color("9ea4a9") if overcast else Color("c4d2e4")
+	sky_environment.ambient_light_energy=0.34 if overcast else 0.30
+	sky_environment.fog_enabled=overcast
+	sky_environment.fog_light_color=Color("72777c") if overcast else Color("9caeac")
+	sky_environment.fog_density=0.0016 if overcast else 0.0018
+	sky_environment.fog_sky_affect=0.6 if overcast else 1.0
+	sky_environment.adjustment_enabled=overcast
+	sky_environment.adjustment_saturation=0.6 if overcast else 1.0
+	sky_environment.adjustment_brightness=0.9 if overcast else 1.0
+	# The sun is behind the cloud: weak and grey, it does not show in the sky.
+	sunlight.light_color=Color("dfe2e6") if overcast else Color("fff8ef")
+	sunlight.light_energy=0.26 if overcast else 0.62
+	sunlight.shadow_opacity=0.45 if overcast else 1.0
+	sunlight.sky_mode=DirectionalLight3D.SKY_MODE_LIGHT_ONLY if overcast else DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY
+
+func avdiivka() -> bool:
+	return is_instance_valid(district) and str(district.campaign_definition.get("terrain",""))=="avdiivka"
 
 func build_district() -> void:
 	world_root=Node3D.new()
@@ -257,6 +292,7 @@ func start_match() -> void:
 	if district.map_id!=selected_map or selected_map in Campaign.IDS or selected_map==BattleMap.ID:
 		world_root.free()
 		build_district()
+	apply_weather(avdiivka())
 	killed=0
 	elapsed=0
 	damage_flash=0

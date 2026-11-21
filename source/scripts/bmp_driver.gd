@@ -38,6 +38,9 @@ var backing_from := Vector3.ZERO
 var jams := 0
 var jam_progress := -INF
 var jam_point := Vector3.ZERO
+# Over a heap of rubble he crawls in first gear: from a little before the
+# bow reaches it until the stern is off.
+const RUBBLE_SPEED := 2.5
 
 func setup(owner: BmpVehicle) -> void:
  vehicle=owner
@@ -151,6 +154,7 @@ func tick(delta: float) -> void:
  var sharp:=absf(e)
  if sharp>0.3:target_speed=minf(target_speed,lerpf(cruise,1.8,clampf((sharp-0.3)/0.7,0,1)))
  target_speed=minf(target_speed,sqrt(2.0*1.0*maxf(0.0,left-arrive*0.5))+0.6)
+ if rubble_ahead():target_speed=minf(target_speed,RUBBLE_SPEED)
  if reverse_mode:target_speed=minf(target_speed,2.5)
  # Told to wait (a vehicle in the way, the column closing up): stand.
  if cap<0.3 and backing<=0.0:
@@ -181,6 +185,13 @@ func tick(delta: float) -> void:
   backing_from=v.global_position
  steer(delta,wanted)
  drive(delta,speed,target_speed,sharp)
+
+func rubble_ahead() -> bool:
+ var district: Node3D=vehicle.game.district
+ if not is_instance_valid(district) or not district.has_meta("rubble_cells"):return false
+ for reach in [-BmpArt.HALF,0.0,BmpArt.HALF,BmpArt.HALF+4.0,BmpArt.HALF+9.0]:
+  if BmpRoutes.on_rubble(district,point_at(progress+reach)):return true
+ return BmpRoutes.on_rubble(district,vehicle.global_position)
 
 # Off the obstacle: reverse with the yoke over, so the bow swings toward
 # the way on; if it was the reverse that hit something, forward instead.

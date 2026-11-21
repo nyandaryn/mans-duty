@@ -14,6 +14,15 @@ const HITS := {
  "mine":{"direct":38.0,"near":14.0,"reach":2.5,"fences":3.5},
  "cannon":{"direct":5.0,"near":0.0,"reach":0.0,"fences":1.2},
 }
+# The heap a house leaves: walls and roof slumped into a low mound of broken
+# brick, about a metre for a single storey, spilt a little past where the
+# walls stood. Its sides are no steeper than a BMP-2 runs up without its nose
+# or stern touching (the hull overhangs the end road wheels by 1.4 m at
+# 0.43 m off the ground: 16.6°), so the tracks take it whole.
+const SPILL := 1.2
+const SLOPE := 14.0
+# The foot of the mound goes a little into the ground: no step at its edge.
+const BURY := 0.1
 
 # The ground is one trimesh: each of its triangles would be a separate
 # result of a shape query and crowd out the walls and fences. Left out.
@@ -92,11 +101,20 @@ static func flatten(game: Node3D, body: DestructibleSurface, direction: Vector3)
  var material: String=body.get_meta("ballistic_material","wood")
  district.fragment(body.global_position,Vector3(size.x,size.y,0.03) if body.has_meta("sheet_scale") else size,body.tint,"wood" if body.has_meta("sheet_scale") else material,direction,body.global_basis)
  if body.has_meta("fence_mesh"):BattleMap.knock_fence(body)
+ elif body.has_meta("merged_mesh"):take_out(body.get_meta("merged_mesh"),body.get_meta("merged_range"))
  elif body.batch!=null and body.batch_index>=0:body.batch.set_instance_transform(body.batch_index,Transform3D(Basis.from_scale(Vector3.ZERO),Vector3.ZERO))
  body.collision_layer=0;body.collision_mask=0
  district.refresh_navigation(body.global_transform*bounds,body.get_instance_id(),[])
  body.queue_free()
  game.spatial_shot("bolt",body.global_position,-6)
+
+# A piece drawn into a merged mesh (a fence panel, a wall corner on a heap)
+# leaves it: its vertices fold into one point, the mesh is built again.
+static func take_out(instance, span: Vector2i) -> void:
+ if not is_instance_valid(instance):return
+ var mesh: ColorMesh=instance.get_meta("color_mesh")
+ for i in range(span.x,span.y):mesh.vertices[i]=mesh.vertices[span.x]
+ instance.mesh=mesh.build(instance.mesh.surface_get_material(0))
 
 # The house comes down: walls and roof into a heap in its footprint, the
 # people inside under it, dust, the rumble.
@@ -150,6 +168,11 @@ static func collapse(game: Node3D, house: Dictionary, where: Vector3) -> void:
  var reach:=Vector3(half.x+0.5,0,half.y+0.5)
  district.navigation_rubble=true
  district.refresh_navigation(AABB(origin-Vector3(reach.length(),0.5,reach.length()),Vector3(reach.length()*2,3.0,reach.length()*2)),0,[heap])
+ # The vehicles' map: the heap is open to the tracks.
+ var battle=game.get("battle")
+ if battle!=null and battle.vehicle_grid!=null:
+  var spread:=Vector2(mound(house).base).length()
+  BmpRoutes.open_rubble(district,battle.vehicle_grid,AABB(origin-Vector3(spread,0.5,spread),Vector3(spread*2,3.0,spread*2)))
  # Dust over the heap, brick and slate thrown off the top.
  var effects:=GradEffects.shared(game)
  for k in range(14):
@@ -161,50 +184,130 @@ static func collapse(game: Node3D, house: Dictionary, where: Vector3) -> void:
   district.fragment(at,Vector3(rng.randf_range(0.3,0.8),0.22,rng.randf_range(0.3,0.6)),Color(house.paint),"brick",away.normalized()*3.0+Vector3.UP*2.0,Basis.from_euler(Vector3(rng.randf(),rng.randf()*TAU,rng.randf())))
  game.spatial_shot("collapse",origin+Vector3.UP*2.0,4)
 
-# The heap: broken masonry, slabs of the roof and beams over a low mound, the
-# corners of the walls broken off at uneven heights. One solid, low body: it
-# stops bullets and keeps to the footprint the house had on the walking map.
+# The mound in the house's own frame: half its base (the footprint and the
+# spill), its height, how far in from the foot its sides rise.
+static func mound(house: Dictionary) -> Dictionary:
+ var half: Vector2=house.half
+ var base:=half+Vector2.ONE*SPILL
+ var height:=clampf(minf(half.x,half.y)*0.25,0.6,1.1)
+ var run:=(height+BURY)/tan(deg_to_rad(SLOPE))
+ # A shed leaves too little for the sides: a lower heap, not a steeper one.
+ var room:=minf(base.x,base.y)-0.3
+ if run>room:
+  run=room
+  height=room*tan(deg_to_rad(SLOPE))-BURY
+ return {"base":base,"height":height,"run":run}
+
+# Height of the heap over the ground at a point (x, z) of the house's frame:
+# a flat top, the sides down to the buried foot.
+static func mound_height(shape: Dictionary, at: Vector2) -> float:
+ var base: Vector2=shape.base
+ var edge:=minf(base.x-absf(at.x),base.y-absf(at.y))
+ return -BURY+(float(shape.height)+BURY)*clampf(edge/float(shape.run),0.0,1.0)
+
+# The heap: broken brick over a low mound, slabs of the roof and beams on
+# it, the corners of the walls broken off at uneven heights. The mound is one
+# solid body: it stops bullets, a vehicle drives over it, and on the walking
+# map it keeps to the footprint the house had. The corners stand apart: a
+# BMP or a blast puts them over like a fence.
 static func rubble(district: District, house: Dictionary, rng: RandomNumberGenerator) -> DestructibleSurface:
  var basis:=Basis(Vector3.UP,float(house.yaw))
  var origin: Vector3=house.center
  var half: Vector2=house.half
  var paint:=Color(house.paint);var roof:=Color(house.roof)
- var heap:=clampf(minf(half.x,half.y)*0.4,0.8,1.6)
+ var shape:=mound(house)
+ var base: Vector2=shape.base
+ var height: float=shape.height
+ var run: float=shape.run
+ var lift:=atan((height+BURY)/run)
+ var surface:=func(at: Vector2) -> Vector3:
+  var p:=origin+basis*Vector3(at.x,0,at.y)
+  p.y=district.ground_height(p)+mound_height(shape,at)
+  return p
  var mesh:=ColorMesh.new()
- # The mound in three slumped tiers, higher in the middle.
- for tier in range(3):
-  var scale:=1.0-tier*0.3
-  var turn:=Basis(Vector3.UP,rng.randf_range(-0.15,0.15))
-  var shift:=Vector3(rng.randf_range(-0.2,0.2)*half.x,0,rng.randf_range(-0.2,0.2)*half.y)*tier
-  mesh.box(Transform3D(basis*turn,origin+basis*(shift+Vector3(0,heap*(0.2+tier*0.3),0))),Vector3(half.x*2*scale+0.3,heap*0.42,half.y*2*scale+0.3),paint.darkened(0.35+tier*0.05))
+ # The mound itself, lumpy, in brick dust and plaster.
+ var dust: Array=[paint.darkened(0.4),paint.darkened(0.3),Color("6e6a60"),Color("7a7468"),Color("9a5a44").darkened(0.25)]
+ var nx:=maxi(2,ceili(base.x*2.0/1.1));var nz:=maxi(2,ceili(base.y*2.0/1.1))
+ var grid: Array[Vector3]=[]
+ for j in range(nz+1):
+  for i in range(nx+1):
+   var p: Vector3=surface.call(Vector2(-base.x+base.x*2.0*i/nx,-base.y+base.y*2.0*j/nz))
+   if i>0 and i<nx and j>0 and j<nz:p.y+=rng.randf_range(0.0,0.12)
+   grid.append(p)
+ for j in range(nz):
+  for i in range(nx):
+   var row:=j*(nx+1)
+   mesh.quad(grid[row+i],grid[row+i+1],grid[row+nx+2+i],grid[row+nx+1+i],dust[rng.randi()%dust.size()],Vector3.UP)
+ # Pieces lying on it, along the slope where they lie on a side.
  var colors: Array=[paint,paint.darkened(0.3),Color("9a5a44"),Color("8f8a7c"),roof,Color("2b2621"),roof.darkened(0.2)]
  var pieces:=int(clampf(half.x*half.y*2.4,36,90))
  for k in range(pieces):
-  var u:=Vector2(rng.randf_range(-1,1),rng.randf_range(-1,1))
-  var top:=heap*(1.25-clampf(u.length()*0.6,0.0,0.85))
-  var size:=Vector3(rng.randf_range(0.4,1.4),rng.randf_range(0.2,0.6),rng.randf_range(0.4,1.1))
-  var tilt:=0.6
+  var at:=Vector2(rng.randf_range(-1,1)*(base.x-0.4),rng.randf_range(-1,1)*(base.y-0.4))
+  var size:=Vector3(rng.randf_range(0.4,1.2),rng.randf_range(0.15,0.4),rng.randf_range(0.4,1.0))
+  var tilt:=0.3
   match k%7:
-   5:size=Vector3(rng.randf_range(1.8,3.4),0.14,0.16);tilt=1.0
-   4,6:size=Vector3(rng.randf_range(1.2,2.6),0.07,rng.randf_range(0.9,1.8));tilt=0.9
-  var local:=Vector3(u.x*(half.x+0.6),rng.randf_range(heap*0.35,top),u.y*(half.y+0.6))
-  var turn:=Basis.from_euler(Vector3(rng.randf_range(-tilt,tilt),rng.randf()*TAU,rng.randf_range(-tilt,tilt)))
-  mesh.box(Transform3D(basis*turn,origin+basis*local),size,colors[k%colors.size()])
+   5:size=Vector3(rng.randf_range(1.8,3.2),0.14,0.16);tilt=0.25
+   4,6:size=Vector3(rng.randf_range(1.2,2.4),0.07,rng.randf_range(0.9,1.6));tilt=0.2
+  var normal:=Vector3.UP
+  var edge_x:=base.x-absf(at.x);var edge_z:=base.y-absf(at.y)
+  if minf(edge_x,edge_z)<run:
+   var out:=Vector3(signf(at.x),0,0) if edge_x<edge_z else Vector3(0,0,signf(at.y))
+   normal=Vector3.UP*cos(lift)+out*sin(lift)
+  var lay:=Basis(Quaternion(Vector3.UP,normal))*Basis.from_euler(Vector3(rng.randf_range(-tilt,tilt),rng.randf()*TAU,rng.randf_range(-tilt,tilt)))
+  mesh.box(Transform3D(basis*lay,surface.call(at)+basis*(normal*size.y*0.15)),size,colors[k%colors.size()])
+ # The corners of the walls, each wing drawn apart to be taken out alone.
+ var corners: Array=[]
  for corner in [Vector2(-1,-1),Vector2(1,-1),Vector2(1,1),Vector2(-1,1)]:
   if rng.randf()<0.35:continue
   var high:=rng.randf_range(0.9,2.6)
   var along_x:=minf(rng.randf_range(0.8,2.4),half.x);var along_z:=minf(rng.randf_range(0.8,2.4),half.y)
-  mesh.box(Transform3D(basis,origin+basis*Vector3(corner.x*(half.x-along_x*0.5),high*0.5,corner.y*(half.y-0.15))),Vector3(along_x,high,0.3),paint)
-  mesh.box(Transform3D(basis,origin+basis*Vector3(corner.x*(half.x-0.15),high*0.4,corner.y*(half.y-along_z*0.5))),Vector3(0.3,high*0.8,along_z),paint)
+  for wing in [[Vector2(corner.x*(half.x-along_x*0.5),corner.y*(half.y-0.15)),Vector3(along_x,high,0.3)],[Vector2(corner.x*(half.x-0.15),corner.y*(half.y-along_z*0.5)),Vector3(0.3,high*0.8,along_z)]]:
+   var at: Vector2=wing[0]
+   var size: Vector3=wing[1]+Vector3(0,0.2,0)
+   var center:=Vector3(origin.x,0,origin.z)+basis*Vector3(at.x,0,at.y)
+   center.y=district.ground_height(center)-0.2+size.y*0.5
+   var first:=mesh.vertices.size()
+   mesh.box(Transform3D(basis,center),size,paint)
+   corners.append([center,size,Vector2i(first,mesh.vertices.size())])
  var instance:=MeshInstance3D.new();instance.name="Rubble"
  instance.mesh=mesh.build(ColorMesh.material(district))
+ instance.set_meta("color_mesh",mesh)
  district.add_child(instance)
- var body:=district.collider(origin+basis*Vector3(0,heap*0.5,0),Vector3(half.x*2,heap,half.y*2),"brick") as DestructibleSurface
+ for item in corners:
+  var wall:=district.collider(item[0],item[1],"brick") as DestructibleSurface
+  wall.basis=basis
+  wall.tint=paint
+  wall.set_meta("surface_color",paint)
+  wall.set_meta("indestructible",true)
+  wall.set_meta("crushable",true)
+  wall.set_meta("merged_mesh",instance);wall.set_meta("merged_range",item[2])
+ # The mound's body: the hull of its foot and its top.
+ var body:=district.collider(origin,Vector3(half.x*2,height,half.y*2),"brick") as DestructibleSurface
  body.basis=basis
+ var points:=PackedVector3Array()
+ var low:=INF;var top:=-INF
+ for corner in [Vector2(-1,-1),Vector2(1,-1),Vector2(1,1),Vector2(-1,1)]:
+  for inner in [base,base-Vector2.ONE*run]:
+   var local:=basis.inverse()*(Vector3(surface.call(corner*inner))-origin)
+   points.append(local)
+   low=minf(low,local.y);top=maxf(top,local.y)
+ var hull:=ConvexPolygonShape3D.new();hull.points=points
+ var collision: CollisionShape3D=body.get_child(0)
+ collision.shape=hull
+ collision.set_meta("navigation_box",AABB(Vector3(-half.x,low,-half.y),Vector3(half.x*2,top-low,half.y*2)))
  body.tint=paint.darkened(0.3)
  body.set_meta("surface_color",paint.darkened(0.3))
  body.set_meta("indestructible",true)
  body.set_meta("rubble",true)
+ # The cells the heap covers: the vehicles' routes and their drivers.
+ var cells: Dictionary=district.get_meta("rubble_cells",{})
+ var scale: float=district.navigation_scale
+ var reach:=base.length()
+ for z in range(floori((origin.z-reach)*scale),ceili((origin.z+reach)*scale)+1):
+  for x in range(floori((origin.x-reach)*scale),ceili((origin.x+reach)*scale)+1):
+   var local:=basis.inverse()*Vector3(x/scale-origin.x,0,z/scale-origin.z)
+   if absf(local.x)<base.x and absf(local.z)<base.y:cells[Vector2i(x,z)]=true
+ district.set_meta("rubble_cells",cells)
  return body
 
 static func sound() -> AudioStreamWAV:

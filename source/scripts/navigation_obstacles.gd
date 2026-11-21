@@ -28,18 +28,26 @@ func add_body(body: StaticBody3D) -> void:
  var keys: Array[int]=[]
  for collision in body.get_children():
   if not collision is CollisionShape3D or collision.disabled:continue
-  var local: AABB=AABB(-collision.shape.size/2,collision.shape.size) if collision.shape is BoxShape3D else collision.shape.get_debug_mesh().get_aabb()
+  var local:=local_bounds(collision)
   var bounds: AABB=collision.global_transform*local
   var key: int=collision.get_instance_id()
   var occupied := tiles(bounds)
   var low := Vector2i(floori((bounds.position.x-0.6)*navigation_scale),floori((bounds.position.z-0.6)*navigation_scale))
   var high := Vector2i(ceili((bounds.end.x+0.6)*navigation_scale),ceili((bounds.end.z+0.6)*navigation_scale))
-  shapes[key]={"local":local,"bounds":bounds,"cells":Rect2i(low,high-low+Vector2i.ONE),"inverse":collision.global_transform.affine_inverse(),"tiles":occupied,"cell":1.0/navigation_scale}
+  shapes[key]={"local":local,"bounds":bounds,"cells":Rect2i(low,high-low+Vector2i.ONE),"inverse":collision.global_transform.affine_inverse(),"tiles":occupied,"cell":1.0/navigation_scale,"rubble":body.has_meta("rubble")}
   keys.append(key)
   for tile in occupied:
    if not buckets.has(tile):buckets[tile]={}
    buckets[tile][key]=true
  bodies[id]=keys
+
+# What a shape takes of the walking map, in its own frame: a box as it is,
+# another shape by its bounds, or what it says (a heap of rubble keeps to
+# the footprint of its house, not its spill).
+static func local_bounds(collision: CollisionShape3D) -> AABB:
+ if collision.has_meta("navigation_box"):return collision.get_meta("navigation_box")
+ if collision.shape is BoxShape3D:return AABB(-collision.shape.size/2,collision.shape.size)
+ return collision.shape.get_debug_mesh().get_aabb()
 
 func build(world: Node3D) -> void:
  shapes.clear();buckets.clear();bodies.clear()

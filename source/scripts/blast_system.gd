@@ -223,6 +223,15 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
   if mine:intensity*=posture_factor(actor)
   if intensity<0.015:continue
   actor.receive_blast((GRAD_DAMAGE if grad else (CANNON_DAMAGE if cannon else (MINE_DAMAGE if mine else 240.0)))*intensity,clampf(intensity*1.35,0,1),where.direction_to(actor.global_position))
+ # A drone near the burst, in the air or on the ground: fragments and the
+ # blast wave bring it down.
+ for drone in get_tree().get_nodes_in_group("drones"):
+  if drone.health<=0:continue
+  var distance: float=drone.global_position.distance_to(where)
+  if distance>=reach:continue
+  var intensity:=pow(maxf(0,1-distance/reach),2)*transmission(source,drone.global_position)
+  if intensity<0.015:continue
+  drone.receive_hit((GRAD_DAMAGE if grad else (CANNON_DAMAGE if cannon else (MINE_DAMAGE if mine else 240.0)))*intensity,"blast",where.direction_to(drone.global_position),drone.global_position)
  # Bursts pin down everyone close by: heads down, into cover, no peeking.
  for bot in game.bots+game.allies:
   if bot.dead or bot.vehicle!=null:continue

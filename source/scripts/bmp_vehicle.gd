@@ -328,7 +328,12 @@ func ground_spot(spot: Vector3, snap: bool) -> Vector3:
   if snap or not district.grid.is_in_boundsv(cell) or district.grid.is_point_solid(cell):
    var snapped:Vector3=district.navigation_position(district.nearest_cell(cell))
    if snapped.distance_to(spot)<4:spot=snapped
- if is_instance_valid(district):spot.y=district.ground_height(spot)+0.1
+ if is_instance_valid(district):
+  spot.y=district.ground_height(spot)+0.1
+  # On a heap of rubble: on top of it, not in it.
+  if BmpRoutes.on_rubble(district,spot):
+   var hit:=get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(spot+Vector3.UP*3.0,spot,1,[get_rid()]))
+   if not hit.is_empty() and hit.collider.has_meta("rubble"):spot.y=hit.position.y+0.1
  return spot
 
 # --- Frame ------------------------------------------------------------------
@@ -604,7 +609,7 @@ func gunner_recoil() -> void:
 
 # Fences, posts, boards and sheds give way to 14 t: the bow (or the stern
 # in reverse) flattens light pieces of the yard it runs into. House walls
-# and masonry stop it.
+# and masonry stop it; the heap of a fallen house it drives over.
 func ram() -> void:
  ram_clock-=get_physics_process_delta_time()
  var v:=speed()
@@ -623,7 +628,8 @@ func ram() -> void:
 
 static func crushable(body: DestructibleSurface) -> bool:
  if body.breaking:return false
- # Fence panels of the great assault: a hull puts them over.
+ # Fence panels of the great assault and the broken corners of walls left
+ # on a heap of rubble: a hull puts them over.
  if body.has_meta("crushable"):return true
  if body.has_meta("indestructible"):return false
  var shape_node:=body.get_child(0) as CollisionShape3D

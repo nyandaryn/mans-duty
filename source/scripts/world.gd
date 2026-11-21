@@ -992,7 +992,7 @@ func rebuild_campaign_grid() -> void:
 		if not child is StaticBody3D or child.is_queued_for_deletion() or child.has_meta("boundary"):continue
 		for collision in child.get_children():
 			if not collision is CollisionShape3D:continue
-			var local_bounds: AABB=AABB(-collision.shape.size/2,collision.shape.size) if collision.shape is BoxShape3D else collision.shape.get_debug_mesh().get_aabb()
+			var local_bounds: AABB=NavigationObstacles.local_bounds(collision)
 			var bounds: AABB=collision.global_transform*local_bounds
 			var inverse: Transform3D=collision.global_transform.affine_inverse()
 			for z in range(maxi(-limit,floori((bounds.position.z-0.6)*navigation_scale)),mini(limit,ceili((bounds.end.z+0.6)*navigation_scale))+1):
