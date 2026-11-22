@@ -125,7 +125,7 @@ func step_projectiles(delta: float) -> void:
 			var before := Penetration.energy(bullet.weapon,next[1].length())
 			var after := Penetration.remaining(bullet.weapon,next[1].length(),material,thickness)
 			if body.has_method("strike"):body.strike(hit.position,direction,before-after,after>1.0)
-			game.impact(hit.position,hit.normal,body)
+			game.impact(hit.position,hit.normal,body,direction,before,false,bullet.weapon)
 			hit_count+=1
 			if after<=1.0:
 				# Already emitted entry effects; don't count or emit them twice.
@@ -136,7 +136,7 @@ func step_projectiles(delta: float) -> void:
 			next[0]=Vector3(hit.position)+(next[0]-Vector3(hit.position))*ratio
 			bullet.crossings.append({"rid":body.get_rid(),"exit":exit,"direction":direction})
 			exclusions.append(body.get_rid())
-			game.impact(exit,direction,body)
+			game.impact(exit,direction,body,direction,after,true,bullet.weapon)
 			ray_start=hit.position
 			hit={}
 			# A finite layer budget never permits skipping remaining geometry.
@@ -171,7 +171,7 @@ func step_projectiles(delta: float) -> void:
 			var energy_factor := clampf(next[1].length_squared()/(float(bullet.speed)*float(bullet.speed)),0.0,1.0)
 			if actor is ReconDrone:
 				actor.receive_hit(float(bullet.damage)*energy_factor,"drone",next[1].normalized(),hit.position)
-				game.impact(hit.position,hit.normal)
+				if is_instance_valid(game.impacts):game.impacts.drone_hit(hit.position,next[1])
 			elif actor!=null and actor!=shooter and actor.has_method("receive_hit"):
 				var zone: String=hit.collider.get_meta("zone","chest")
 				if shooter==game.player:
@@ -183,12 +183,15 @@ func step_projectiles(delta: float) -> void:
 				var wound := DamageModel.wound(zone,bullet.weapon,energy_factor,location,actor.plate_integrity,String(vest) if vest!=null else "korsar")
 				if actor!=game.player or not game.debug_invulnerable:
 					actor.apply_wound(wound,zone,next[1].normalized(),hit.position)
-					game.blood.add_wound(actor,area,hit.position,hit.normal,wound)
+					# Where a rifle round would come out of him.
+					var exit_at: Variant=ImpactEffects.exit_through(actor,area,hit.position,next[1].normalized())
+					if is_instance_valid(game.impacts):game.impacts.body_hit(actor,area,hit.position,hit.normal,next[1].normalized(),wound,bullet.weapon,energy_factor,exit_at)
+					game.blood.add_wound(actor,area,hit.position,hit.normal,wound,next[1].normalized(),exit_at)
 			elif actor==shooter:
 				# Shooter's body areas are excluded at launch; defensive fallback.
 				pass
 			else:
-				if not hit.get("surface_processed",false):game.impact(hit.position,hit.normal,hit.collider)
+				if not hit.get("surface_processed",false):game.impact(hit.position,hit.normal,hit.collider,next[1].normalized(),Penetration.energy(bullet.weapon,next[1].length()),false,bullet.weapon)
 			if not hit.get("surface_processed",false):hit_count+=1
 			projectiles.remove_at(index)
 			# A hit may finish the match. Never deliver queued damage after victory/death.

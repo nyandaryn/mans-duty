@@ -1,3 +1,38 @@
+# 0.32.2 validation — 2026-11-22
+
+Bullet impact effects by material: powder, chips, splinters, sparks, soil
+thrown up; a man hit (dust off his clothes, a mist out of the far side);
+marks by material; detail by distance from the camera.
+
+- New test_impact_effects (41 checks, --fixed-fps 60): concrete seen from
+  3 m gets full detail, ≥ 8 puffs and ≥ 6 chips, all off the struck face,
+  and a 3–8 cm crater; brick dust redder than concrete's; a 4 cm board
+  throws long splinters (≥ 4:1), out of its far side most go on with the
+  bullet, no sparks; a 12 mm steel plate gives one flash and ≥ 8 sparks, all
+  off the plate; over 20 rounds rifle cores strike sparks off concrete, PM
+  rounds none; soil spurts up, clods rise 0.15–2.6 m and come down on the
+  ground (the shader's landing time checked against the flight); at 80 m
+  less but the hole is left, at 250 m the cloud only (no chips, no hole), at
+  600 m nothing; a man hit: his clothing found, a puff of its dusty colour
+  in front, a rifle round's red mist behind his centre (out of the far side
+  of his body when it went in by the arm), none from a pistol round; a plate
+  that stops it: dust, no blood; a drone hit: four bits, no mark in the air;
+  strike, body_hit and add_wound leave the global RNG where it was; the
+  effects' clock stops on pause; a new match clears them.
+- test_penetration (34): the mark budget is ImpactEffects.MARKS_KEPT (120).
+- test_assault_halt (14): seed 22 → 55. At --fixed-fps 60 over seeds
+  11/22/33/44/55 four of five pass on 0.32.1 (44 fails) and on 0.32.2 (22
+  fails): the effects no longer draw from the global RNG, so a seed plays
+  another fight.
+- Full suite from source: 74 scenarios pass with no script errors.
+- Battle bench (54 a side, rendered 1280×720, seeds 11/22/33, 0.32.1 →
+  0.32.2 pck): 12.3 → 12.0 fps, scripts 16.1 → 16.7 ms/tick, render GPU
+  6.7 → 6.4 ms, draw calls the same — within the spread between fights.
+- Renders (tests/render_impacts.gd, 1280×720, fixed fps): concrete, brick,
+  board, plate, soil and a man frame by frame; the dust fades into the
+  ground rather than being cut by it. `--quit-after 300` from source and the
+  pck exits clean.
+
 # 0.32.1 validation — 2026-11-22
 
 The RPG-22 sight; the mortarman's firing position in the great assault;

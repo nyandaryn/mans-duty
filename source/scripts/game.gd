@@ -8,8 +8,9 @@ var ballistics: Ballistics
 var blasts: BlastSystem
 var concussion_overlay: ColorRect
 var effects: Array[Dictionary] = []
-var impact_disk: CylinderMesh
+var impacts: ImpactEffects
 var bullet_marks: Array[Node3D] = []
+var mark_count := 0
 var district: District
 var player: Operator
 var bots: Array[Hostile] = []
@@ -265,6 +266,9 @@ func build_district() -> void:
 	debris=CartridgeDebris.new()
 	debris.game=self
 	world_root.add_child(debris)
+	impacts=ImpactEffects.new()
+	impacts.game=self
+	world_root.add_child(impacts)
 
 func start_match() -> void:
 	battle.reset()
@@ -274,6 +278,7 @@ func start_match() -> void:
 	hearing.reset()
 	debris.clear()
 	blood.clear()
+	impacts.clear()
 	ballistics.clear()
 	blasts.clear()
 	for effect in effects:
@@ -580,38 +585,38 @@ func alert_bots(where: Vector3) -> void:
 func eject_case(where: Vector3, basis: Basis, weapon_id: String="ak74", live: bool=false) -> void:
 	debris.eject(where,basis,weapon_id,live)
 
-func impact(where: Vector3, normal: Vector3=Vector3.UP, surface: Node3D=null) -> void:
+# A bullet (or a shell, a fragment) on a surface: the hole it leaves and what
+# it throws up (ImpactEffects). `direction` the way it flew, `energy` its
+# energy there in joules, `exit` where it comes out of the far side.
+func impact(where: Vector3, normal: Vector3=Vector3.UP, surface: Node3D=null, direction: Vector3=Vector3.ZERO, energy: float=-1.0, exit: bool=false, weapon: String="") -> void:
 	# Knock-down targets of the training range count their hits.
 	if surface!=null and surface.has_meta("range_target"):surface.get_meta("range_target").hit(where)
 	# A ray starting inside a collider returns no valid surface normal.
 	# Do not fabricate a horizontal decal in mid-air in that case.
 	if normal.length_squared()<0.1:return
 	normal=normal.normalized()
-	# Small dark impact mark and short-lived dust, no bright projectile.
-	var mark := MeshInstance3D.new()
-	if impact_disk==null:
-		impact_disk=CylinderMesh.new()
-		impact_disk.top_radius=0.015
-		impact_disk.bottom_radius=0.015
-		impact_disk.height=0.001
-		impact_disk.radial_segments=8
-	mark.mesh=impact_disk
-	mark.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mark.material_override=Models.surface("34352f")
-	(surface if is_instance_valid(surface) else world_root).add_child(mark)
-	mark.global_position=where+normal*0.003
-	mark.quaternion=Quaternion(Vector3.UP,normal)
-	# Destructible surfaces can free their child decals before this budget runs.
-	bullet_marks=bullet_marks.filter(func(item):return is_instance_valid(item))
-	bullet_marks.append(mark)
-	if bullet_marks.size()>100:
-		var old: Node3D=bullet_marks.pop_front()
-		if is_instance_valid(old):old.queue_free()
-	# Centimetre dust is invisible beyond a few dozen metres; skip it in big battles.
-	if battle.active and Models.view_distance(self,where)>45:return
-	for i in range(3):
-		var particle := Models.particle(world_root,where+normal*0.025,randf_range(0.012,0.03),"a39c88")
-		effects.append({"node":particle,"velocity":normal*randf_range(0.5,1.4)+Vector3(randf_range(-0.5,0.5),0.3,randf_range(-0.5,0.5)),"life":0.3,"spin":Vector3(3,5,2),"type":"dust"})
+	var kind := ImpactEffects.substance(surface)
+	# A hole of a centimetre or two is not seen from far off.
+	var seen := Models.view_distance(self,where)
+	if not is_finite(seen) or seen<=ImpactEffects.MARK_RANGE:
+		var mark := MeshInstance3D.new()
+		if ImpactEffects.mark_mesh==null:ImpactEffects.mark_mesh=QuadMesh.new()
+		mark.mesh=ImpactEffects.mark_mesh
+		mark.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mark.material_override=ImpactEffects.mark_material(kind,exit)
+		(surface if is_instance_valid(surface) else world_root).add_child(mark)
+		mark.global_position=where+normal*0.003
+		var size := ImpactEffects.mark_size(kind,exit,energy)
+		mark_count+=1
+		var spin := float(mark_count*2654435761%6283)/1000.0
+		mark.global_basis=Basis(Quaternion(Vector3.BACK,normal))*Basis(Vector3.BACK,spin)*Basis.from_scale(Vector3(size,size,1))
+		# Destructible surfaces can free their child decals before this budget runs.
+		bullet_marks=bullet_marks.filter(func(item):return is_instance_valid(item))
+		bullet_marks.append(mark)
+		if bullet_marks.size()>ImpactEffects.MARKS_KEPT:
+			var old: Node3D=bullet_marks.pop_front()
+			if is_instance_valid(old):old.queue_free()
+	if is_instance_valid(impacts):impacts.strike(where,normal,surface,direction,energy,exit,weapon)
 
 func _physics_process(delta: float) -> void:
 	if not running or paused:return

@@ -73,7 +73,7 @@ func run():
  # Marks parented to a destroyed object must not leave stale typed references.
  var temporary_surface := Node3D.new()
  game.add_child(temporary_surface)
- for i in range(100):game.impact(Vector3(i*0.04,10,0),Vector3.UP,temporary_surface)
+ for i in range(ImpactEffects.MARKS_KEPT):game.impact(Vector3(i*0.04,10,0),Vector3.UP,temporary_surface)
  temporary_surface.free()
  game.impact(Vector3(0,10,1),Vector3.UP)
  check(game.bullet_marks.size()==1 and is_instance_valid(game.bullet_marks[0]),"Destroyed-surface decals are pruned before enforcing impact budget")

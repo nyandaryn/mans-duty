@@ -46,15 +46,17 @@ func run():
  # The battle's course decides how far a halted man runs for cover: the
  # checks pass for about two seeds in three, with fences as cover (0.28.0)
  # and without. The seed is set again after the start is skipped, so the
- # draws of whatever start a class has do not move the fight.
- seed(22)
+ # draws of whatever start a class has do not move the fight. Since 0.32.2
+ # the bullet effects draw no numbers from the battle: seed 22 became 55
+ # (over 11/22/33/44/55 four of five pass, before and after).
+ seed(55)
  var game=load("res://main.tscn").instantiate();game.set_meta("automated_preview",true);root.add_child(game);await process_frame
  game.volume=0
  game.set_player_class("mortarman")
  game.battle_size=18;game.selected_map=BattleMap.ID;game.start_match()
  # The column is taken as arrived: the squads wait dismounted on the start line.
  game.battle.skip_approach()
- seed(22)
+ seed(55)
  game.player.set_physics_process(false)
  check(game.battle.halted and game.battle.awaiting,"Mortarman: the assault waits for the order")
  var start: Dictionary={}

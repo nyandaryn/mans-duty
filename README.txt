@@ -1,13 +1,19 @@
-MANS DUTY / 0.32.1 / Linux x86_64
+MANS DUTY / 0.32.2 / Linux x86_64
 
 Запуск: ./play.sh або bash play.sh у цій папці.
 Godot включено; тримайте kvartal.x86_64, kvartal.pck та play.sh поруч.
 Усі збірки: https://github.com/nyandaryn/mans-duty/releases
-macOS (Apple Silicon та Intel): kvartal-0.32.1-macos.zip.
-Windows 10/11 (64-біт): kvartal-0.32.1-windows.zip.
+macOS (Apple Silicon та Intel): kvartal-0.32.2-macos.zip.
+Windows 10/11 (64-біт): kvartal-0.32.2-windows.zip.
 Версія та сама, що й тут. Збірки не підписані: як дозволити перший запуск
 (Gatekeeper на Mac, SmartScreen на Windows) — у README-macOS.txt
 і README-Windows.txt в архівах.
+
+Влучання куль — 0.32.2:
+Куля в бетон чи цеглу збиває хмару пилу й відколи, у ґрунт — підкидає
+землю грудками, у дошку — тріски, у сталь — спалах та іскри. З одягу
+бійця вибиває пил, гвинтівкова куля навиліт — червона завись з іншого
+боку тіла.
 
 Приціл РПГ-22, мінометник у полі, дрони, ТБГ-7В — 0.32.1:
 Приціл РПГ-22 більше не закривають пальці; діоптр — розмите кільце.
