@@ -118,6 +118,9 @@ var road := 0.5
 var integrity := 1.0
 var immobile := false
 var destroyed := false
+# Armour, hits, fire and the ammunition (VehicleDamage over VehicleArmor).
+var hull: VehicleDamage
+var engine_dead := false
 var burn := 0.0
 var smoke_clock := 0.0
 var ram_clock := 0.0
@@ -162,6 +165,9 @@ func setup(owner_game: Node3D, label: String="") -> void:
  radio_player.finished.connect(next_track);add_child(radio_player)
  gunner=BmpGunner.new();gunner.setup(self)
  troops=BmpTroops.new();troops.setup(self)
+ hull=VehicleDamage.new();hull.setup(self,VehicleArmor.bmp2())
+ add_to_group("vehicles")
+ VehicleMarkings.apply(self,friendly)
 
 func cabin() -> BmpInterior:
  if interior==null:
@@ -371,7 +377,7 @@ func _physics_process(delta: float) -> void:
  gunner.tick(delta)
  crush()
  ram()
- if destroyed:smolder(delta)
+ hull.tick(delta)
  if seat=="driver" and is_instance_valid(game.district.operation_area):game.district.operation_area.collide_trees(global_position)
 
 func steer_yoke(delta: float) -> void:
@@ -412,9 +418,9 @@ func simulate_engine(delta: float) -> void:
  omega=maxf(omega,0.0)
  drive_force=transmitted*ratio*EFFICIENCY/SPROCKET*2.0/(1.0+k)
  if catching>0.0:catching-=delta
- if starter and master and not running and rpm()>200.0 and crank_left<=0.0 and not destroyed:
+ if starter and master and not running and rpm()>200.0 and crank_left<=0.0 and not destroyed and not engine_dead:
   running=true;catching=1.2;say("Двигун запущено",2)
- if running and ((rpm()<STALL_RPM and catching<=0.0) or not master or destroyed):
+ if running and ((rpm()<STALL_RPM and catching<=0.0) or not master or destroyed or engine_dead):
   running=false
   if master and not destroyed:say("Двигун заглух",3)
  if (running or (starter and master)) and not engine_sound.playing:engine_sound.play()
@@ -641,6 +647,74 @@ static func crushable(body: DestructibleSurface) -> bool:
 func flatten(body: DestructibleSurface, direction: Vector3) -> void:Demolition.flatten(game,body,direction)
 
 # --- Damage -----------------------------------------------------------------
+# A round or a grenade strikes the hull (VehicleArmor works out the rest).
+func vehicle_hit(point: Vector3, direction: Vector3, round: String, pen_mm: float=-1.0) -> Dictionary:
+ return hull.strike(point,direction,round,pen_mm)
+
+# A burst near the vehicle: its fragments on the armour.
+func blast_hit(where: Vector3, kind: String) -> void:hull.blast(where,kind)
+
+func turret_yaw() -> float:return art.turret.rotation.y
+
+func out_of_action() -> bool:return hull.out_of_action()
+
+# Everybody inside and where (vehicle frame): the crew in their seats, the
+# squad on the benches, the player where he sits (not with his head out of
+# a hatch: then the hull is not between him and the jet).
+func occupants() -> Array:
+ var list:=[]
+ for actor in crew:
+  if not is_instance_valid(actor) or actor.dead:continue
+  var role:=String(actor.get_meta("bmp_role",""))
+  if role=="driver":list.append([actor,BmpArt.DRIVER_EYE+Vector3(0,-0.45,0)])
+  else:list.append([actor,turret_point(BmpArt.GUNNER_EYE+Vector3(0,-0.55,0))])
+ for actor in aboard:
+  if not is_instance_valid(actor) or actor.dead:continue
+  var place:=troops.seat_of(actor)
+  list.append([actor,BmpTroops.seat_spot(place)+Vector3(0,0.45,0) if place>=0 else Vector3(0,0.95,1.4)])
+ if game.player_vehicle()==self and not game.bmp.head_out and is_instance_valid(game.player):
+  var at:=BmpTroops.seat_spot(BmpTroops.PLAYER_SEAT)+Vector3(0,0.45,0)
+  if game.bmp.seat=="driver":at=BmpArt.DRIVER_EYE+Vector3(0,-0.45,0)
+  list.append([game.player,at])
+ return list
+
+# A point of the turret (given as if it faced ahead) where it is now.
+func turret_point(point: Vector3) -> Vector3:
+ return BmpArt.TURRET+(point-BmpArt.TURRET).rotated(Vector3.UP,turret_yaw())
+
+func on_immobile(reason: String) -> void:
+ immobile=true
+ if reason.contains("двигун"):engine_dead=true
+ say(reason.left(1).to_upper()+reason.substr(1)+": машина знерухомлена",4)
+
+# Fire inside: the crew and the troops get out at once (their squad sees to
+# it, see MechSquad); the player is told.
+func on_fire() -> void:
+ say("ПОЖЕЖА В МАШИНІ! Покинути машину!",6)
+ open_doors(true)
+ if game.player_vehicle()==self:game.squad.tell("Пожежа в БМП — негайно покинь машину!")
+
+func on_destroyed(blast: bool) -> void:
+ destroy(Vector3.ZERO)
+ burnt()
+ if blast:
+  # The ammunition went up under the turret: it is thrown off the ring.
+  var turret: Node3D=art.turret
+  turret.position+=Vector3(randf_range(-0.5,0.5),0.35,randf_range(-0.4,0.6))
+  turret.rotation+=Vector3(randf_range(-0.45,0.45),randf_range(-0.6,0.6),randf_range(-0.35,0.35))
+
+# The paint burns off: everything darkens to scorched steel.
+static var burnt_material: StandardMaterial3D
+func burnt() -> void:
+ if burnt_material==null:
+  burnt_material=StandardMaterial3D.new()
+  burnt_material.vertex_color_use_as_albedo=true
+  burnt_material.albedo_color=Color(0.22,0.20,0.19)
+  burnt_material.roughness=0.95
+ for item in art.root.find_children("*","MeshInstance3D",true,false):
+  if item.name=="Flames":continue
+  (item as MeshInstance3D).material_override=burnt_material
+
 func damage(amount: float, where: Vector3) -> void:
  if destroyed:return
  integrity-=amount
@@ -649,6 +723,7 @@ func damage(amount: float, where: Vector3) -> void:
  if integrity<=0.0:destroy(where)
 
 func destroy(_where: Vector3) -> void:
+ if destroyed and not running:return
  destroyed=true;immobile=true;running=false;burn=1.0
  throttle=0;clutch_pedal=1
  set_radio(false)

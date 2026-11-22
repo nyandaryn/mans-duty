@@ -51,8 +51,19 @@ static func item_model(kind: String) -> Node3D:
  if kind=="rpo_a":return ShmelArt.build()
  if kind=="recon_drone":return DroneArt.build(true)
  if kind=="mortar_mine":return MineBox.mine_model()
+ if kind in ["rpg7","rpg22"]:return BotKit.launcher_model(kind,kind=="rpg22")
+ if kind=="pg7vl":return grenade_model()
+ if kind in Equipment.FPV:return fpv_model(kind)
  var root := Node3D.new()
  root.name="EquipmentItem"
+ if kind=="ammo_pkm":
+  # The steel box of a 100-round belt: lid with its catch, carrying handle.
+  Models.bevel(root,Vector3.ZERO,Vector3(0.11,0.155,0.19),"#4a5139",0.006)
+  Models.bevel(root,Vector3(0,0.080,0),Vector3(0.114,0.008,0.194),"#3f4631",0.003)
+  Models.bevel(root,Vector3(0,0.092,0.02),Vector3(0.02,0.012,0.09),"#2b2f24",0.003)
+  Models.bevel(root,Vector3(0.057,0.05,-0.07),Vector3(0.006,0.03,0.025),"#6d6f62",0.002)
+  Models.merge_rigid(root)
+  return root
  if kind=="rangefinder":
   Models.bevel(root,Vector3.ZERO,Vector3(0.105,0.075,0.13),"#454f43",0.015)
   for x in [-0.027,0.027]:
@@ -72,9 +83,42 @@ static func item_model(kind: String) -> Node3D:
  Models.merge_rigid(root)
  return root
 
-static func attach_launcher(model: Node3D) -> Node3D:
- var launcher := ShmelArt.build()
- launcher.name="CarriedLauncher";launcher.position=Vector3(0.26,1.21,0.31)
- launcher.rotation=Vector3(PI/2,0,-0.12)
+# PG-7VL: the art of the launcher's agent when it is there, else a plain
+# warhead on its motor.
+static func grenade_model() -> Node3D:
+ var path:="res://scripts/rpg7_art.gd"
+ if ResourceLoader.exists(path):
+  var art: Script=load(path)
+  if art.has_method("grenade"):
+   var built=art.grenade()
+   if built is Node3D:return built
+ var root:=Node3D.new();root.name="Grenade"
+ Models.tube(root,Vector3(0,0,-0.18),0.0465,0.30,"#4b4f3a",Vector3.FORWARD)
+ Models.tube(root,Vector3(0,0,0.14),0.020,0.40,"#3a3d31",Vector3.FORWARD)
+ return root
+
+static func fpv_model(kind: String) -> Node3D:
+ return DroneArt.build_fpv("heat" if kind=="fpv_heat" else "frag")
+
+# Where each launcher rides on the pack's outer mount, muzzle up: position
+# and rotation.
+const MOUNTS := {
+ "rpo_a":[Vector3(0.26,1.21,0.31),Vector3(PI/2,0,-0.12)],
+ "rpg7":[Vector3(-0.20,1.12,0.33),Vector3(PI/2,0,0.16)],
+ "rpg22":[Vector3(0.05,1.02,0.36),Vector3(PI/2,0,-0.04)],
+}
+
+static func mount(kind: String) -> Transform3D:
+ var at: Array=MOUNTS.get(kind,MOUNTS.rpo_a)
+ return Transform3D(Basis.from_euler(at[1]),at[0])
+
+static func attach_launcher(model: Node3D, kind: String="rpo_a") -> Node3D:
+ var launcher: Node3D
+ match kind:
+  "rpg7":launcher=BotKit.launcher_model("rpg7",false)
+  "rpg22":launcher=BotKit.launcher_model("rpg22",false)
+  _:launcher=ShmelArt.build()
+ launcher.name="Carried_"+kind
+ launcher.transform=mount(kind)
  model.add_child(launcher)
  return launcher

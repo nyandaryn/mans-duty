@@ -63,7 +63,10 @@ func run():
  await run_until(game,12.0)
  var waiting := await watch(game,12.0,24.0)
  var moved := 0.0
- for actor in managed(game):moved=maxf(moved,actor.global_position.distance_to(start[actor.get_instance_id()]))
+ # Only the men on foot at the start: a crewman who has stepped out of his
+ # vehicle since has no start position.
+ for actor in managed(game):
+  if start.has(actor.get_instance_id()):moved=maxf(moved,actor.global_position.distance_to(start[actor.get_instance_id()]))
  print("WAIT soldiers=",waiting.soldiers," covered=",waiting.covered," changes_per_soldier=",waiting.per_soldier," moved_max=",moved)
  check(moved<=21,"Waiting groups stay at the start line (furthest %.1f m)" % moved)
  check(waiting.per_soldier<=1.5,"Waiting soldiers hold their posture under fire (%.2f changes each in 12 s)" % waiting.per_soldier)
@@ -136,8 +139,10 @@ func run():
  check(game.battle.depot(true).distance_to(game.district.player_spawn)>20,"The ammunition point is not the insertion point of the mortar crew")
  # A shell burst pins the enemy down: into cover, no peeking.
  var enemy: Hostile=null
+ # A rifleman of a garrison, not a crewman by his vehicle (its hull would
+ # shield him).
  for bot in game.bots:
-  if not bot.dead:enemy=bot;break
+  if not bot.dead and not bot.get_meta("armour_crew",false):enemy=bot;break
  if enemy!=null:
   game.blasts.detonate(enemy.global_position+Vector3(6,0,0),"mine")
   check(enemy.dead or (enemy.shelled>2 and enemy.suppression>0.5),"A burst 6 m away pins the enemy down")

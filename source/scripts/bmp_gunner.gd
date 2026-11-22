@@ -5,8 +5,10 @@ extends RefCounted
 # on the 2E36-1 stabilizer (30°/s in traverse, −5°…+74°) and the coaxial
 # PKT. He searches through the BPK sight, holds the aim on the move and fires
 # short bursts: high explosive at men behind cover, in houses or far away,
-# the machine gun at men in the open nearby. He never fires across his own
-# men, and only when the squad lets him.
+# the machine gun at men in the open nearby, armour-piercing (3UBR6, about
+# 35 mm at 500 m) at enemy vehicles, which come first. He never fires
+# across his own men, and only when the squad lets him. Either side: the
+# vehicle's `friendly` says whose men are whose.
 const TRAVERSE := 0.52
 const ELEVATE := 0.61
 const MIN_PITCH := -0.087
@@ -22,7 +24,7 @@ var game: Node3D
 var yaw := 0.0
 var pitch := 0.0
 var rest_yaw := 0.0
-var target: Hostile
+var target: Node3D
 var watching: Dictionary={}
 var search_left := 0.0
 var he := 340
@@ -46,10 +48,34 @@ func setup(owner: BmpVehicle) -> void:
  vehicle=owner;game=owner.game
  ray=PhysicsRayQueryParameters3D.create(Vector3.ZERO,Vector3.DOWN,1,[owner.get_rid()])
 
-func enemies() -> Array:return game.bots
+func enemies() -> Array:
+ var list:=[]
+ list.append_array(game.bots if vehicle.friendly else game.allies+[game.player])
+ for other in game.get_tree().get_nodes_in_group("vehicles"):
+  if other!=vehicle and other.friendly!=vehicle.friendly:list.append(other)
+ return list
 
-func fighting(actor: Hostile) -> bool:
- return is_instance_valid(actor) and not actor.dead and actor.collapse<=0.5 and actor.vehicle==null and not actor.concussion.incapacitated()
+# His own side: never under his fire.
+func own() -> Array:
+ return game.allies+[game.player] if vehicle.friendly else game.bots
+
+static func is_vehicle(actor: Node3D) -> bool:return actor.is_in_group("vehicles")
+
+func fighting(actor: Node3D) -> bool:
+ if not is_instance_valid(actor):return false
+ if actor is Hostile:return not actor.dead and actor.collapse<=0.5 and actor.vehicle==null and not actor.concussion.incapacitated()
+ if actor is Operator:
+  return actor.is_inside_tree() and actor.health>0 and not actor.get_meta("battle_out",false) and (game.player_vehicle()==null or game.bmp.head_out)
+ # A vehicle: until it burns or is wrecked.
+ if actor.get("destroyed"):return false
+ var state=actor.get("hull")
+ return state==null or not state.burning
+
+# Where he lays the sight on a man or a vehicle.
+func center(actor: Node3D) -> Vector3:
+ if actor is Hostile:return actor.global_position+Vector3.UP*lerpf(1.2,0.35,maxf(actor.tactical_prone,actor.collapse))
+ if actor is Operator:return actor.camera.global_position+Vector3.DOWN*0.35
+ return actor.to_global(Vector3(0,1.15,0))
 
 func sight() -> Vector3:return vehicle.art.turret.to_global(Vector3(-0.42,0.95,-0.4))
 
@@ -60,7 +86,7 @@ func clear_to(from: Vector3, to: Vector3) -> bool:
 func tick(delta: float) -> void:
  since_burst+=delta
  fly(delta)
- if vehicle.destroyed or not manned:return
+ if vehicle.destroyed or not manned or vehicle.hull.weapon_out or vehicle.hull.burning:return
  search_left-=delta
  if search_left<=0:
   search_left=0.55+randf()*0.2
@@ -78,28 +104,31 @@ func search(step: float) -> void:
  for actor in enemies():
   if not fighting(actor):continue
   var d:=eye.distance_to(actor.global_position)
-  if d>REACH:continue
-  candidates.append([d,actor])
+  var armour:=is_vehicle(actor)
+  if d>(REACH*1.6 if armour else REACH):continue
+  # Enemy armour first, then the grenade launchers that threaten his own.
+  var weight:=d*(0.35 if armour else (0.6 if actor.get("kit") in ["rpg7","rpg22"] else 1.0))
+  candidates.append([weight,actor,d])
  candidates.sort_custom(func(a,b):return a[0]<b[0])
  var seen: Dictionary={}
  for i in range(mini(candidates.size(),10)):
-  var actor: Hostile=candidates[i][1]
-  var chest:=actor.global_position+Vector3.UP*lerpf(1.2,0.35,maxf(actor.tactical_prone,actor.collapse))
-  if not clear_to(eye,chest):continue
+  var actor: Node3D=candidates[i][1]
+  if not clear_to(eye,center(actor)):continue
   var id:=actor.get_instance_id()
   seen[id]=float(watching.get(id,0.0))+step
  watching=seen
  if is_instance_valid(target) and fighting(target) and watching.has(target.get_instance_id()):return
  target=null
  for i in range(candidates.size()):
-  var actor: Hostile=candidates[i][1]
+  var actor: Node3D=candidates[i][1]
   var id:=actor.get_instance_id()
-  # Recognition takes longer the further away the man is.
-  if float(watching.get(id,0.0))>=0.5+candidates[i][0]/400.0:target=actor;break
+  # Recognition takes longer the further away the man is; a vehicle is
+  # made out sooner.
+  if float(watching.get(id,0.0))>=0.5+float(candidates[i][2])/(900.0 if is_vehicle(actor) else 400.0):target=actor;break
 
 func aim_point() -> Vector3:
  if not is_instance_valid(target):return Vector3.INF
- return target.global_position+Vector3.UP*lerpf(1.15,0.3,maxf(target.tactical_prone,target.collapse))
+ return center(target)
 
 func aim(delta: float) -> void:
  var wanted_yaw:=rest_yaw
@@ -129,19 +158,23 @@ func fire(delta: float) -> void:
   weapon=choose_weapon(distance)
   if weapon=="":return
   if not safe(muzzle,point):return
-  burst_left=randi_range(3,4) if weapon=="cannon" else randi_range(8,14)
+  burst_left=randi_range(8,14) if weapon=="pkt" else randi_range(3,5)
   shot_clock=0.0
  while burst_left>0 and shot_clock<=0.0:
   if weapon=="cannon":shoot_cannon(muzzle)
+  elif weapon=="ap":shoot_ap(muzzle)
   else:shoot_pkt()
   burst_left-=1
   shots+=1
-  shot_clock+=CANNON_INTERVAL if weapon=="cannon" else PKT_INTERVAL
+  shot_clock+=PKT_INTERVAL if weapon=="pkt" else CANNON_INTERVAL
   if burst_left==0:
    pause_left=randf_range(1.2,2.6);since_burst=0.0
 
 func choose_weapon(distance: float) -> String:
- var covered:=target.has_cover or target.tactical_prone>0.5 or not clear_to(sight(),target.global_position+Vector3.UP*0.4)
+ if is_vehicle(target):
+  if ap>0 and distance<1500.0:return "ap"
+  return "cannon" if he>0 else ""
+ var covered: bool=(target is Hostile and (target.has_cover or target.tactical_prone>0.5)) or not clear_to(sight(),target.global_position+Vector3.UP*0.4)
  if distance>=CANNON_MINIMUM and he>0 and (covered or distance>400.0):return "cannon"
  if pkt>0 and distance<700.0:return "pkt"
  if he>0 and distance>=CANNON_MINIMUM:return "cannon"
@@ -150,10 +183,10 @@ func choose_weapon(distance: float) -> String:
 # No friendly soldier near the line of fire or near the burst.
 func safe(from: Vector3, to: Vector3) -> bool:
  var reach:=7.0 if weapon=="cannon" else 3.0
- for actor in game.allies+[game.player]:
+ for actor in own():
   if not is_instance_valid(actor):continue
   if actor is Hostile and (actor.dead or actor.vehicle!=null):continue
-  if actor is Operator and (actor.health<=0 or actor.get_meta("battle_out",false) or game.player_vehicle()!=null):continue
+  if actor is Operator and (not vehicle.friendly or actor.health<=0 or actor.get_meta("battle_out",false) or game.player_vehicle()!=null):continue
   var p: Vector3=actor.global_position+Vector3.UP
   if p.distance_to(to)<reach:return false
   var along:=(p-from).dot(from.direction_to(to))
@@ -178,6 +211,20 @@ func shoot_cannon(muzzle: Vector3) -> void:
  game.alert_opponents(vehicle,muzzle)
  vehicle.gunner_recoil()
 
+# Armour-piercing tracer: the slug strikes the armour where the shot lands.
+func shoot_ap(muzzle: Vector3) -> void:
+ ap-=1
+ var direction:=(barrel()+spread(0.0010)).normalized()
+ ray.from=muzzle;ray.to=muzzle+direction*1800.0;ray.collision_mask=1|4
+ var hit:=game.get_world_3d().direct_space_state.intersect_ray(ray)
+ var point:Vector3=hit.position if not hit.is_empty() else ray.to
+ var struck: Object=hit.get("collider")
+ shells.append({"point":point,"left":muzzle.distance_to(point)/SHELL_SPEED,"ap":true,"collider":struck,"direction":direction,"distance":muzzle.distance_to(point),"normal":hit.get("normal",Vector3.UP)})
+ streak(muzzle,point,0.09,Color(1.0,0.45,0.25))
+ game.spatial_shot("mortar_launch",muzzle,-3)
+ game.alert_opponents(vehicle,muzzle)
+ vehicle.gunner_recoil()
+
 func shoot_pkt() -> void:
  pkt-=1
  var origin: Vector3=vehicle.art.coax.global_position
@@ -191,8 +238,14 @@ func fly(delta: float) -> void:
  for i in range(shells.size()-1,-1,-1):
   shells[i].left-=delta
   if shells[i].left<=0:
-   game.blasts.detonate(shells[i].point,"cannon")
+   var shell: Dictionary=shells[i]
    shells.remove_at(i)
+   if shell.get("ap",false):
+    var struck: Object=shell.collider
+    if is_instance_valid(struck) and struck.has_method("vehicle_hit"):
+     struck.vehicle_hit(shell.point,shell.direction,"ap30",VehicleArmor.penetration("ap30",shell.distance))
+    game.impact(shell.point,shell.normal,struck as Node3D)
+   else:game.blasts.detonate(shell.point,"cannon")
  for i in range(tracers.size()-1,-1,-1):
   tracers[i][1]-=delta
   if tracers[i][1]<=0:

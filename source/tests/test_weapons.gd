@@ -15,7 +15,8 @@ func identities(w: WeaponState) -> Array:
 func _initialize():
  for id in WeaponState.DATA:
   var w := WeaponState.new(id)
-  var count := 3 if id in ["pm","m9"] else 4
+  # The pistols and the PKM (two spare boxes of 100) carry one pouch less.
+  var count := 3 if id in ["pm","m9","pkm"] else 4
   var capacity := int(w.data.capacity)
   var initial := capacity*count
   check(w.ammunition_total()==initial,id+": finite starting ammunition")

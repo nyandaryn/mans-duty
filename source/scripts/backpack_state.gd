@@ -73,6 +73,8 @@ func mass() -> float:
  for entry in items:
   var definition: Dictionary=Equipment.ITEMS[entry.kind]
   total+=float(definition.mass)+int(entry.rounds)*float(Equipment.ROUND_MASS.get(definition.get("weapon",""),0))
+  # A PG-7VL seated in the RPG-7 rides with it.
+  if entry.get("loaded",false)==true:total+=float(Equipment.ITEMS.pg7vl.mass)
  return total
 
 func serialize() -> Dictionary:

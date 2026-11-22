@@ -235,6 +235,7 @@ static func weapon(id: String, rebuild: bool=false) -> Node3D:
 		if id=="ak74":build_ak(root,magazine,bolt)
 		elif id=="m16":build_m16(root,magazine,bolt)
 		elif id=="svd":SvdArt.build(root,magazine,bolt)
+		elif id=="pkm":PkmArt.build(root,magazine,bolt)
 		else:build_pistol(root,magazine,bolt,id)
 		WeaponArt.finish(root)
 	var height: float=root.get_meta("sight_height")
@@ -243,7 +244,8 @@ static func weapon(id: String, rebuild: bool=false) -> Node3D:
 	marker(root,"RearSight",Vector3(0,height,rear_z))
 	marker(root,"FrontSight",Vector3(0,height,front_z))
 	marker(root,"Muzzle",Vector3(0,0,float(root.get_meta("muzzle_z"))))
-	marker(root,"EjectionPort",Vector3(0.036,0.009,-0.015))
+	# The PKM throws its cases out to the left.
+	marker(root,"EjectionPort",root.get_meta("ejection_port",Vector3(0.036,0.009,-0.015)))
 	var pistol := id in ["pm","m9"]
 	var left: Node3D
 	if pistol:
@@ -251,7 +253,7 @@ static func weapon(id: String, rebuild: bool=false) -> Node3D:
 		left=pistol_hand(root,true)
 	else:
 		hand(root,"RightHand",Vector3(0.017,-0.095,0.145 if id=="svd" else 0.085)).rotation.z=-0.13
-		left=hand(root,"LeftHand",Vector3(-0.02,-0.075,-0.32 if id=="svd" else -0.27))
+		left=hand(root,"LeftHand",root.get_meta("support_hand",Vector3(-0.02,-0.075,-0.32 if id=="svd" else -0.27)))
 		left.rotation=Vector3(0.0,0.1,-0.55)
 	root.set_meta("left_rest",left.position)
 	root.set_meta("left_rotation",left.rotation)

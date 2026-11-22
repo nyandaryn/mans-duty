@@ -3,14 +3,19 @@ extends RefCounted
 
 # Each class has its own weapons, ammunition and equipment; only the mortarman
 # leads a crew (one assistant) and gives orders.
-const IDS := ["rifleman","sniper","mortarman","grad","bmp"]
-const TITLES := {"rifleman":"СТРІЛЕЦЬ","sniper":"СНАЙПЕР","mortarman":"МІНОМЕТНИК","grad":"КОМАНДИР БМ-21","bmp":"МЕХАНІК-ВОДІЙ БМП"}
-const PRIMARY := {"rifleman":["ak74","m16"],"sniper":["svd"],"mortarman":["ak74"],"grad":["ak74"],"bmp":["ak74"]}
-const SECONDARY := {"rifleman":["pm","m9"],"sniper":["pm","m9"],"mortarman":["pm","m9"],"grad":["pm","m9"],"bmp":["pm","m9"]}
+const IDS := ["rifleman","machinegunner","grenadier","sniper","uav","mortarman","grad","bmp"]
+const TITLES := {"rifleman":"СТРІЛЕЦЬ","machinegunner":"КУЛЕМЕТНИК","grenadier":"ГРАНАТОМЕТНИК","sniper":"СНАЙПЕР","uav":"ОПЕРАТОР БПЛА","mortarman":"МІНОМЕТНИК","grad":"КОМАНДИР БМ-21","bmp":"МЕХАНІК-ВОДІЙ БМП"}
+const PRIMARY := {"rifleman":["ak74","m16"],"machinegunner":["pkm"],"grenadier":["ak74"],"sniper":["svd"],"uav":["ak74","m16"],"mortarman":["ak74"],"grad":["ak74"],"bmp":["ak74"]}
+const SECONDARY := {"rifleman":["pm","m9"],"machinegunner":["pm","m9"],"grenadier":["pm","m9"],"sniper":["pm","m9"],"uav":["pm","m9"],"mortarman":["pm","m9"],"grad":["pm","m9"],"bmp":["pm","m9"]}
+# Infantry classes of the great assault: on foot with the squads.
+const INFANTRY := ["rifleman","machinegunner","grenadier","sniper","uav"]
 const ITEMS := {
 # The rangefinder is not a pack item: every class carries one in a pouch on
 # the plate carrier (K), so older presets lose the pack copy.
- "rifleman":["rpo_a","ammo_ak74","ammo_m16","ammo_pm","ammo_m9","medkit","recon_drone"],
+ "rifleman":["rpo_a","rpg22","ammo_ak74","ammo_m16","ammo_pm","ammo_m9","medkit","recon_drone"],
+ "machinegunner":["ammo_pkm","ammo_pm","ammo_m9","medkit","recon_drone"],
+ "grenadier":["rpg7","pg7vl","rpg22","ammo_ak74","ammo_pm","ammo_m9","medkit"],
+ "uav":["fpv_heat","fpv_frag","recon_drone","ammo_ak74","ammo_m16","ammo_pm","ammo_m9","medkit"],
  "sniper":["ammo_svd","ammo_pm","ammo_m9","medkit","recon_drone"],
  "mortarman":["mortar_mine","ammo_ak74","ammo_pm","ammo_m9","medkit","recon_drone"],
  # The drone of the BM-21 belongs to the observation post, not to the pack.
@@ -18,7 +23,10 @@ const ITEMS := {
  "bmp":["ammo_ak74","ammo_pm","ammo_m9","medkit","recon_drone"]
 }
 const BRIEF := {
- "rifleman":"АК-74М або M16A4, пістолет, РПО-А «Шмель». Набої 5.45 / 5.56 / 9 мм. Діє самостійно: без власної групи й команд.",
+ "rifleman":"АК-74М або M16A4, пістолет, РПО-А «Шмель» або РПГ-22. Набої 5.45 / 5.56 / 9 мм. Діє самостійно: без власної групи й команд.",
+ "machinegunner":"ПКМ (7,5 кг, коробки по 100 набоїв, 650 постр./хв), пістолет. Вогонь на придушення і по групах. X — сошки (лежачи чи на опорі віддача втричі менша), PgUp / PgDn — приціл 1–15.",
+ "grenadier":"РПГ-7В1 з ПГО-7В3 і пострілами ПГ-7ВЛ, РПГ-22, АК-74М, пістолет. Б'є по техніці, по вогневих точках у будівлях. 4 — гранатомет, 5 — інший, R — заряджання РПГ-7 або переведення РПГ-22 в бойове положення (назад не складається).",
+ "uav":"FPV-дрони 7\" (кумулятивні й осколкові), розвіддрон, АК-74М, пістолет. Шукає противника з повітря і вражає техніку й піхоту. Y — FPV, J — розвіддрон.",
  "sniper":"СВД з ПСО-1, пістолет. Набої 7.62 × 54R / 9 мм. Діє самостійно: без власної групи й команд.",
  "mortarman":"Міномет 2Б14 «Піднос» (ствол і двонога — 30,1 кг), АК-74М, пістолет, 82-мм міни. Помічник несе опорну плиту й ящик мін. G — команди, N — міномет.",
  "bmp":"БМП-2 і своє відділення: навідник-оператор у башті, сім бійців десанту. Ти механік-водій і командир: ведеш машину (маса, стартер, фрикціон, п'ять передач, штурвал) і командуєш — десант, по місцях, за БМП, штурм розсипом. АК-74М, пістолет.",
@@ -31,7 +39,7 @@ const BASEPLATE := 17.0
 static func valid(id: String) -> String:return id if id in IDS else "rifleman"
 
 # Older settings and presets carry no class: the rifle decides it.
-static func infer(primary: String) -> String:return "sniper" if primary=="svd" else "rifleman"
+static func infer(primary: String) -> String:return "sniper" if primary=="svd" else ("machinegunner" if primary=="pkm" else "rifleman")
 
 static func primary_for(id: String, weapon: String) -> String:
  var allowed: Array=PRIMARY[valid(id)]

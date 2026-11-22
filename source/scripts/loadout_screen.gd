@@ -16,6 +16,8 @@ var class_buttons: Dictionary={}
 var class_brief: Label
 var catalog_tiles: Dictionary={}
 var operation_label: Label
+var vest_buttons: Dictionary={}
+var vest_label: Label
 
 func setup(owner_game: Node3D, parent: Control) -> void:
  game=owner_game
@@ -66,7 +68,8 @@ func setup(owner_game: Node3D, parent: Control) -> void:
  game.secondary_tile=game.inventory_slot("pistol","ПІСТОЛЕТ","",64)
  weapons.add_child(game.secondary_tile)
  game.secondary_tile.pressed.connect(func():picker.open(true))
- weapons.add_child(UiKit.text("ПЛИТОНОСКА · R + 1 / 2 / 3",12,UiKit.ACCENT,"head"))
+ vest_label=UiKit.text("",12,UiKit.ACCENT,"head")
+ weapons.add_child(vest_label)
  var vest := HBoxContainer.new();weapons.add_child(vest)
  for i in range(3):
   var tile: Button=game.inventory_slot("magazine",str(i+1),"",46)
@@ -96,6 +99,22 @@ func setup(owner_game: Node3D, parent: Control) -> void:
   var caption: Label=UiKit.text(Wardrobe.LABELS[i].replace(" / ","\n").replace(" — ","\n"),12,UiKit.SOFT,"head")
   caption.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;caption.mouse_filter=MOUSE_FILTER_IGNORE
   game.place(caption,tile,0.43,0.07,0.97,0.95)
+ # Body armour: what it stops, where, and what it costs in speed.
+ var armour := ScrollContainer.new();armour.name="БРОНЯ";tabs.add_child(armour)
+ armour.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED
+ var vests := VBoxContainer.new();vests.size_flags_horizontal=SIZE_EXPAND_FILL;armour.add_child(vests)
+ vests.add_theme_constant_override("separation",6)
+ for id in VestKind.KINDS:
+  var data: Dictionary=VestKind.DATA[id]
+  var tile: Button=small_button("",func():game.choose_vest(id))
+  tile.custom_minimum_size=Vector2(0,150);tile.size_flags_horizontal=SIZE_EXPAND_FILL;tile.toggle_mode=true
+  vests.add_child(tile);vest_buttons[id]=tile
+  var thumbnail := ModelPreview.new();game.place(thumbnail,tile,0,0,0.32,1)
+  thumbnail.show_outfit("ua_pixel" if id!="ratnik" else "rf_digital","",false,false,id)
+  var mass: float=VestKind.BODY_GEAR_MASS+float(data.mass)
+  var caption: Label=UiKit.wrapped("%s · %.1f кг · плити %s\n%s\nВід уламків: %d %% шкоди проходить · біг %.1f км/год без зброї" % [data.name,float(data.mass),data["class"],data.brief,roundi(VestKind.blast_factor(id)*100.0),6.3*3.6*Equipment.run_multiplier(mass)],12,UiKit.SOFT)
+  caption.mouse_filter=MOUSE_FILTER_IGNORE
+  game.place(caption,tile,0.33,0.05,0.98,0.95)
  game.place(UiKit.text("03 / НАПЛІЧНИК",14,UiKit.ACCENT,"head"),self,0.64,0.27,0.965,0.3)
  pack_select=OptionButton.new();pack_select.add_item("Без наплічника");pack_select.add_item("Штурмовий 30 л · 24 клітинки · 1,35 кг")
  pack_select.add_theme_font_size_override("font_size",14)
@@ -143,15 +162,17 @@ func small_button(title: String, callback: Callable) -> Button:
 
 func refresh() -> void:
  if not is_instance_valid(portrait):return
- portrait.show_outfit(game.player_outfit,game.primary,game.loadout_bag.equipped,game.loadout_bag.count("rpo_a")>0)
- game.outfit_caption.text=Wardrobe.LABELS[Wardrobe.IDS.find(game.player_outfit)]
+ portrait.show_outfit(game.player_outfit,game.primary,game.loadout_bag.equipped,game.loadout_bag.count("rpo_a")>0,game.player_vest)
+ game.outfit_caption.text=Wardrobe.LABELS[Wardrobe.IDS.find(game.player_outfit)]+" · "+VestKind.label(game.player_vest)
+ for id in vest_buttons:vest_buttons[id].set_pressed_no_signal(id==game.player_vest)
+ vest_label.text="%s · МАГАЗИНИ R + 1 / 2 / 3" % VestKind.label(game.player_vest)
  for i in range(game.outfit_buttons.size()):game.outfit_buttons[i].button_pressed=Wardrobe.IDS[i]==game.player_outfit
  pack_select.select(1 if game.loadout_bag.equipped else 0)
  pack_grid.bag=game.loadout_bag;pack_grid.refresh()
  for id in class_buttons:class_buttons[id].set_pressed_no_signal(id==game.player_class)
  class_brief.text=PlayerClass.BRIEF[game.player_class]
  for kind in catalog_tiles:catalog_tiles[kind].visible=PlayerClass.allows(game.player_class,kind)
- var weight := Equipment.carried_mass([WeaponState.new(game.primary),WeaponState.new(game.secondary)],game.loadout_bag)
+ var weight := Equipment.carried_mass([WeaponState.new(game.primary),WeaponState.new(game.secondary)],game.loadout_bag,2,game.player_vest)
  if game.player_class=="mortarman":weight+=PlayerClass.BARREL_AND_BIPOD
  load_label.text="СПОРЯДЖЕННЯ  %.1f кг\nБіг: %.1f км/год · наплічник %d / 24" % [weight,6.3*3.6*Equipment.run_multiplier(weight),game.loadout_bag.used_slots()]
 
@@ -168,7 +189,7 @@ func add_item(kind: String) -> void:
  if not PlayerClass.allows(game.player_class,kind):return
  if game.loadout_bag.add(kind)<0:notice.text="Спершу одягни наплічник. Для речі потрібне вільне місце; ліміт вантажу — 18 кг."
  else:notice.text="Додано: "+Equipment.ITEMS[kind].name;changed()
-func snapshot() -> Dictionary:return {"class":game.player_class,"primary":game.primary,"secondary":game.secondary,"outfit":game.player_outfit,"backpack":game.loadout_bag.serialize()}
+func snapshot() -> Dictionary:return {"class":game.player_class,"primary":game.primary,"secondary":game.secondary,"outfit":game.player_outfit,"vest":game.player_vest,"backpack":game.loadout_bag.serialize()}
 func refresh_presets() -> void:
  preset_select.clear();preset_select.add_item("Завантажити збережений комплект…")
  for title in store.presets:preset_select.add_item(title)
@@ -182,6 +203,7 @@ func load_selected(index: int) -> void:
  var title := preset_select.get_item_text(index)
  var data: Dictionary=store.presets[title]
  game.primary=data.primary;game.secondary=data.secondary;game.player_outfit=data.outfit
+ game.player_vest=VestKind.valid(str(data.get("vest",game.player_vest)))
  game.loadout_bag=BackpackState.restore(data.backpack)
  game.set_player_class(data.get("class",PlayerClass.infer(data.primary)))
  preset_name.text=title;game.refresh_inventory();changed();notice.text="Завантажено: "+title

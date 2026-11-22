@@ -2,6 +2,8 @@ class_name MagazineView
 extends RefCounted
 
 static func decorate(mag: Node3D, id: String) -> void:
+ # The PKM's box shows its belt already.
+ if id=="pkm":return
  if mag.has_node("AmmoEvidence"):
   if id=="svd":
    mag.get_node("AmmoEvidence/TopRound").position.y=-0.046

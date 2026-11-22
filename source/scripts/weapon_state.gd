@@ -7,7 +7,12 @@ const DATA = {
 	"ak74": {"name": "АК-74М", "caliber": "5.45 × 39", "capacity": 30, "damage": 36.0, "interval": 60.0 / 600.0, "modes": ["АВТО", "ОДИН"], "recoil": 0.021, "reload": 2.5, "hold_open": false},
 	"m16": {"name": "M16A2", "caliber": "5.56 × 45", "capacity": 30, "damage": 38.0, "interval": 60.0 / 800.0, "modes": ["ОДИН", "3 ПОСТРІЛИ"], "recoil": 0.017, "reload": 2.3, "hold_open": true},
 	"pm": {"name": "ПМ", "caliber": "9 × 18", "capacity": 8, "damage": 29.0, "interval": 0.12, "modes": ["ОДИН"], "recoil": 0.035, "reload": 1.9, "hold_open": true},
-	"m9": {"name": "M9", "caliber": "9 × 19", "capacity": 15, "damage": 31.0, "interval": 0.10, "modes": ["ОДИН"], "recoil": 0.029, "reload": 1.9, "hold_open": true}
+	"m9": {"name": "M9", "caliber": "9 × 19", "capacity": 15, "damage": 31.0, "interval": 0.10, "modes": ["ОДИН"], "recoil": 0.029, "reload": 1.9, "hold_open": true},
+	# PKM: belt of 100 in a box under the receiver, 650 rounds/min, automatic
+	# only, fires from an open bolt: at the end of the belt the bolt runs
+	# home on an empty chamber, a new belt needs the cover lifted, the belt
+	# laid on the feed tray, the cover shut and the handle pulled (V).
+	"pkm": {"name": "ПКМ", "caliber": "7.62 × 54R", "capacity": 100, "damage": 68.0, "interval": 60.0 / 650.0, "modes": ["АВТО"], "recoil": 0.032, "reload": 7.5, "hold_open": false}
 }
 var id: String
 var data: Dictionary
@@ -42,7 +47,9 @@ func _init(weapon_id: String="ak74") -> void:
 	id=weapon_id
 	data=DATA[id]
 	magazine={"serial":1,"rounds":int(data.capacity)}
-	for i in range(2 if id in ["pm","m9"] else 3):pouches.append({"serial":i+2,"rounds":int(data.capacity)})
+	# Spare boxes of 100 for the machine gun: two on the gunner.
+	for i in range(2 if id in ["pm","m9","pkm"] else 3):pouches.append({"serial":i+2,"rounds":int(data.capacity)})
+	if id=="pkm":scope_zero=300
 	chamber()
 
 func rounds() -> int:return int(magazine.get("rounds",0))
@@ -162,13 +169,15 @@ func cancel() -> void:
 
 func phase_duration() -> float:
 	match phase:
-		"remove":return 0.7
+		# The PKM: the feed cover lifted and the old belt out of the tray; the
+		# new belt laid on it and the cover shut (with the box: about 7 s).
+		"remove":return 1.5 if id=="pkm" else 0.7
 		"stow":return 0.65 if inspected_loaded_reload else 0.9
 		"ready_remove":return 0.55
 		"ready_stow":return 0.55
 		"ready_insert":return 0.65
 		"draw":return 0.7
-		"insert":return 0.9
+		"insert":return 2.2 if id=="pkm" else 0.9
 		"rack":return 0.85
 		"inspect_chamber":return 1.8
 		"inspect_mag","inspect_pouch":return 2.1

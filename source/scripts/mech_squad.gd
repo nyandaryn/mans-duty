@@ -50,6 +50,9 @@ var yield_time := 0.0
 var file_mark_time := 0.0
 var mount_called := false
 var player_called := false
+# The gunner-operator waits outside with the squad until «По машинах!»; then
+# he climbs onto the hull and into the turret.
+var gunner_out: Hostile
 # Where the hull has been: the file walks in its tracks round corners.
 var trail := PackedVector3Array()
 
@@ -178,7 +181,8 @@ func _physics_process(delta: float) -> void:
  state_time+=delta
  record_trail()
  prune()
- if vehicle.destroyed and state!="afoot":
+ # Wrecked or on fire: everybody out.
+ if (vehicle.destroyed or vehicle.hull.burning) and state!="afoot":
   bail_out()
   return
  if player_led:
@@ -224,6 +228,15 @@ func form_up() -> void:
   actor.disembark(vehicle.ground_spot(spot,false),-vehicle.global_basis.z)
   control(actor,true)
   move_to(actor,spot,1.5)
+ # The gunner climbs out of the turret and stands by the right side.
+ for actor in vehicle.crew.duplicate():
+  if actor.get_meta("bmp_role","")!="gunner" or player_led:continue
+  vehicle.crew.erase(actor)
+  vehicle.gunner.manned=false
+  actor.disembark(vehicle.ground_spot(gunner_spot(),false),-vehicle.global_basis.z)
+  control(actor,true)
+  move_to(actor,gunner_spot(),1.5)
+  gunner_out=actor
  vehicle.open_doors(false)
  set_state("field")
 
@@ -235,10 +248,52 @@ func tick_field() -> void:
   move_to(men[i],field_spot(i,count),1.5)
   men[i].has_cover=false
   men[i].cover_timer=maxf(men[i].cover_timer,0.5)
+  # Waiting for the order: as men wait, not in a firing line.
+  if not Idle.active(men[i]) and not men[i].alerted:Idle.place(men[i],vehicle.global_position-vehicle.global_basis.z*300.0,field_spot(i,count))
+ tick_gunner_outside()
+
+func gunner_spot() -> Vector3:return vehicle.to_global(Vector3(2.6,0,-0.6))
+
+# By the vehicle in the field: idling with the others; boarding: up the
+# right side to the turret hatch and in.
+func tick_gunner_outside() -> void:
+ var actor:=gunner_out
+ if not is_instance_valid(actor) or actor.dead or actor.vehicle!=null:return
+ move_to(actor,gunner_spot(),1.5)
+ actor.has_cover=false
+ if not Idle.active(actor) and not actor.alerted:Idle.place(actor,vehicle.global_position-vehicle.global_basis.z*300.0,gunner_spot())
+
+func board_gunner() -> bool:
+ var actor:=gunner_out
+ if not is_instance_valid(actor) or actor.dead or actor.vehicle!=null:
+  gunner_out=null
+  return true
+ Idle.stop(actor)
+ var hatch:=vehicle.to_global(Vector3(2.0,0,-0.4))
+ move_to(actor,hatch,0.8)
+ actor.sprinting=true
+ if actor.global_position.distance_to(hatch)<1.9:
+  actor.set_meta("mech_control",false)
+  vehicle.board_crew(actor,"gunner")
+  vehicle.gunner.manned=true
+  gunner_out=null
+  return true
+ return false
+
+# Straight into the turret (the start skipped).
+func gunner_in_now() -> void:
+ var actor:=gunner_out
+ gunner_out=null
+ if not is_instance_valid(actor) or actor.dead or actor.vehicle!=null:return
+ Idle.stop(actor)
+ actor.set_meta("mech_control",false)
+ vehicle.board_crew(actor,"gunner")
+ vehicle.gunner.manned=true
 
 func mount_up() -> void:
  if state!="field":return
  boarded_clock=0.0
+ for actor in on_foot():Idle.stop(actor)
  # The driver's men board as on his own «По машинах!».
  if player_led:set_state("mount");return
  vehicle.open_doors(true)
@@ -252,7 +307,8 @@ func tick_board(delta: float) -> void:
   control(men[i],true)
   run_to_door(men[i],i)
   try_board(men[i],i)
- if not on_foot().is_empty() or vehicle.troops.busy() or battle.waiting_for_player(self):
+ var gunner_in:=board_gunner()
+ if not on_foot().is_empty() or not gunner_in or vehicle.troops.busy() or battle.waiting_for_player(self):
   boarded_clock=0.0
   return
  boarded_clock+=delta
@@ -698,7 +754,7 @@ func bail_out() -> void:
   if actor.get_meta("bmp_role","")=="":vehicle.unload(actor,index_out)
   else:actor.disembark(snap(spot)+Vector3.UP*0.1,vehicle.global_basis.z)
   control(actor,false)
-  if randf()<0.35:actor.receive_blast(140.0,0.8,Vector3.UP)
+  if vehicle.destroyed and randf()<0.35:actor.receive_blast(140.0,0.8,Vector3.UP)
   if actor.get_meta("bmp_role","")!="":actor.set_meta("bmp_role","");members.append(actor)
  vehicle.gunner.manned=false
  set_state("afoot")

@@ -53,6 +53,7 @@ var outfit_caption: Label
 var outfit_buttons: Array[Button] = []
 var map_buttons: Array[Button] = []
 var player_outfit := "ua_pixel"
+var player_vest := "korsar"
 var enemy_outfit := "rf_digital"
 var outfit_preview: SubViewport
 var campaign := Campaign.new()
@@ -90,6 +91,8 @@ var main_menu: MainMenu
 var grad_training: GradTraining
 # Every «Навчання» course by class, in the order of the training screen.
 const COURSE_IDS := ["rifleman","sniper","mortarman","grad","bmp"]
+# Firearms whose report is a gunshot to the ears (the hearing model).
+const GUNSHOTS := ["ak74","m16","svd","pm","m9","pkm"]
 var courses: Dictionary={}
 # A training session borrows the BM-21 class and gives the loadout back.
 var training := ""
@@ -634,6 +637,7 @@ func load_settings() -> void:
 	if settings.load("user://settings.cfg")==OK:
 		loadout_bag=BackpackState.restore(settings.get_value("loadout","backpack",{}))
 		player_outfit=Wardrobe.valid(str(settings.get_value("loadout","outfit","ua_pixel")))
+		player_vest=VestKind.valid(str(settings.get_value("loadout","vest","korsar")))
 		battle_size=int(settings.get_value("operation","battle_size",27))
 		# Sizes before the BMPs (12, 20, 28, 50) are not whole crews: the nearest one.
 		if battle_size not in BattleMode.SIZES:
@@ -646,7 +650,7 @@ func load_settings() -> void:
 		if selected_map not in Campaign.IDS and selected_map!=BattleMap.ID:selected_map="forest_01"
 		primary=str(settings.get_value("loadout","primary","ak74"))
 		secondary=str(settings.get_value("loadout","secondary","pm"))
-		if primary not in ["ak74","m16","svd"]:primary="ak74"
+		if primary not in ["ak74","m16","svd","pkm"]:primary="ak74"
 		if secondary not in ["pm","m9"]:secondary="pm"
 		player_class=PlayerClass.valid(str(settings.get_value("loadout","class",PlayerClass.infer(primary))))
 		primary=PlayerClass.primary_for(player_class,primary)
@@ -667,6 +671,7 @@ func save_settings() -> void:
 	settings.set_value("settings","fullscreen",fullscreen_on)
 	settings.set_value("settings","ui_width",ui_width)
 	settings.set_value("loadout","outfit",player_outfit)
+	settings.set_value("loadout","vest",player_vest)
 	settings.set_value("loadout","backpack",loadout_bag.serialize())
 	settings.set_value("operation","enemy_outfit",enemy_outfit)
 	settings.set_value("loadout","class",player_class)
@@ -699,7 +704,10 @@ func setup_audio() -> void:
 		wav.mix_rate=22050
 		wav.data=bytes
 		sounds[kind]=wav
-	for key in ["ak74","m16","pm","m9","mag_in","mag_out","bolt","bolt_pull","pain_1","pain_2","pain_3","pain_4","cover"]:
+	# Recorded: the PKM and the launches of the RPG-7 and of a disposable
+	# launcher (an M72 standing in for the RPG-22), public-domain DVIDS
+	# footage; provenance in AUDIO-CREDITS.
+	for key in ["ak74","m16","pm","m9","pkm","rpg7_launch","rpg22_launch","mag_in","mag_out","bolt","bolt_pull","pain_1","pain_2","pain_3","pain_4","cover"]:
 		sounds[key]=load("res://assets/audio/"+key+".wav")
 	# Recorded rifle placeholder; its provenance is documented in AUDIO-CREDITS.
 	sounds["svd"]=sounds["ak74"]
@@ -724,7 +732,7 @@ func setup_audio() -> void:
 		spatial_pool.append(output)
 
 func sound(kind: String, db: float) -> void:
-	if kind in ["ak74","m16","svd","pm","m9"]:
+	if kind in GUNSHOTS:
 		hearing.shot(0,true)
 		db+=3
 	if volume<=0:return
@@ -736,12 +744,12 @@ func sound(kind: String, db: float) -> void:
 	output.play()
 
 func spatial_shot(weapon: String, where: Vector3, db: float=-5) -> void:
-	if weapon in ["ak74","m16","svd","pm","m9"] and is_instance_valid(player):
+	if weapon in GUNSHOTS and is_instance_valid(player):
 		hearing.shot(player.camera.global_position.distance_to(where))
 	if volume<=0:return
 	var output := spatial_pool[spatial_index]
 	spatial_index=(spatial_index+1)%spatial_pool.size()
-	output.stream=sounds[weapon]
+	output.stream=sounds.get(weapon,sounds["mine_blast"])
 	output.global_position=where
 	output.volume_db=db+linear_to_db(volume)
 	output.pitch_scale=randf_range(0.99,1.01)
@@ -1082,6 +1090,11 @@ func refresh_inventory() -> void:
 	for tile in pistol_mag_tiles:tile.show_weapon(secondary)
 	for tile in medkit_tiles:tile.show_item("medkit")
 
+func choose_vest(id: String) -> void:
+	player_vest=VestKind.valid(id)
+	refresh_outfit_preview()
+	save_settings()
+
 func choose_outfit(index: int) -> void:
 	player_outfit=Wardrobe.IDS[index]
 	refresh_outfit_preview()
@@ -1281,7 +1294,11 @@ func close_panels() -> void:
 
 func control_hint() -> String:
 	var text := "SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    Q / E  НАХИЛ    C  ВИГЛЯНУТИ    ALT  ЛИШЕ ЗБРОЯ    H  АПТЕЧКА\nV  ЗАТВОР    M  КАРТА    K  ДАЛЕКОМІР    J  ДРОН    U  ЕКРАН ДРОНА"
-	if player_class=="rifleman":text+="    4  РПО-А"
+	if player_class=="rifleman":text+="    4  РПО-А / РПГ-22    5  НАСТУПНИЙ"
+	if player_class=="grenadier":text+="    4  РПГ-7 / РПГ-22    5  НАСТУПНИЙ    R  ЗАРЯДИТИ РПГ-7 / ВЗВЕСТИ РПГ-22"
+	if player_class=="machinegunner":text+="    X  СОШКИ    PGUP / PGDN  ПРИЦІЛ 1–15"
+	if player_class=="uav":text+="    Y  FPV-ДРОН"
+
 	if player_class=="mortarman":text+="    G  РОЗРАХУНОК    N  МІНОМЕТ    F  ПРИЦІЛ / ЯЩИК"
 	if player_class=="bmp":text+="\nG  КОМАНДИ ВІДДІЛЕННЮ    F  БІЛЯ ЛЮКА — МІСЦЕ МЕХАНІКА-ВОДІЯ"
 	if player_class=="grad":text="SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    H  АПТЕЧКА    F  БІЛЯ МАШИНИ — ДІЯ / КАБІНА / ПРИЦІЛ    M  ПЛАНШЕТ    G  РАДІО"

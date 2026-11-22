@@ -199,6 +199,15 @@ func animate(state: WeaponState, delta: float) -> void:
 	flash_node.visible=flash_time>0
 	magazine.position=mag_offset
 	magazine.rotation=mag_rotation
+	# The PKM's feed cover: lifted at the start of a reload, open while the
+	# box is changed, shut once the new belt lies on the tray.
+	var cover := get_node_or_null("FeedCover") as Node3D
+	if cover!=null:
+		var open := 0.0
+		if phase=="remove":open=smoothstep(0.0,0.35,p)
+		elif phase in ["stow","draw","ready_remove","ready_stow"]:open=1.0
+		elif phase in ["insert","ready_insert"]:open=1.0-smoothstep(0.70,0.95,p)
+		cover.rotation.x=-1.35*open
 	left_hand.position=left_hand.position.lerp(hand_target,minf(delta*24,1))
 	left_hand.rotation=left_hand.rotation.lerp(hand_rotation,minf(delta*20,1))
 	phase_offset=phase_offset.lerp(offset,minf(delta*12,1))

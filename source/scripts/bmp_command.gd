@@ -450,7 +450,7 @@ func _process(delta: float) -> void:
    vehicle.master=true;vehicle.set_radio(true)
   # A passenger gets out with the squad in his turn (BmpTroops); at once
   # when the vehicle is lost.
-  if seat=="troop" and vehicle.destroyed:
+  if seat=="troop" and (vehicle.destroyed or vehicle.hull.burning):
    leave()
    game.squad.tell("БМП підбито — ти з десантом пішки")
   elif seat=="driver" and vehicle.destroyed:
@@ -540,6 +540,8 @@ func instrument_text() -> String:
  states.append("ЛЮК %s" % ("ВІДКРИТО" if v.hatch_open else "ЗАКРИТО"))
  if v.radio_on:states.append("РАДІО «%s»" % BmpVehicle.RADIO_TRACKS[v.radio_track][1])
  if v.immobile:states.append("ХОДОВУ ПОШКОДЖЕНО")
+ if v.hull.burning and not v.destroyed:states.append("ПОЖЕЖА — ПОКИНЬ МАШИНУ (F)")
+ if v.hull.weapon_out:states.append("ОЗБРОЄННЯ НЕ ПРАЦЮЄ")
  return lines+"\n"+" · ".join(states)
 
 func hint_text() -> String:

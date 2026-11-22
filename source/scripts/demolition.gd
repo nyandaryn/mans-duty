@@ -13,6 +13,11 @@ const HITS := {
  "rpo":{"direct":55.0,"near":18.0,"reach":2.5,"fences":3.5},
  "mine":{"direct":38.0,"near":14.0,"reach":2.5,"fences":3.5},
  "cannon":{"direct":5.0,"near":0.0,"reach":0.0,"fences":1.2},
+ # A shaped charge burns a hole through a wall (1.7 m of brick for the
+ # PG-7VL) but brings down little: weaker than a Shmel on a house.
+ "heat":{"direct":22.0,"near":6.0,"reach":1.5,"fences":1.5},
+ # The ammunition of a vehicle going up beside a house.
+ "cookoff":{"direct":90.0,"near":60.0,"reach":6.0,"fences":9.0},
 }
 # The heap a house leaves: walls and roof slumped into a low mound of broken
 # brick, about a metre for a single storey, spilt a little past where the

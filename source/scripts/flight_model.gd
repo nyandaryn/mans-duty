@@ -84,7 +84,7 @@ const G1 = [
  Vector2(4.80,0.4990),
  Vector2(5.00,0.4988)
 ]
-const BC = {"ak74":0.31,"m16":0.304,"svd":0.411,"pm":0.12,"m9":0.16}
+const BC = {"ak74":0.31,"m16":0.304,"svd":0.411,"pm":0.12,"m9":0.16,"pkm":0.374}
 const AIR_DENSITY := 1.225
 const SOUND_SPEED := 340.3
 const BC_TO_SI := 703.06958 # lb/in² to kg/m² (BC uses diameter², not frontal area).

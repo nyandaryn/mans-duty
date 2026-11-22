@@ -54,12 +54,12 @@ static func trajectory_location(area: Area3D, point: Vector3, direction: Vector3
 	return Vector2(minf(radial,0.86),0.5 if upper and radial<0.4 else -0.5)
 
 static func damage(weapon: String, zone: String, energy: float) -> float:
-	var rifle := weapon in ["ak74","m16","svd"]
-	var base := 86.0 if weapon=="svd" else (68.0 if rifle else 40.0)
+	var rifle := weapon in ["ak74","m16","svd","pkm"]
+	var base := 86.0 if weapon in ["svd","pkm"] else (68.0 if rifle else 40.0)
 	var factors := {"head":3.5,"chest":1.0,"abdomen":0.85,"arm":0.50,"leg":0.65}
 	return base*float(factors.get(zone,1.0))*energy
 
-static func wound(zone: String, weapon: String, energy: float, location: Vector2, plate_integrity: float) -> Dictionary:
+static func wound(zone: String, weapon: String, energy: float, location: Vector2, plate_integrity: float, vest: String="korsar") -> Dictionary:
 	var result := {"kind":"penetrating","damage":damage(weapon,zone,energy),"bleeding":1.2,"pain":0.7,"disabled":false,"plate_loss":0.0}
 	if energy<0.12:
 		result.kind="blunt"
@@ -73,9 +73,11 @@ static func wound(zone: String, weapon: String, energy: float, location: Vector2
 		result.bleeding=2.0
 		return result
 	if zone=="plate":
-		var penetration := energy*(1.0 if weapon in ["ak74","m16","svd"] else 0.30)
-		result.plate_loss=energy*(0.45 if weapon in ["ak74","m16","svd"] else 0.12)
-		if plate_integrity>0 and penetration<0.90+plate_integrity*0.35:
+		var penetration := energy*(1.0 if weapon in ["ak74","m16","svd","pkm"] else 0.30)
+		result.plate_loss=energy*(0.45 if weapon in ["ak74","m16","svd","pkm"] else 0.12)
+		# The plate's class (VestKind): class 4 of the Korsar, 5A of the 6B45,
+		# class 6 of the carrier's plates.
+		if VestKind.plate_holds(vest,penetration,plate_integrity):
 			result.kind="blunt"
 			result.damage=8.0+energy*6.0
 			result.bleeding=0.0
@@ -84,6 +86,13 @@ static func wound(zone: String, weapon: String, energy: float, location: Vector2
 		result.kind="plate_penetration"
 		result.damage=damage(weapon,"chest",energy)*0.9
 		result.bleeding=3.8
+		return result
+	# Soft armour round the torso stops a pistol round: a bruise.
+	if zone in ["chest","abdomen"] and VestKind.soft_holds(vest,weapon,energy):
+		result.kind="blunt"
+		result.damage=4.0+energy*5.0
+		result.bleeding=0.0
+		result.pain=0.6
 		return result
 	# A marginal hit on the limb's outer region is treated as a graze.
 	if zone in ["arm","leg"] and absf(location.x)>0.87:

@@ -16,7 +16,7 @@ func run():
  game.volume=0;game.ally_count=3;game.battle_size=team_size;game.selected_map=BattleMap.ID;game.start_match()
  var squads:=BattleMode.squad_count(team_size)
  # The rifleman's squads start on the field by their vehicles (test_field_start).
- check(game.battle.mech.size()==squads and game.battle.mech.all(func(s):return s.on_foot().size()+s.aboard().size()==BmpVehicle.SEATS and s.vehicle.crew.size()==2),"The attackers come in %d BMPs, a full crew and squad to each" % squads)
+ check(game.battle.mech.size()==squads and game.battle.mech.all(func(s):return s.on_foot().size()+s.aboard().size()==BmpVehicle.SEATS and s.vehicle.crew.size()+(1 if is_instance_valid(s.gunner_out) else 0)==2),"The attackers come in %d BMPs, a full crew and squad to each" % squads)
  # The infantry assault from the start line: the column is taken as arrived.
  game.battle.skip_approach()
  # The vehicles hold still and silent: the checks below count every shot.
@@ -36,10 +36,13 @@ func run():
  for i in range(3):
   for j in range(i+1,3):apart=minf(apart,Vector2(BattleMap.CENTERS[i]).distance_to(BattleMap.CENTERS[j]))
  check(apart>140,"Strongpoints stand in different parts of the village (%.0f m apart at least)" % apart)
- var counts:=BattleMode.defence_counts(BattleMode.enemies(team_size))
+ # The crews of their vehicles (EnemyArmour) are counted apart.
+ var crews: int=game.bots.filter(func(a):return a.get_meta("armour_crew",false)).size()
+ var counts:=BattleMode.defence_counts(BattleMode.enemies(team_size)-crews)
  var sectors:Array[int]=[0,0,0,0];var held:=true;var posted:=true
  var slots:Array[Dictionary]=[{},{},{}];var reach:Array[float]=[0.0,0.0,0.0]
  for actor in game.bots:
+  if actor.get_meta("armour_crew",false):continue
   var index:int=actor.get_meta("battle_sector",-1)
   if actor.position.distance_to(battle.post_of(actor))>1:posted=false
   if index<0:

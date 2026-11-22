@@ -18,7 +18,7 @@ static func validate(data: Dictionary) -> Dictionary:
  var role := PlayerClass.valid(str(data.get("class",PlayerClass.infer(primary))))
  var bag := BackpackState.restore(data.get("backpack",{}))
  PlayerClass.clean_bag(role,bag)
- return {"class":role,"primary":PlayerClass.primary_for(role,primary),"secondary":PlayerClass.secondary_for(role,str(data.get("secondary","pm"))),"outfit":Wardrobe.valid(str(data.get("outfit","ua_pixel"))),"backpack":bag.serialize()}
+ return {"class":role,"primary":PlayerClass.primary_for(role,primary),"secondary":PlayerClass.secondary_for(role,str(data.get("secondary","pm"))),"outfit":Wardrobe.valid(str(data.get("outfit","ua_pixel"))),"vest":VestKind.valid(str(data.get("vest","korsar"))),"backpack":bag.serialize()}
 
 func save_preset(title: String, data: Dictionary) -> Error:
  title=title.strip_edges().left(32)

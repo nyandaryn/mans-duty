@@ -9,6 +9,9 @@ var goggles: Node3D
 var controller: Node3D
 var weapon_id := ""
 var launcher_model: Node3D
+# Every launcher the operator carries, on the pack's mount or in his hands
+# (the RPG-22 folded on the pack, drawn out in the hands).
+var launcher_models := {}
 
 func setup(owner_operator: Operator) -> void:
  operator=owner_operator
@@ -16,8 +19,10 @@ func setup(owner_operator: Operator) -> void:
  model=Models.soldier(self)
  Wardrobe.dress(model,operator.outfit_id)
  CharacterArt.team_markings(model,true)
+ CharacterArt.wear_vest(model,operator.vest)
  PackArt.equip(model,operator.backpack.equipped)
  launcher_model=PackArt.attach_launcher(model)
+ launcher_models["rpo_a"]=launcher_model
  goggles=DroneArt.goggles()
  goggles.name="PilotGoggles"
  model.get_node("Head").add_child(goggles)
@@ -37,10 +42,44 @@ func refresh_weapon() -> void:
  CharacterArt.equip_display(model,weapon_id)
  for mesh in model.find_children("*","VisualInstance3D",true,false):mesh.layers=WORLD_BODY_LAYER
 
+# A launcher on the body: on the pack's mount (one per kind and state) or in
+# the hands (a copy of its own, so a second tube of the kind stays on the
+# mount). An armed RPG-22 is drawn out wherever it is.
+func launcher_for(kind: String, ready: bool=false, hands: bool=false) -> Node3D:
+ var key:=kind+("/ready" if ready and kind=="rpg22" else "")+("/hands" if hands else "")
+ if not launcher_models.has(key):
+  var built: Node3D
+  if kind=="rpg22" and ready:
+   built=BotKit.launcher_model("rpg22",true)
+   model.add_child(built)
+  else:built=PackArt.attach_launcher(model,kind)
+  built.name="Carried_"+key.replace("/","_")
+  for mesh in built.find_children("*","VisualInstance3D",true,false):mesh.layers=WORLD_BODY_LAYER
+  launcher_models[key]=built
+ return launcher_models[key]
+
 func update_pose() -> void:
  refresh_weapon()
- launcher_model.visible=operator.backpack.count("rpo_a")>0 or operator.launcher.mode=="spent"
- launcher_model.position=Vector3(0.26,1.21,0.31);launcher_model.rotation=Vector3(PI/2,0,-0.12)
+ var drawn: LauncherRig=operator.launcher
+ var in_hands: Node3D=null
+ if drawn.active():in_hands=launcher_for(drawn.kind,drawn.kind=="rpg22" and (drawn.armed() or drawn.mode=="spent"),true)
+ # What is left on the mount, and the state of the first of each kind there.
+ var mounted := {}
+ for entry in operator.backpack.items:
+  var kind: String=entry.kind
+  if kind not in LauncherRig.KINDS or (drawn.active() and int(entry.uid)==drawn.item_uid):continue
+  if not mounted.has(kind):mounted[kind]=entry
+ for kind in mounted:launcher_for(kind,mounted[kind].get("extended",false)==true)
+ for key in launcher_models:
+  var m: Node3D=launcher_models[key]
+  var kind: String=String(key).get_slice("/",0)
+  var hands:=String(key).ends_with("/hands")
+  var ready:=String(key).contains("/ready")
+  m.visible=m==in_hands or (not hands and mounted.has(kind) and ready==(mounted.get(kind,{}).get("extended",false)==true))
+  m.transform=PackArt.mount(kind)
+  if kind=="rpg7":
+   var round:=m.get_node_or_null("Grenade") as Node3D
+   if round!=null:round.visible=drawn.loaded() if m==in_hands else mounted.get("rpg7",{}).get("loaded",false)==true
  if operator.is_vaulting():
   vault_pose()
   return
@@ -66,20 +105,33 @@ func update_pose() -> void:
   # One knee on the ground, opposite shin vertical, both feet supported.
   leg.position.y=0.89+(0.27 if knee else 0.0)
  var rifle: Node3D=model.get_node("CarriedRifle")
- if operator.launcher.active():
+ if in_hands!=null:
   rifle.position=Vector3(0.25,1.05,-0.13);rifle.rotation=Vector3(0,0,-0.8)
-  launcher_model.position=Vector3(0.19,1.46,-0.08)
-  launcher_model.rotation=Vector3(PI/2 if low else operator.pitch,0,0)
-  if operator.launcher.mode in ["draw","stow"]:
-   var progress := clampf(operator.launcher.timer/(LauncherRig.ACCESS_TIME if operator.launcher.mode=="draw" else 2.0),0,1)
-   var reach := smoothstep(0.15,0.92,progress) if operator.launcher.mode=="draw" else 1-smoothstep(0,1,progress)
-   launcher_model.position=Vector3(0.26,1.21,0.31).lerp(launcher_model.position,reach)
-   launcher_model.rotation=Vector3(PI/2,0,-0.12).lerp(launcher_model.rotation,reach)
-  elif operator.launcher.mode=="spent":
-   var discard := smoothstep(0,1,clampf(operator.launcher.timer/1.1,0,1))
-   launcher_model.position+=Vector3(0.35,-0.7,0.1)*discard;launcher_model.rotation.z=discard*0.65
-  CharacterArt.pose_arm(model,"Left",launcher_model.position+launcher_model.basis*Vector3(-0.055,-0.10,-0.20))
-  CharacterArt.pose_arm(model,"Right",launcher_model.position+launcher_model.basis*Vector3(-0.035,-0.10,0.16))
+  var kind: String=drawn.kind
+  # The tube on the right shoulder (the Shmel's capsule as before).
+  var basis:=Basis.from_euler(Vector3(PI/2 if low else operator.pitch,0,0))
+  var seat:=Transform3D(basis,Vector3(0.19,1.46,-0.08))
+  if kind!="rpo_a":seat.origin=BotKit.SHOULDER_TOP-basis*drawn.shoulder_point()
+  in_hands.transform=seat
+  if drawn.mode in ["draw","stow"]:
+   var progress := clampf(drawn.timer/float(LauncherRig.DRAW[kind] if drawn.mode=="draw" else LauncherRig.STOW[kind]),0,1)
+   var reach := smoothstep(0.15,0.92,progress) if drawn.mode=="draw" else 1-smoothstep(0,1,progress)
+   in_hands.transform=PackArt.mount(kind).interpolate_with(seat,reach)
+  elif drawn.mode=="arm":
+   # Across the chest while the covers come off and the sleeve is drawn out.
+   var p := clampf(drawn.timer/LauncherRig.ARM_TIME,0,1)
+   var down := smoothstep(0,0.12,p)*(1-smoothstep(0.88,1,p))
+   var chest:=Transform3D(Basis.from_euler(Vector3(0,PI/2-0.25,0)),Vector3(0.02,1.22,-0.28))
+   in_hands.transform=seat.interpolate_with(chest,down)
+  elif drawn.mode=="spent":
+   var discard := smoothstep(0,1,clampf(drawn.timer/1.1,0,1))
+   in_hands.position+=Vector3(0.35,-0.7,0.1)*discard;in_hands.rotation.z=discard*0.65
+  var grip:=Vector3(-0.035,-0.10,0.16)
+  var support:=Vector3(-0.055,-0.10,-0.20)
+  if kind=="rpg7":grip=Rpg7Art.GRIP;support=Rpg7Art.SUPPORT
+  elif kind=="rpg22":grip=Rpg22Art.GRIP;support=Rpg22Art.SUPPORT
+  CharacterArt.pose_arm(model,"Left",in_hands.transform*support)
+  CharacterArt.pose_arm(model,"Right",in_hands.transform*grip)
  elif pilot:
   rifle.position=Vector3(0.30,1.30,0.06) if low else Vector3(0.25,1.10,-0.16)
   rifle.rotation=Vector3(PI/2 if low else 0.0,0,-0.75)

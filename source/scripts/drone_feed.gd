@@ -150,7 +150,7 @@ func wanted_mode() -> String:
  # The driver sees it in his seat too; a passenger is not in the vehicle yet.
  if battery()!=null and not goggles and game.bmp.seat!="troop":return "barrage"
  var unit := drone()
- if unit!=null and not unit.piloting and unit.health>0 and not goggles:return "drone"
+ if unit!=null and unit.shows_on_wrist() and not unit.piloting and unit.health>0 and not goggles:return "drone"
  return ""
 
 func wanted() -> bool:return wanted_mode()!=""

@@ -56,8 +56,8 @@ func show_weapon(id: String, magazine_only: bool=false) -> void:
   replace_model(magazine)
  else:replace_model(baked)
 
-func show_outfit(id: String, weapon_id: String="", backpack: bool=false, launcher: bool=false) -> void:
- var key := id+weapon_id+("pack" if backpack else "")+("launcher" if launcher else "")
+func show_outfit(id: String, weapon_id: String="", backpack: bool=false, launcher: bool=false, vest: String="") -> void:
+ var key := id+weapon_id+("pack" if backpack else "")+("launcher" if launcher else "")+vest
  if content_key==key:return
  content_key=key
  actor_view=true
@@ -66,6 +66,7 @@ func show_outfit(id: String, weapon_id: String="", backpack: bool=false, launche
  if weapon_id!="":CharacterArt.equip_display(soldier,weapon_id)
  Wardrobe.dress(soldier,id)
  CharacterArt.team_markings(soldier,true)
+ if vest!="":CharacterArt.wear_vest(soldier,vest)
  PackArt.equip(soldier,backpack)
  if launcher:PackArt.attach_launcher(soldier)
  replace_model(holder)

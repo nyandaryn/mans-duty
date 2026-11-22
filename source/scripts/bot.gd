@@ -37,6 +37,16 @@ var squad_role := ""
 var squad_partner: Hostile
 # The infantry fighting vehicle this soldier rides in, or null on foot.
 var vehicle: BmpVehicle
+# His role and what he carries for it (BotKit): machine gunner, sniper,
+# grenade launchers, drone pilot; null for a plain rifleman of old.
+var kit: BotKit
+# Magnification of his sight for recognition (a sniper's PSO-1).
+var optic := 1.0
+# The quiet life before the fight (Idle): empty once he is on alert.
+var idle := {}
+# His body armour (VestKind) and the share of a burst it lets through.
+var vest := "korsar"
+var vest_blast := 1.0
 var hitbox_layers: Array[int]=[]
 var suppress_point := Vector3.ZERO
 var suppress_age := 100.0
@@ -167,10 +177,12 @@ func setup(owner_game: Node3D, spawn: Vector3) -> void:
 	outfit_id=game.player_outfit if friendly else game.enemy_outfit
 	Wardrobe.dress(model,outfit_id)
 	CharacterArt.team_markings(model,friendly)
+	wear_vest(VestKind.issue(friendly,formation_index))
 	hitboxes.append(DamageModel.hitbox(self,model.get_node("Head"),"head",Vector3(0,0.156,-0.045),Vector3(0.225,0.27,0.235)))
 	hitboxes.append(DamageModel.hitbox(self,model,"chest",Vector3(0,1.29,0),Vector3(0.40,0.36,0.30)))
 	hitboxes.append(DamageModel.hitbox(self,model,"abdomen",Vector3(0,1.00,0),Vector3(0.34,0.22,0.28)))
-	for z in [-0.19,0.19]:hitboxes.append(DamageModel.hitbox(self,model,"plate",Vector3(0,1.24,z),Vector3(0.32,0.38,0.05)))
+	# The plates of his vest, front and back, of their real size.
+	for z in [-0.19,0.19]:hitboxes.append(DamageModel.hitbox(self,model,"plate",Vector3(0,VestKind.plate_center_y(vest),z),VestKind.plate_box(vest)))
 	for side in ["Left","Right"]:
 		hitboxes.append(DamageModel.limb_hitbox(self,model.get_node(side+"Leg"),"leg",Vector3(0,-0.36,0.015),0.21,true))
 		hitboxes.append(DamageModel.limb_hitbox(self,model.get_node(side+"Leg/Knee"),"leg",Vector3(0,-0.36,0),0.16,false))
@@ -209,6 +221,45 @@ func setup(owner_game: Node3D, spawn: Vector3) -> void:
 	think_timer=randf()*0.4
 	path_timer=randf()*1.5
 	rotation.y=randf()*TAU
+
+# Takes up a role: its weapon in his hands and on the model.
+func set_kit(id: String) -> void:
+	if kit!=null:kit.clear()
+	kit=BotKit.make(self,id)
+	var weapon_id: String=BotKit.WEAPON.get(id,"ak74")
+	if weapon_id!=weapon.id:
+		weapon=WeaponState.new(weapon_id)
+		weapon.debug_infinite=game.debug_invulnerable
+		# The baked model of the weapon (the PKM's comes with its art).
+		if ResourceLoader.exists("res://assets/models/"+("ak74m" if weapon_id=="ak74" else weapon_id)+".scn"):
+			remodel(func():CharacterArt.equip_display(model,weapon_id))
+		n_rifle=model.get_node("CarriedRifle")
+		n_bolt=n_rifle.get_node("Bolt")
+		n_mag=n_rifle.get_node("Magazine")
+		n_muzzle=n_rifle.get_node("BotMuzzle")
+	optic=2.5 if id=="sniper" else 1.0
+
+func kit_id() -> String:return kit.kind if kit!=null else "rifle"
+
+# Puts on a vest: its model over the plate bags of the uniform.
+func wear_vest(id: String) -> void:
+	vest=VestKind.valid(id)
+	vest_blast=VestKind.blast_factor(vest)
+	remodel(func():CharacterArt.wear_vest(model,vest))
+
+# Changes the soldier's own geometry. A distant soldier of the great assault
+# is drawn by the crowd with his detailed meshes out of the tree: they are
+# put back for the change and recorded anew after it, or the new parts would
+# stay drawn beside the crowd's figure and the old ones would leak.
+func remodel(change: Callable) -> void:
+	var crowd: CrowdRenderer=null
+	if game!=null and game.battle!=null and is_instance_valid(game.battle.crowd):crowd=game.battle.crowd
+	if crowd!=null:crowd.before_remodel(self)
+	change.call()
+	if crowd!=null:crowd.after_remodel(self)
+
+# Fragments of a burst: what the vest keeps off (BlastSystem.detonate).
+func blast_protection(_where: Vector3) -> float:return vest_blast
 
 func hear(where: Vector3) -> void:
 	if dead or global_position.distance_to(where)>180:return
@@ -453,6 +504,7 @@ func _tick(delta: float) -> void:
 		var in_view := float(observation.exposure)>0
 		if float(observation.exposure)>0:
 			recognition=minf(1,recognition+float(observation.rate)*think_timer*(1.4 if alerted else 1.0))
+		# The role's own judgement (launchers, drones, the gunner's aim).
 		else:recognition=maxf(0,recognition-think_timer*0.8)
 		var previously_seen := sees_player
 		sees_player=in_view and float(observation.exposure)>0 and recognition>=(0.3 if sees_player else 1.0)
@@ -485,6 +537,7 @@ func _tick(delta: float) -> void:
 		if friendly:
 			if cover_timer<=0 and (order in ["engage","assault"] or follow_concealment or (alerted and contact_age<15) or under_fire_time>0):find_cover()
 		elif alerted and cover_timer<=0 and (flank_timer<=0 or suppression>1.4) and (not has_cover or suppression>0.4 or contact_age>7):find_cover()
+		if kit!=null:kit.think(think_timer)
 	if sees_player and reaction_left<=0:
 		var pivot := global_position+Vector3.UP*1.4
 		var from := pivot.direction_to(tracked_aim)
@@ -518,6 +571,10 @@ func _tick(delta: float) -> void:
 			cover_timer=8
 			no_sight_time=0
 	var hide := at_cover and ((friendly and under_fire_time>0 and squad_role!="cover") or shelled>0 or suppression>1.4 or reload_active or (squad_role!="cover" and fmod(peek_clock,4.8)<2.3))
+	# A machine gunner stays on his gun longer; a launcher on the shoulder is
+	# up whatever comes.
+	if kit!=null and kit.kind=="mg" and at_cover and shelled<=0 and suppression<=2.2 and not reload_active and fmod(peek_clock,6.0)<4.2:hide=false
+	if kit!=null and kit.exposed():hide=false
 	var drone_fire := drone_engaged() and not (sees_player and distance<DRONE_FIRST) and shelled<=0 and suppression<=1.4 and not reload_active and wound_timer<=0 and arm_wound<0.5 and collapse<0.01 and treatment_time<=0
 	if drone_fire:
 		hide=false
@@ -534,8 +591,9 @@ func _tick(delta: float) -> void:
 	var desired_stance := 1.0 if hide or wound_timer>0 or reload_active or leg_wound>0.6 else 0.0
 	if blind_fire:desired_stance=0.7
 	# Fire discipline in a halted assault: aimed shots at seen enemies only.
-	suppressive_fire=squad_role=="cover" and not sees_player and suppress_age<8 and not reload_active and not holding
-	blind_fire=at_cover and not sees_player and (suppression>0.7 or suppressive_fire) and suppress_age<8 and (peek_side!=0 or peek_top) and not reload_active and not holding
+	var gunner := kit!=null and kit.kind=="mg"
+	suppressive_fire=(squad_role=="cover" or gunner) and not sees_player and suppress_age<(12 if gunner else 8) and not reload_active and not holding
+	blind_fire=at_cover and not sees_player and (suppression>0.7 or (suppressive_fire and not gunner)) and suppress_age<8 and (peek_side!=0 or peek_top) and not reload_active and not holding
 	if drone_fire:
 		blind_fire=false
 		suppressive_fire=false
@@ -544,11 +602,13 @@ func _tick(delta: float) -> void:
 	if friendly and (follow_crouch or (follow_concealment and has_cover) or under_fire_time>0):desired_stance=maxf(desired_stance,1.0)
 	# Waiting behind cover: lean out to fire on one knee, never stand up.
 	if holding:desired_stance=maxf(desired_stance,0.8)
+	if kit!=null and kit.busy():desired_stance=1.0 if kit.piloting() else 0.8
+	if not idle.is_empty():desired_stance=0.0
 	stance=move_toward(stance,desired_stance,delta*4)
 	if not friendly:
 		# Defenders lie down behind low cover and hit the ground under shelling
 		# when no cover is near; they rise to a knee to fire.
-		var lie := (at_cover and cover_requires_prone and hide) or (shelled>0 and not has_cover)
+		var lie := (at_cover and cover_requires_prone and hide) or (shelled>0 and not has_cover) or bipod_down(at_cover)
 		tactical_prone=move_toward(tactical_prone,1.0 if lie else 0.0,delta*3)
 	var aiming := (alerted and not hide and not reload_active and wound_timer<=0 and arm_wound<0.5 and contact_age<8) or drone_fire
 	aim_weight=move_toward(aim_weight,1.0 if aiming else 0.0,delta*3)
@@ -574,6 +634,11 @@ func _tick(delta: float) -> void:
 		destination=game.squad.destination(self)
 		at_cover=has_cover and global_position.distance_to(cover_point)<0.85
 		if order=="hold" and global_position.distance_to(destination)<0.8:at_cover=true
+	if not idle.is_empty():
+		if alerted or under_fire_time>0 or shelled>0 or suppression>0.5 or wound_timer>0 or collapse>0.1:Idle.stop(self)
+		else:
+			destination=Idle.destination(self,delta)
+			at_cover=false
 	if path_timer<=0 and game.battle.budget("path"):
 		path_timer=1.1+randf()*0.3 if game.battle.active else (0.65 if friendly else 1.0)
 		if last_path_goal.distance_to(destination)>1.5 or path_index>=path.size() or velocity.length()<0.2:
@@ -592,7 +657,12 @@ func _tick(delta: float) -> void:
 		speed=game.squad.movement(self,direction,destination)*(1-leg_wound*0.65)*(0.55 if arm_wound>=0.5 else 1.0)
 		if sprinting:stance=move_toward(stance,0.2,delta*8)
 		direction=game.squad.separate(self,direction)
+	if friendly and bipod_down(at_cover):tactical_prone=move_toward(tactical_prone,1.0,delta*3)
+	if not idle.is_empty():
+		speed=minf(speed,Idle.STROLL_SPEED);sprinting=false
+		tactical_prone=move_toward(tactical_prone,0.0,delta*3)
 	if not friendly and tactical_prone>0.5:speed=minf(speed,0.85)
+	if kit!=null and kit.holds():direction=Vector3.ZERO
 	velocity.x=direction.x*speed
 	if concussion.active():
 		sprinting=false
@@ -603,20 +673,33 @@ func _tick(delta: float) -> void:
 	slide(delta)
 	var look: Vector3=game.squad.look_direction(self,direction) if friendly else (target-position if alerted else direction)
 	if drone_fire:look=drone_aim-position
+	if kit!=null and kit.facing()!=Vector3.INF:look=kit.facing()-position
+	if not idle.is_empty():look=Idle.look(self,direction)
 	if look.length()>0.1:
 		var desired := atan2(-look.x,-look.z)
 		rotation.y+=clampf(angle_difference(rotation.y,desired),-delta*2.2,delta*2.2)
 	animate_pose(delta,direction.length()>0.1)
+	if kit!=null and kit.kind=="mg":set_bipod(braced())
+	if not idle.is_empty():
+		Idle.pose(self)
+		return
+	if kit!=null and kit.act(delta):return
 	if drone_fire:
 		fire_at_drone(delta)
 		return
-	var ready := sees_player and reaction_left<=0 and not hide and aim_time>(0.18 if panic_time>0 else 0.65+distance*0.004)*(1+concussion.severity*3)
+	var settle := 0.65+distance*0.004
+	if kit_id()=="sniper":settle=1.1+distance*0.0035
+	var ready := sees_player and reaction_left<=0 and not hide and aim_time>(0.18 if panic_time>0 else settle)*(1+concussion.severity*3)
 	if sprinting or reaction_left>0 or not (ready or blind_fire or suppressive_fire) or arm_wound>=0.5 or wound_timer>0 or weapon.phase!="":
 		shoot_timer=maxf(0,shoot_timer)
 		return
 	if shoot_timer<=0.000001:
+		var role:=kit_id()
 		if burst_left<=0:
 			burst_left=randi_range(2,4) if not blind_fire else randi_range(4,7)
+			# PKM: bursts of five to ten; the sniper one aimed round at a time.
+			if role=="mg":burst_left=randi_range(5,10) if not suppressive_fire else randi_range(8,14)
+			elif role=="sniper":burst_left=1
 			shoot_timer=0 # No accumulated firing debt from time without a target.
 		while burst_left>0 and shoot_timer<=0.000001:
 			if not shoot(player,distance):
@@ -624,7 +707,12 @@ func _tick(delta: float) -> void:
 				shoot_timer=0.25
 				break
 			burst_left-=1
-			shoot_timer+=float(weapon.data.interval) if burst_left>0 else randf_range(0.8,1.7)
+			# The pause after a burst is drawn only when the burst is over: one
+			# draw per burst, as before the roles (seeded scenarios rely on it).
+			if burst_left>0:shoot_timer+=float(weapon.data.interval)
+			elif role=="mg":shoot_timer+=randf_range(0.35,0.9)
+			elif role=="sniper":shoot_timer+=randf_range(1.8,3.4);aim_time=0.6
+			else:shoot_timer+=randf_range(0.8,1.7)
 
 func animate_pose(delta: float, moving: bool) -> void:
 	pose_serial+=1
@@ -679,6 +767,10 @@ func animate_pose(delta: float, moving: bool) -> void:
 	if tactical_prone>collapse:
 		rifle.position=rifle.position.lerp(Vector3(0.14,1.34,-0.16),tactical_prone)
 		rifle.rotation.x=lerpf(rifle.rotation.x,PI/2+aim_pitch,tactical_prone)
+		# On its bipod the PKM stands on its legs (0.28 m, swung 0.3 rad
+		# forward): the hinge 0.26 m above the ground, the bore at 0.31 m;
+		# the gunner props himself on his elbows behind it.
+		if bipod_open:rifle.position.z=lerpf(rifle.position.z,0.11,tactical_prone)
 	# Rotate around the base of the neck, with a slight forward cheek weld.
 	# Positive X tips the face upward: cap extension and keep the chin tucked.
 	var head: Node3D=n_head
@@ -750,18 +842,43 @@ func shoot(player: Node3D, distance: float) -> bool:
 		return false
 	if not weapon.fire():return false
 	since_shot=0
+	var role:=kit_id()
 	var spread := (0.008+arm_wound*0.025+suppression*0.006) if not blind_fire else 0.10
+	# The PSO-1 and a rest: a sniper's round goes where it is laid.
+	if role=="sniper" and not blind_fire:spread=0.0018+arm_wound*0.02+suppression*0.003
 	spread+=concussion.severity*0.05
 	if aim_weight<0.7 or panic_time>0:spread+=0.055
-	if suppressive_fire:spread=maxf(spread,0.045)
+	if suppressive_fire:spread=maxf(spread,0.045 if role!="mg" else 0.022)
 	var direction := origin.direction_to(end)+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randf_range(-spread,spread),randf_range(-spread,spread),randf_range(-spread,spread))
-	game.ballistics.launch(origin,direction.normalized(),"ak74",68,self)
-	game.spatial_shot("ak74",origin)
+	game.ballistics.launch(origin,direction.normalized(),weapon.id,68,self)
+	game.spatial_shot(weapon.id,origin)
 	game.alert_opponents(self,origin)
-	game.eject_case(n_rifle.to_global(Vector3(0.04,0.01,0)),n_rifle.global_basis,"ak74")
+	game.eject_case(n_rifle.to_global(Vector3(0.04,0.01,0)),n_rifle.global_basis,weapon.id)
 	shot_kick=0.045
-	recoil_offset+=Vector2(randf_range(-0.008,0.008),0.021)*(0.65 if stance>0.5 else 1.0)*(1.8 if blind_fire else 1.0)
+	# A machine gun on its bipod hardly climbs; held at the hip it does.
+	var climb:=float(weapon.data.recoil)*(0.3 if braced() else 1.0)
+	recoil_offset+=Vector2(randf_range(-0.008,0.008),climb)*(0.65 if stance>0.5 else 1.0)*(1.8 if blind_fire else 1.0)
 	return true
+
+# The PKM down on its bipod: lying, or resting on the cover he fires over.
+func braced() -> bool:
+	return kit!=null and kit.kind=="mg" and (tactical_prone>0.7 or (has_cover and global_position.distance_to(cover_point)<0.85))
+
+# The PKM's bipod legs: swung down and spread when he rests the gun on them,
+# folded back under the barrel otherwise (PkmArt: deployed (0.30, 0, ∓0.22)).
+var bipod_open := false
+func set_bipod(open: bool) -> void:
+	if open==bipod_open:return
+	var legs:=n_rifle.get_node_or_null("Bipod")
+	if legs==null:return
+	bipod_open=open
+	for side in [["LegLeft",-1.0],["LegRight",1.0]]:
+		var leg:=legs.get_node_or_null(String(side[0])) as Node3D
+		if leg!=null:leg.rotation=Vector3(0.30,0,0.22*float(side[1])) if open else Vector3(-PI/2,0,0)
+
+# A machine gunner engaging from the open lies behind the bipod.
+func bipod_down(at_cover: bool) -> bool:
+	return kit!=null and kit.kind=="mg" and alerted and contact_age<10 and weapon.phase=="" and velocity.length()<0.3 and (not at_cover or cover_requires_prone)
 
 # Drones of the other side in the air, heard within DRONE_HEARD or seen in
 # front or overhead against the sky: the nearest is noticed after a moment
@@ -827,10 +944,10 @@ func shoot_drone() -> bool:
 	# further it is, and wider still until the rifle has followed it a while.
 	var spread := 0.011+0.006*minf(2.0,origin.distance_to(drone_aim)/60.0)+suppression*0.006+concussion.severity*0.05+(0.012 if drone_aim_time<1.4 else 0.0)
 	var direction := origin.direction_to(drone_aim)+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randf_range(-spread,spread),randf_range(-spread,spread),randf_range(-spread,spread))
-	game.ballistics.launch(origin,direction.normalized(),"ak74",68,self)
-	game.spatial_shot("ak74",origin)
+	game.ballistics.launch(origin,direction.normalized(),weapon.id,68,self)
+	game.spatial_shot(weapon.id,origin)
 	game.alert_opponents(self,origin)
-	game.eject_case(n_rifle.to_global(Vector3(0.04,0.01,0)),n_rifle.global_basis,"ak74")
+	game.eject_case(n_rifle.to_global(Vector3(0.04,0.01,0)),n_rifle.global_basis,weapon.id)
 	shot_kick=0.045
 	recoil_offset+=Vector2(randf_range(-0.008,0.008),0.021)*(0.65 if stance>0.5 else 1.0)
 	return true
@@ -933,6 +1050,7 @@ func disembark(point: Vector3, facing: Vector3) -> void:
 func die() -> void:
 	if dead:return
 	dead=true
+	if kit!=null:kit.clear()
 	var voice := get_node_or_null("PainVoice") as AudioStreamPlayer3D
 	if voice:voice.stop()
 	var callout := get_node_or_null("CoverVoice") as AudioStreamPlayer3D
@@ -945,6 +1063,10 @@ func die() -> void:
 
 func create_corpse() -> void:
 	if not is_inside_tree() or is_queued_for_deletion():return
+	# Killed inside a vehicle: he stays in it, out of sight.
+	if has_meta("died_inside") or vehicle!=null:
+		visible=false
+		return
 	var corpse := Corpse.new()
 	corpse.name="Corpse"
 	add_child(corpse)
@@ -1086,9 +1208,11 @@ func select_contact(eye: Vector3) -> Node3D:
 	for actor in candidates:
 		if not is_instance_valid(actor) or (actor is Hostile and (actor.dead or actor.vehicle!=null or actor.concussion.incapacitated())) or (actor is Operator and (actor.health<=0 or actor.get_meta("battle_out",false) or game.player_sheltered())):continue
 		var center: Vector3=actor.camera.global_position if actor is Operator else actor.n_head.global_position
-		if eye.distance_to(center)>220 or (-global_basis.z).dot(eye.direction_to(center))<=0.42:continue
+		if eye.distance_to(center)>220*optic or (-global_basis.z).dot(eye.direction_to(center))<=0.42:continue
 		var priority: float=game.squad.contact_priority(self,center) if friendly else 0.0
 		if priority<0:continue
+		# A sniper looks for the gunners, the grenade launchers and the pilots.
+		if optic>1.0 and actor is Hostile and actor.kit_id() in ["mg","rpg7","uav","sniper"]:priority+=12.0
 		var seen := Perception.observe(self,actor,game,eye)
 		if float(seen.exposure)<=0:continue
 		var score := float(seen.rate)+(20.0 if actor==combat_target else 0.0)+priority

@@ -19,6 +19,18 @@ Download mirror: https://github.com/petroulacl/fps-asset-kit/tree/main/sfx/firea
 
 These are recorded firearm sounds, not synthesized gunshots. Exact model, microphone location and ammunition differ from the in-game weapons. For AK-47, the last shot of the first recorded burst was isolated (source offset 1.085 s), so one game shot never triggers a recorded burst. Each sample was converted from 24-bit stereo to 16-bit mono 44.1 kHz, trimmed to one onset and up to 2.4 seconds of decay, high-pass filtered at 55 Hz, gain-adjusted with headroom, and faded over its final 120 ms. The runtime uses spatial distance attenuation for bots and small (±1%) pitch variation. This is not a physical acoustic simulator.
 
+## PKM and the grenade launchers (0.31)
+
+Cut from **public-domain US Government video** (DVIDS; works of US service members made in their official duties, 17 U.S.C. §105; https://www.dvidshub.net/about/copyright). The appearance of US Department of Defense visual information does not imply or constitute endorsement. Each source was decoded whole, cut with SoX, mixed to mono, high-pass filtered at 55 Hz, resampled to 44.1 kHz, faded out and normalised to −2 dBFS.
+
+| In-game file | Source | Range | What it is |
+|---|---|---|---|
+| `audio/pkm.wav` | DVIDS 506875 «Marines fire foreign weapons as part of pre-deployment training (B-Roll)», video by Sgt. Lucas Hopkins, II MEF, Camp Lejeune 2017 | 18.735–19.835 s | The last shot of a four-round burst of a PK-family machine gun (PKM pattern in the frame), close microphone, open range |
+| `audio/rpg7_launch.wav` | DVIDS 701773 «Agile Spirit 19 — RPG-7 Range», video by Spc. Ethan Valetski, 5th Mobile Public Affairs Detachment, Vaziani 2019 | 84.645–86.155 s | RPG-7 with a PG-7 round: the booster, the sustainer igniting 0.17 s later, the rocket's roar; the impact is left out |
+| `audio/rpg22_launch.wav` | DVIDS 896823 «U.S. Marines test fire the M72 LAW with a Robotic Goat», video by LCpl. Connor Webb, Twentynine Palms 2023 | 276.152–276.447 s | **An M72 LAW, NOT an RPG-22**: the same kind of disposable launcher whose motor burns out in the tube (one report, no sustainer). Cut before a second thump at 0.30 s (echo or impact) |
+
+No licensed recording of an RPG-18/22/26 launch was found on Wikimedia Commons or DVIDS. Source URLs and SHA-256 of the files used are in `audio-sources.json`, trims in `audio-processing.json`.
+
 ## Magazine and bolt handling
 
 **Gun Reload Sound Effects — BMacZero / Brian MacIntosh**

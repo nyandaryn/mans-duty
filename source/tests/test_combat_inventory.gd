@@ -24,7 +24,8 @@ func run():
   check(w.ammunition_total()==total,"Cancel neither duplicates nor discards ammo "+id)
   check(not task.begin(w,1,1),"Cannot transfer into same magazine "+id)
   check(task.begin(w,2,1),"Pouch to pouch transfer starts "+id)
-  for i in range(100):task.update(0.5)
+  # A belt of 100 takes longer to fill by hand than a magazine of 30.
+  for i in range(maxi(100,int(w.data.capacity)*5)):task.update(0.5)
   check(not task.active and int(w.pouches[0].rounds)==int(w.data.capacity),"Transfer stops at receiver capacity "+id)
   check(w.ammunition_total()==total,"Full transfer conserves ammo "+id)
   check(not task.begin(w,2,1),"Full receiver rejected "+id)

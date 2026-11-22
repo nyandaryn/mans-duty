@@ -8,7 +8,9 @@ const PROFILES = {
 	"ak74": {"speed": 880.0, "zero": 100.0},
 	"m16": {"speed": 940.0, "zero": 100.0},
 	"pm": {"speed": 315.0, "zero": 25.0},
-	"m9": {"speed": 365.0, "zero": 25.0}
+	"m9": {"speed": 365.0, "zero": 25.0},
+	# 57-N-323S LPS from the PKM: 825 m/s.
+	"pkm": {"speed": 825.0, "zero": 300.0}
 }
 var game: Node3D
 var projectiles: Array[Dictionary] = []
@@ -163,7 +165,8 @@ func step_projectiles(delta: float) -> void:
 					game.hit_marker=0.15
 				var area: Area3D=hit.collider
 				var location := DamageModel.trajectory_location(area,hit.position,next[1].normalized())
-				var wound := DamageModel.wound(zone,bullet.weapon,energy_factor,location,actor.plate_integrity)
+				var vest: Variant=actor.get("vest")
+				var wound := DamageModel.wound(zone,bullet.weapon,energy_factor,location,actor.plate_integrity,String(vest) if vest!=null else "korsar")
 				if actor!=game.player or not game.debug_invulnerable:
 					actor.apply_wound(wound,zone,next[1].normalized(),hit.position)
 					game.blood.add_wound(actor,area,hit.position,hit.normal,wound)

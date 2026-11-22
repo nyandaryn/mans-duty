@@ -167,6 +167,11 @@ func select_pack_item(uid: int) -> void:
  if str(entry.kind).begins_with("ammo_"):message.text="Обери магазин відповідного калібру, потім натисни «ПЕРЕКЛАСТИ НАБОЇ»."
  elif entry.kind=="recon_drone":message.text="Дістати й розкласти дрон · J — FPV-окуляри · після посадки F поруч — забрати."
  elif entry.kind=="rpo_a":message.text="Одноразовий РПО-А · 4 — дістати / прибрати · ПКМ — приціл · ЛКМ — постріл."
+ elif entry.kind=="rpg7":message.text="РПГ-7В1 з ПГО-7В3 · 4 — дістати / прибрати · R — зарядити ПГ-7ВЛ (6 с) · ПКМ — приціл · ЛКМ — постріл."
+ elif entry.kind=="pg7vl":message.text="Постріл ПГ-7ВЛ · з РПГ-7 у руках R — зарядити. Шеврони ПГО-7: 2…5 — 200…500 м."
+ elif entry.kind=="rpg22" and entry.get("extended",false)==true:message.text="РПГ-22 уже в бойовому положенні (скласти назад не можна) · 4 / 5 — зняти з кріплення й стріляти."
+ elif entry.kind=="rpg22":message.text="Одноразовий РПГ-22 у похідному положенні · 4 / 5 — зняти з кріплення · R — привести в бойове (6 с, назад не складається) · рамка 5 / 15 / 25 — 50 / 150 / 250 м."
+ elif entry.kind in Equipment.FPV:message.text="FPV-дрон · Y — дістати, поставити й надіти окуляри · ЛКМ у польоті — підрив."
  elif entry.kind=="medkit":message.text="Аптечка · порожнє місце на поясі — прикріпити (3,4 с) · «ДІСТАТИ ПРЕДМЕТ» — одразу лікуватися."
  else:message.text="Діставання займає 3,4 с. ЛКМ — виміряти; K — прибрати далекомір."
  refresh()
@@ -178,11 +183,11 @@ func inside_vehicle() -> bool:
 
 func use_pack_item() -> void:
  if inside_vehicle() and game.player.backpack.item(source_box).get("kind","")!="medkit":
-  message.text="У машині з наплічника — лише пачки з набоями й аптечка. Дрон, далекомір і РПО — назовні або з люка."
+  message.text="У машині з наплічника — лише пачки з набоями й аптечка. Дрон, далекомір і гранатомети — назовні або з люка."
   return
- if game.player.backpack.item(source_box).get("kind","")=="rpo_a":
+ if game.player.backpack.item(source_box).get("kind","") in LauncherRig.KINDS:
   if game.player.launcher.equip(source_box):hide_for_action()
-  else:message.text="РПО-А недоступний: руки зайняті, поранення або контузія."
+  else:message.text="Гранатомет недоступний: руки зайняті, поранення або контузія."
   return
  if game.player.field_rig.request(source_box):hide_for_action()
  else:message.text="Предмет зараз недоступний: перевір поранення, стан зброї та потребу в лікуванні."
@@ -258,7 +263,7 @@ func refresh() -> void:
  pack_grid.refresh()
  pack_summary.text="Вантаж: %.1f кг · %d / 24 клітинки\nK — дістати / прибрати далекомір" % [game.player.backpack.mass(),game.player.backpack.used_slots()]
  var selected: Dictionary=game.player.backpack.item(source_box)
- item_button.disabled=selected.is_empty() or selected.get("kind","") not in ["medkit","rangefinder","recon_drone","rpo_a"] or game.player.injury_time>0 or game.player.bandage_time>0 or game.player.concussion.incapacitated() or game.player.concussion.blackout_left>0 or (game.player.arm_injury>=0.5 and selected.get("kind","")!="medkit")
+ item_button.disabled=selected.is_empty() or selected.get("kind","") not in ["medkit","rangefinder","recon_drone","rpo_a","rpg7","rpg22","fpv_heat","fpv_frag"] or game.player.injury_time>0 or game.player.bandage_time>0 or game.player.concussion.incapacitated() or game.player.concussion.blackout_left>0 or (game.player.arm_injury>=0.5 and selected.get("kind","")!="medkit")
  summary.text=Wardrobe.LABELS[Wardrobe.IDS.find(game.player.outfit_id)]+"\nСпорядження: %.1f кг\nБіг: %.1f км/год" % [game.player.carried_mass(),6.3*3.6*Equipment.run_multiplier(game.player.carried_mass())]
  transfer_button.disabled=(source.x<0 and source_box<0) or destination.x<0 or transfer.active or not can_handle()
  progress_bar.visible=game.player.bandage_time>0

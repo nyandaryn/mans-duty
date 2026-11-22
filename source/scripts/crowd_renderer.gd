@@ -97,6 +97,33 @@ func set_far(entry: Dictionary, far: bool) -> void:
 		elif not far and mesh.get_parent()==null and is_instance_valid(parents[i]):
 			parents[i].add_child(mesh)
 
+# A soldier's own geometry is about to change (the weapon of his role, another
+# vest): his detailed meshes go back into the tree first, so the change sees
+# and frees the old ones; after it they are recorded again and, while he is
+# drawn by the crowd, taken out of the tree once more.
+func before_remodel(actor: Hostile) -> void:
+	for entry in entries:
+		if entry.actor==actor and entry.far:set_far(entry,false)
+
+func after_remodel(actor: Hostile) -> void:
+	for entry in entries:
+		if entry.actor!=actor:continue
+		discard(entry)
+		var meshes: Array=[]
+		for mesh in actor.model.find_children("*","MeshInstance3D",true,false):
+			if mesh!=actor.medical_prop:meshes.append(mesh)
+		var parents: Array=[]
+		parents.resize(meshes.size())
+		entry.meshes=meshes
+		entry.parents=parents
+		var mask:=int(entry.get("ride",1))
+		if mask!=1:
+			entry.ride=1
+			ride_layers(entry,mask)
+		if entry.far:set_far(entry,true)
+		entry.serial=-1
+		return
+
 # The layers of the detailed meshes, attached to the tree or not.
 func ride_layers(entry: Dictionary, mask: int) -> void:
 	if int(entry.get("ride",1))==mask:return

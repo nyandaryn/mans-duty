@@ -27,6 +27,14 @@ const SCATTERED_SHARE := 0.3
 # from the middle of a strongpoint.
 const POST_STANDOFF := 100.0
 const POST_APART := 55.0
+# Roles in a squad of ours (the seven who dismount, in seat order): the
+# machine gunner, the grenadier with the RPG-7, two riflemen with RPG-22, the
+# squad's sniper; every other squad has a drone pilot in place of a rifleman.
+const SQUAD_KITS := ["mg","rpg7","rpg22","rifle","rpg22","sniper","rifle"]
+# Roles of the defenders of a strongpoint in the order they take its posts:
+# two machine guns, the grenadier, a sniper, a drone pilot, RPG-22 among the
+# riflemen; on the scattered posts one of each pair has an RPG-22.
+const DEFENCE_KITS := ["mg","rpg7","rifle","sniper","rpg22","mg","uav","rifle","rpg22","rifle","rifle","rpg22"]
 var game: Node3D
 var active := false
 var finished := false
@@ -70,6 +78,7 @@ var done_at := -1.0
 var held_said := false
 var drive_warned := false
 var battery: GradBattery
+var armour: EnemyArmour
 # Marks over the player's squad and over his vehicle when it is boarded.
 var marks: Array[Sprite3D]=[]
 var vehicle_mark: Label3D
@@ -95,6 +104,8 @@ func reset() -> void:
    if is_instance_valid(squad.vehicle):squad.vehicle.gunner.clear();squad.vehicle.queue_free()
    squad.queue_free()
  mech.clear()
+ if is_instance_valid(armour):armour.clear();armour.queue_free()
+ armour=null
  vehicle_grid=null
 
 func start() -> void:
@@ -110,7 +121,11 @@ func start() -> void:
  # later: every casualty is final. Defenders hold the three strongpoints and
  # the posts between them; the attackers form up in front of the insertion,
  # the commander behind them.
- var defenders:=defence_counts(enemies(game.battle_size))
+ # The vehicles' map first: a BMP-2 of theirs at each strongpoint, its crew
+ # beside it, counted in the defenders' strength.
+ vehicle_grid=BmpRoutes.vehicle_grid(game.district)
+ armour=EnemyArmour.new();armour.setup(game,self);armour.deploy()
+ var defenders:=defence_counts(maxi(0,enemies(game.battle_size)-game.bots.size()))
  for index in range(3):
   for i in range(defenders[index]):deploy(false,index)
  deploy_posts(defenders[3])
@@ -118,7 +133,6 @@ func start() -> void:
  sector=next_target(formation_base(true,0))
  # The attackers come up in their vehicles: the column waits under the
  # trees by the highway; the player's own vehicle, if he drives one, leads.
- vehicle_grid=BmpRoutes.vehicle_grid(game.district)
  for i in range(1 if game.player_class=="bmp" else 0,squad_count(game.battle_size)):deploy_squad(i)
  # Every class but the BM-21 commander starts with the battery's fire; the
  # column moves off after it.
@@ -134,10 +148,10 @@ func start() -> void:
 static func enemies(size: int) -> int:return size*ENEMY_RATIO
 
 # On foot with the squad by its vehicle at the start.
-static func field_class(id: String) -> bool:return id in ["rifleman","sniper"]
+static func field_class(id: String) -> bool:return id in PlayerClass.INFANTRY
 # The start with the battery's fire: all but the BM-21 commander, who is
 # himself the fire.
-static func barrage_class(id: String) -> bool:return id in ["rifleman","sniper","bmp","mortarman"]
+static func barrage_class(id: String) -> bool:return id in PlayerClass.INFANTRY+["bmp","mortarman"]
 
 # --- The start on the field: the battery's fire, then «По машинах!» ----------
 func begin_field() -> void:
@@ -292,6 +306,9 @@ func deploy_squad(index: int) -> MechSquad:
   vehicle.board_crew(actor,role)
  for k in range(BmpVehicle.SEATS):
   var actor:=spawn_soldier(true,spot,index)
+  var role: String=SQUAD_KITS[k%SQUAD_KITS.size()]
+  if k==6 and index%2==0:role="uav"
+  actor.set_kit(role)
   squad.members.append(actor)
   vehicle.board(actor)
  return squad
@@ -308,6 +325,8 @@ func skip_approach() -> void:
   if is_instance_valid(battery):battery.queue_free()
   battery=null
  for squad in mech:
+  squad.gunner_in_now()
+  for actor in squad.on_foot():Idle.stop(actor)
   if squad.player_led:
    # The driver's men back in his vehicle.
    for actor in squad.on_foot():squad.control(actor,false);squad.vehicle.board(actor)
@@ -353,7 +372,9 @@ func skip_field() -> void:
  if is_instance_valid(battery):battery.queue_free()
  battery=null
  for squad in mech:
+  squad.gunner_in_now()
   for actor in squad.on_foot():
+   Idle.stop(actor)
    squad.control(actor,false)
    squad.vehicle.board(actor)
   squad.vehicle.open_doors(false)
@@ -409,8 +430,9 @@ func deploy(friendly: bool, index: int) -> void:
  if not friendly:
   var slot:=0
   for actor in game.bots:
-   if actor.get_meta("battle_sector",-1)==index:slot+=1
-  spawn_soldier(false,garrison_post(index,slot),index,slot%BattleMap.POSITIONS[index].size())
+   if actor.get_meta("battle_sector",-1)==index and not actor.get_meta("armour_crew",false):slot+=1
+  var defender:=spawn_soldier(false,garrison_post(index,slot),index,slot%BattleMap.POSITIONS[index].size())
+  defender.set_kit(DEFENCE_KITS[slot%DEFENCE_KITS.size()])
   return
  var point:Variant=safe_spawn(true,index)
  # A full formation still places the soldier: at the base, slightly offset.
@@ -462,7 +484,8 @@ func deploy_posts(count: int) -> void:
    var point:Variant=post_point(desired,2.5)
    if point==null:continue
    if first==null:first=point
-   spawn_soldier(false,point,-1,-1)
+   var sentry:=spawn_soldier(false,point,-1,-1)
+   sentry.set_kit("rpg22" if placed==0 else "rifle")
    placed+=1
   if placed>0:taken.append(at);count-=placed
  # A village with no room for every post: the rest join the strongpoints.
@@ -660,6 +683,10 @@ func spawn_soldier(friendly: bool, point: Vector3, index: int=0, slot: int=-1) -
  else:game.bots.append(actor)
  if is_instance_valid(crowd):crowd.register(actor)
  assign(actor)
+ # Before the attack the defenders live as on any quiet day at a post.
+ if not friendly:
+  var look:=BattleMap.threat(Vector2(point.x,point.z))
+  Idle.place(actor,point+Vector3(look.x,0,look.y)*120.0)
  return actor
 
 # Out of rounds: a comrade close by passes a spare magazine, or the soldier
@@ -695,7 +722,7 @@ static func give_magazine(weapon: WeaponState, magazine: Dictionary) -> bool:
 func assign(actor: Hostile) -> void:
  if not operational(actor) or not actor.get_meta("battle_managed",false):return
  # In a vehicle, or led by his squad on the approach: not the battle's man.
- if actor.vehicle!=null or actor.get_meta("mech_control",false):return
+ if actor.vehicle!=null or actor.get_meta("mech_control",false) or actor.get_meta("armour_crew",false):return
  if not actor.friendly:
   defend(actor);return
  var group:int=actor.get_meta("battle_group",0)
@@ -720,6 +747,10 @@ func assign(actor: Hostile) -> void:
  # the position it storms.
  if Vector2(actor.position.x-objective.x,actor.position.z-objective.z).length()>30:goal+=side*(float(group-1)*18+spread)-forward*16
  else:goal+=side*spread+forward*2
+ # The sniper and the drone pilot work from behind the assault line: the
+ # sniper where he overlooks the strongpoint, the pilot further back.
+ var role:=actor.kit_id()
+ if role in ["sniper","uav"]:goal=objective-forward*(140.0 if role=="sniper" else 220.0)+side*spread*2.5
  goal=snap(goal)
  if supply is Vector3:goal=snap(supply)
  elif actor.weapon.ammunition_total()==0:goal=restock(actor,depot(true))
@@ -750,7 +781,7 @@ func restock(actor: Hostile, point: Vector3) -> Vector3:
  if actor.position.distance_to(goal)<7:
   var time:float=actor.get_meta("resupply_time",0.0)+1
   actor.set_meta("resupply_time",time)
-  if time>=6:actor.weapon=WeaponState.new("ak74");actor.set_meta("resupply_time",0.0)
+  if time>=6:actor.weapon=WeaponState.new(actor.weapon.id);actor.set_meta("resupply_time",0.0)
  else:actor.set_meta("resupply_time",0.0)
  return goal
 

@@ -1,3 +1,46 @@
+# 0.31.0 validation — 2026-11-22
+
+PKM, RPG-7V1 with PGO-7V3 and PG-7VL, RPG-22; vehicle armour and damage;
+three enemy BMP-2s in the great assault and the quiet before it; vehicle
+markings; body armour in the loadout; machine gunner, grenadier and UAV
+operator classes; bot roles on both sides; FPV kamikaze drones.
+
+- New test_player_weapons (58 checks): the PGO-7 chevrons 2…5 and the
+  RPG-22 frame bars 5/15/25, flown with the game's own rocket flight, land
+  within 0.25 m of the point of aim; the RPG-7 and three PG-7VL fit in the
+  pack; the RPG-7 comes off the mount in 3 s, will not fire empty, loads in
+  6 s (the round leaves the pack only once seated, a seated round still
+  weighs), fires a PG-7VL and stays in the hands; through the PGO-7 the tube
+  is tilted by the sight's elevation and the scope fills the view; 5 swaps
+  launchers; the RPG-22 comes off the mount folded in 2.2 s and neither fires
+  nor aims so; R arms it in 6 s (locked at 3.6 s); put back on the mount it
+  stays drawn out, shows so on the pack and comes off ready with no second
+  arming; fired, it is thrown away. PKM: the bipod goes down only lying or on
+  a support, folds when moving, a burst on it climbs under 0.4 of one lying
+  without it; PgUp/PgDn 3 → 8 → 15, the rear sight slider rises and the gun
+  tilts by FlightModel.zero_angle; the feed cover lifts for a new belt and
+  shuts on it.
+- New test_bot_roles (28 checks, --fixed-fps 60), test_vests (16),
+  test_vehicle_armor (21) and test_fpv (56): roles and their kit on both
+  sides, idling until the alarm, the enemy BMP crews running to their
+  vehicles, the marks, a grenadier's RPG-7 shot on a vehicle, shaped charges
+  through walls; plates and soft armour against rounds and fragments, run
+  speed by vest weight; BMP-2 plates against the PG-7VL, the RPG-22, the
+  30 mm and bullets, fire, bail-out and cook-off, an FPV on a «Grad»'s rocket
+  package setting the rockets off; FPV attack runs, search, shoot-down, link
+  range against ground and cover, the player's FPV from the pack.
+- Updated for the PKM's 100-round box and its longer belt change:
+  test_weapons, test_inspection_reload, test_combat_inventory;
+  test_assault_halt guards a late crewman; a machine gunner's pause between
+  bursts is drawn once a burst, so seeded test_squad_tactics is unchanged.
+- Renders looked right: render_player_weapons (RPG-7 loading, on the
+  shoulder, the PGO-7 reticle, the body with the launcher; RPG-22 folded,
+  arming, armed at the peep; PKM at 3 and 8 on its sight, the feed cover
+  open) and render_roles (their BMP and its idle crew, our squad and gunner
+  by the vehicle, the marks on BMPs and a «Grad», the roles, the vests; one
+  side view of their BMP is partly behind a wall).
+- Full suite from source: 63 scenarios pass, no script errors.
+
 # 0.30.0 validation — 2026-11-21
 
 The BMP-2 over the ruins of fallen houses, overcast weather in Avdiivka,

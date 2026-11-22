@@ -13,7 +13,7 @@ const MATERIALS = {
 	"fabric":{"resistance":750.0,"entry":8.0,"fracture":350.0,"density":140.0},
 	"rubber":{"resistance":8000.0,"entry":40.0,"fracture":2200.0,"density":1100.0}
 }
-const MASS = {"ak74":0.0034,"m16":0.0040,"svd":0.0096,"pm":0.0061,"m9":0.0080}
+const MASS = {"ak74":0.0034,"m16":0.0040,"svd":0.0096,"pm":0.0061,"m9":0.0080,"pkm":0.0096}
 
 static func energy(weapon: String, speed: float) -> float:
 	return 0.5*float(MASS[weapon])*speed*speed

@@ -75,5 +75,26 @@
   "start": 20.3,
   "duration": 4.65,
   "note": "crossfaded loop, 185218 samples; pitch follows the simulated rpm"
+ },
+ {
+  "output": "pkm",
+  "source": "dvids_506875_pk",
+  "start": 18.735,
+  "duration": 1.1,
+  "note": "last shot of a 4-round PK burst; mono, high-pass 55 Hz, 44.1 kHz, fade-out 120 ms, peak -2 dBFS; sha256 c37ede2ce108b246734aa34aafa712971efd37a703acdbb3e25d0acb7109dd5b"
+ },
+ {
+  "output": "rpg7_launch",
+  "source": "dvids_701773_rpg7",
+  "start": 84.645,
+  "duration": 1.51,
+  "note": "booster bang, sustainer ignition 0.17 s later, whoosh; impact excluded; sha256 4fc127207ba086cfca12aa4f29392f8c454c674564c9ccb0befad47ab9b2ede3"
+ },
+ {
+  "output": "rpg22_launch",
+  "source": "dvids_896823_m72",
+  "start": 276.152,
+  "duration": 0.295,
+  "note": "M72 LAW report standing in for the RPG-22 (motor burns in the tube in both); cut before the thump at 0.30 s, fade-out 80 ms; sha256 17a1646d263a91eefeb25e2c5d89ac153856c9d19bd23bae9485902aac2eb385"
  }
 ]

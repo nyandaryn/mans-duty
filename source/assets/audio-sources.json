@@ -66,5 +66,26 @@
   "sha256": "720b88d2ef97e9a9de6edca75955ea93f917356748de8e03943ff7ba508b4f4a",
   "bytes": 10182011,
   "license": "CC BY 4.0, Ministry of Defence of the Russian Federation"
+ },
+ {
+  "name": "dvids_506875_pk",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Marines_fire_foreign_weapons_as_part_of_pre-deployment_training_%28B-Roll%29.ogv",
+  "page": "https://www.dvidshub.net/video/506875/marines-fire-foreign-weapons-part-pre-deployment-training-b-roll",
+  "sha256": "9526baecc32b30f7675c8ee0a4375692e19c98892dfc585f2be930a6cd89f12d",
+  "license": "Public domain (US Government work; Sgt. Lucas Hopkins, II MEF, 2017)"
+ },
+ {
+  "name": "dvids_701773_rpg7",
+  "url": "https://d34w7g4gy10iej.cloudfront.net/video/1908/DOD_107099395/DOD_107099395-1024x576-1769k.mp4",
+  "page": "https://www.dvidshub.net/video/701773/agile-spirit-19-rpg-7-range",
+  "sha256": "000e37ceaac1ee93058732ba7937a8a745b093c13e9f1383fe24f6db577194c1",
+  "license": "Public domain (US Government work; Spc. Ethan Valetski, 5th MPAD, 2019)"
+ },
+ {
+  "name": "dvids_896823_m72",
+  "url": "https://d34w7g4gy10iej.cloudfront.net/video/2309/DOD_109879769/DOD_109879769.mp4",
+  "page": "https://www.dvidshub.net/video/896823/us-marines-test-fire-m72-law-with-robotic-goat",
+  "sha256": "900c54440090226cd338c28881252d2b4c9ef0573bae09962045e4305ef33c70",
+  "license": "Public domain (US Government work; LCpl. Connor Webb, 2023)"
  }
 ]

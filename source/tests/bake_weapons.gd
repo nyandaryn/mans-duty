@@ -6,7 +6,7 @@ func assign_owner(node: Node, owner: Node):
 func _initialize():call_deferred("run")
 func run():
 	DirAccess.make_dir_recursive_absolute("res://assets/models")
-	for id in ["ak74","m16","svd","pm","m9"]:
+	for id in ["ak74","m16","svd","pm","m9","pkm"]:
 		if not OS.get_cmdline_user_args().is_empty() and id not in OS.get_cmdline_user_args():continue
 		# Force rebuild from the original authored geometry rather than baked assets.
 		var model: Node3D=Models.weapon(id,true)

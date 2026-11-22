@@ -40,8 +40,8 @@ func run():
  check(game.player.global_position.distance_to(lead.vehicle.global_position)<12.0,"…by his BMP in the column's place (%.1f m)" % game.player.global_position.distance_to(lead.vehicle.global_position))
  var afoot:=true
  for squad in battle.mech:
-  afoot=afoot and squad.state=="field" and squad.on_foot().size()==BmpVehicle.SEATS and squad.aboard().is_empty() and squad.vehicle.crew.size()==2
- check(afoot,"Every squad is out of its vehicle, the crews inside")
+  afoot=afoot and squad.state=="field" and squad.on_foot().size()==BmpVehicle.SEATS and squad.aboard().is_empty() and squad.vehicle.crew.size()==1 and is_instance_valid(squad.gunner_out) and squad.gunner_out.vehicle==null
+ check(afoot,"Every squad is out of its vehicle, the driver inside, the gunner waiting by it")
  # The battery on its firing position.
  var grads: GradBattery=battle.battery
  check(grads!=null and grads.launchers.size()==3,"Three allied BM-21")

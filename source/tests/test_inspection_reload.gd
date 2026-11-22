@@ -18,7 +18,7 @@ func unique_magazines(w: WeaponState) -> bool:
 func _initialize():call_deferred("run")
 func run():
  for id in WeaponState.DATA:
-  for slot in range(2 if id in ["pm","m9"] else 3):
+  for slot in range(2 if id in ["pm","m9","pkm"] else 3):
    for interruption in [0.1,0.6,1.2]:
     var w := WeaponState.new(id)
     for i in range(3):w.fire()
@@ -42,11 +42,17 @@ func run():
    loaded.update(0.9)
    var initial := loaded.ammunition_total()
    check(loaded.reload(slot) and loaded.phase=="stow" and loaded.magazine.is_empty(),"Loaded inspection skips repeated removal")
-   loaded.update(2.25)
-   check(loaded.phase=="" and loaded.magazine.serial==slot+2 and loaded.ammunition_total()==initial,"Loaded inspection reload finishes in 2.25 s")
+   # Stow, draw, insert: 2.25 s; the PKM's new belt takes longer to lay.
+   var finish := 0.65+0.7+(2.2 if id=="pkm" else 0.9)
+   loaded.update(finish)
+   check(loaded.phase=="" and loaded.magazine.serial==slot+2 and loaded.ammunition_total()==initial,"Loaded inspection reload finishes in %.2f s" % finish)
   var rig: WeaponRig=Models.weapon(id)
   check(rig.inspection_pose(-1,0.18).origin.distance_to(rig.inspection_pose(0,0.18).origin)>0.3,"Weapon and pouch retrieval start in different locations")
   check(rig.inspection_pose(0,0.18).origin.distance_to(rig.inspection_pose(1,0.18).origin)>0.1,"Each pouch uses its own retrieval location")
+  # The PKM's box feeds a belt out of its lid: no feed lips to fit a round in.
+  if id=="pkm":
+   rig.free()
+   continue
   var round: Node3D=rig.magazine.get_node("AmmoEvidence/TopRound")
   var low := Vector3(INF,INF,INF)
   var high := Vector3(-INF,-INF,-INF)

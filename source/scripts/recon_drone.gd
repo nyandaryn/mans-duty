@@ -213,6 +213,10 @@ func alarm() -> String:
  if downed>0.0:return "ДРОН ЗБИТО"
  return "ПО ДРОНУ ВЕДУТЬ ВОГОНЬ" if fired_on>0.0 else ""
 
+# The wrist display takes this drone's picture while the goggles are off
+# (an analog FPV has none to give it).
+func shows_on_wrist() -> bool:return true
+
 func can_recover() -> bool:
  if not landed or armed or global_position.distance_to(operator.camera.global_position)>2.3:return false
  var ray := PhysicsRayQueryParameters3D.create(operator.camera.global_position,global_position,1,[operator.get_rid(),get_rid()])

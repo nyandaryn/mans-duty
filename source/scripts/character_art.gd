@@ -144,6 +144,14 @@ static func pose_arm(model: Node3D, side: String, wrist: Vector3) -> void:
  forearm.position=arm.basis.inverse()*(elbow-shoulder)
  forearm.basis=arm.basis.inverse()*Basis(Quaternion(rest_forearm.normalized(),elbow.direction_to(wrist)))
 
+# Body armour over the uniform (VestArt), the uniform's plate bags hidden
+# under it.
+static func wear_vest(model: Node3D, id: String) -> void:
+ VestArt.attach(model,VestKind.valid(id))
+ for bag in ["FrontPlate","BackPlate"]:
+  var node:=model.get_node_or_null(bag)
+  if node!=null:node.visible=false
+
 static func equip_display(model: Node3D, id: String) -> void:
  var rifle: Node3D=model.get_node("CarriedRifle")
  for child in rifle.get_children():child.free()
@@ -153,11 +161,14 @@ static func equip_display(model: Node3D, id: String) -> void:
   baked.remove_child(child)
   rifle.add_child(child)
  Models.marker(rifle,"BotMuzzle",Vector3(0,0,float(baked.get_meta("muzzle_z"))))
+ # The support hand where the weapon is held (the PKM: on the bipod legs
+ # folded under the gas tube).
+ var support: Vector3=baked.get_meta("support_hand",Vector3(-0.035,-0.045,-0.30 if id=="svd" else -0.265))
  baked.free()
  rifle.get_node("Magazine").set_meta("rest",Vector3.ZERO)
  rifle.position=Vector3(0.14,1.27,-0.25 if id=="svd" else -0.28)
  rifle.rotation=Vector3.ZERO
- pose_arm(model,"Left",rifle.position+Vector3(-0.035,-0.045,-0.30 if id=="svd" else -0.265))
+ pose_arm(model,"Left",rifle.position+support)
  pose_arm(model,"Right",rifle.position+Vector3(0.012,-0.09,0.145 if id=="svd" else 0.085))
 
 # Bots use a lighter variant: centimetre-scale details (fingers, laces, eyes)

@@ -34,6 +34,15 @@ var forearms: Array[Node3D]=[]
 var visual_key := ""
 var drone: ReconDrone
 var drone_notice := ""
+# FPV kamikaze drones (fpv_heat, fpv_frag; fpv_drone with a "warhead" key):
+# out of the pack, set on the ground in front, goggles on. While one is up
+# the recon drone, if out, waits here and comes back to the rig after.
+const FPV_DRONE := preload("res://scripts/fpv_drone.gd")
+const FPV_PLACE_TIME := 1.0
+const FPV_FOOTPRINT := Vector3(0.46,0.17,0.62)
+const FPV_LIFTS := [0.12,0.15,0.20]
+var fpv_warhead := "heat"
+var parked_drone: ReconDrone
 # Hands-on work in place: mortar deployment, taking a mine out of the box.
 var work_title := ""
 var work_time := 0.0
@@ -94,7 +103,9 @@ func request(uid: int) -> bool:
  if operator.is_vaulting():return false
  var entry := operator.backpack.item(uid)
  if entry.is_empty() or active() or operator.bandage_time>0 or operator.current().phase!="" or (operator.current().pending_slot>=0 and entry.kind!="medkit") or (operator.arm_injury>=0.5 and entry.kind!="medkit") or operator.injury_time>0:return false
- if entry.kind not in ["rangefinder","medkit","recon_drone"]:return false
+ if entry.kind not in ["rangefinder","medkit","recon_drone"] and not FPV_DRONE.is_fpv_kind(entry.kind):return false
+ if FPV_DRONE.is_fpv_kind(entry.kind) and is_instance_valid(drone) and drone is FPV_DRONE:return false
+ if FPV_DRONE.is_fpv_kind(entry.kind):fpv_warhead=FPV_DRONE.warhead_of(entry)
  if entry.kind=="recon_drone" and (is_instance_valid(drone) or float(entry.get("battery",1.0))<=0 or float(entry.get("condition",1.0))<=0):return false
  if entry.kind=="medkit" and not operator.needs_bandage():return false
  item_uid=uid;kind=entry.kind;mode="access";timer=0;reading="— — — м";sample_left=0;to_belt=false
@@ -132,9 +143,13 @@ func toggle_rangefinder() -> void:
 
 func cancel() -> void:
  if operator.launcher!=null:operator.launcher.cancel()
- if is_instance_valid(drone) and drone.piloting:drone.end_control()
+ # An FPV still on the ground goes back into the pack, hands first.
+ var stow := FPV_DRONE.is_fpv_kind(kind) and mode=="fpv_place"
+ if is_instance_valid(drone) and drone is FPV_DRONE:stow=release_fpv() or stow
+ elif is_instance_valid(drone) and drone.piloting:drone.end_control()
  mode="";timer=0;sample_left=0;visible=false;to_belt=false;work_done=Callable();work_target=Vector3.INF
  transfer().cancel()
+ if stow and operator.game.running and operator.arm_injury<0.5 and operator.injury_time<=0:mode="stow";timer=0
 
 # Hands-on work stops as soon as the soldier moves or calls it off.
 func interrupt_work(reason: String) -> void:
@@ -173,7 +188,11 @@ func tick(delta: float) -> void:
    elif kind=="recon_drone":
     if deploy_drone():mode="goggles";timer=0
     else:cancel()
+   elif FPV_DRONE.is_fpv_kind(kind):mode="fpv_place";timer=0
    else:mode="rangefinder";timer=0
+  elif mode=="fpv_place" and timer>=FPV_PLACE_TIME:
+   if deploy_fpv():mode="goggles";timer=0
+   else:cancel()
   elif mode=="pouch" and timer>=POUCH_TIME:mode="rangefinder";timer=0
   elif mode=="pouch_stow" and timer>=POUCH_STOW:mode=""
   elif mode=="stow" and timer>=2.2:mode=""
@@ -251,6 +270,7 @@ func rebuild(key: String, weapon_id: String) -> void:
   round_mesh.mesh=debris.cartridge_mesh(weapon_id in ["pm","m9"],true,weapon_id=="svd")
   cartridge.add_child(round_mesh)
   debris.free()
+ elif FPV_DRONE.is_fpv_kind(kind):item_prop=DroneArt.build_fpv(fpv_warhead);add_child(item_prop)
  else:item_prop=PackArt.item_model(kind);add_child(item_prop)
  paint(self)
 
@@ -349,10 +369,11 @@ func animate() -> void:
    left.position=Vector3(-0.16,-0.52+swing,-0.42);right.position=Vector3(0.17,-0.50-swing,-0.40)
    left.rotation=Vector3(-0.9,0,0.3);right.rotation=Vector3(-0.9,0,-0.3)
  elif mode=="goggles":
-  if visual_key!="goggles":
-   visual_key="goggles"
+  var fpv := FPV_DRONE.is_fpv_kind(kind)
+  if visual_key!=("fpv_goggles" if fpv else "goggles"):
+   visual_key="fpv_goggles" if fpv else "goggles"
    if is_instance_valid(item_prop):item_prop.free()
-   item_prop=DroneArt.goggles();add_child(item_prop);paint(self)
+   item_prop=DroneArt.fpv_goggles() if fpv else DroneArt.goggles();add_child(item_prop);paint(self)
   pack.visible=false
   if is_instance_valid(target_mag):target_mag.visible=false
   if is_instance_valid(source_mag):source_mag.visible=false
@@ -361,8 +382,17 @@ func animate() -> void:
   item_prop.rotation=Vector3.ZERO;item_prop.visible=true
   left.position=item_prop.position+Vector3(-0.09,0,0);right.position=item_prop.position+Vector3(0.09,0,0)
  else:
-  rebuild("item:"+kind,operator.current().id)
+  rebuild("item:"+kind+(":"+fpv_warhead if FPV_DRONE.is_fpv_kind(kind) else ""),operator.current().id)
   if mode=="access":animate_access(clampf(timer/ACCESS_TIME,0,1))
+  elif mode=="fpv_place":
+   # Both hands set the drone down on the ground a pace ahead.
+   var down := smoothstep(0,1,clampf(timer/FPV_PLACE_TIME,0,1))
+   pack.visible=false
+   item_prop.visible=down<0.97
+   item_prop.position=Vector3(-0.17,-0.25,-0.48).lerp(Vector3(0,-1.05,-0.85),down)
+   item_prop.rotation=Vector3(-0.25*(1-down),0,0.12*(1-down))
+   left.position=item_prop.position+Vector3(-0.15,0.0,0.06);right.position=item_prop.position+Vector3(0.15,0.0,0.06)
+   left.rotation=Vector3(-0.6,0,0.5);right.rotation=Vector3(-0.6,0,-0.5)
   elif mode=="stow":animate_access(1-clampf(timer/2.2,0,1))
   elif mode=="belt":
    # The kit leaves the view downwards to the belt pouch on the hip.
@@ -413,9 +443,9 @@ func toggle_drone() -> void:
  else:
   if not request(operator.backpack.first("recon_drone")):drone_notice="Додай розвіддрон до наплічника в лодауті."
 
-func deployment_point() -> Variant:
+func deployment_point(size: Vector3=Vector3(0.44,0.14,0.38), lifts: Array=[0.085,0.12,0.17]) -> Variant:
  var space := operator.get_world_3d().direct_space_state
- var box := BoxShape3D.new();box.size=Vector3(0.44,0.14,0.38)
+ var box := BoxShape3D.new();box.size=size
  var query := PhysicsShapeQueryParameters3D.new();query.shape=box
  query.collision_mask=1|2|4|8|32;query.margin=0.003
  query.exclude=[operator.get_rid()]
@@ -423,7 +453,7 @@ func deployment_point() -> Variant:
  for offset in [Vector3(0,0,-1.05),Vector3(-0.45,0,-0.85),Vector3(0.45,0,-0.85),Vector3(0,0,-0.65)]:
   var support := GroundSupport.sample(space,operator.to_global(offset),operator.global_basis,0.23,-0.20,0.20,[operator.get_rid()])
   if support.is_empty():continue
-  for lift in [0.085,0.12,0.17]:
+  for lift in lifts:
    var pose: Transform3D=support.frame
    pose.origin+=pose.basis.y*lift
    if pose.origin.distance_to(operator.camera.global_position)>2.2:continue
@@ -460,3 +490,59 @@ func finish_drone_recovery() -> bool:
  drone.queue_free();drone=null
  drone_notice="Дрон повернуто в наплічник. Заряд і пошкодження збережено."
  return true
+
+# --- FPV ----------------------------------------------------------------------
+# Y: the first FPV from the pack, out (3.4 s), set down (1 s), goggles on;
+# Y again in its goggles takes them off (in the air it flies on a moment
+# and falls; still on the ground it goes back into the pack).
+func toggle_fpv() -> void:
+ if operator.concussion.acute_left>0 or operator.concussion.incapacitated():return
+ if operator.is_vaulting():return
+ if FPV_DRONE.is_fpv_kind(kind) and mode in ["access","fpv_place","goggles","drone"]:cancel();return
+ if mode in ["drone","goggles"]:drone_notice="Спершу зніми окуляри розвіддрона (J).";return
+ if active() or operator.current().phase!="" or operator.arm_injury>=0.5 or operator.injury_time>0 or operator.bandage_time>0:return
+ var uid := first_fpv()
+ if uid<0:drone_notice="Додай FPV-дрон до наплічника в лодауті.";return
+ if not request(uid):drone_notice="Зараз не дістати FPV-дрон."
+
+func first_fpv() -> int:
+ for entry in operator.backpack.items:
+  if FPV_DRONE.is_fpv_kind(str(entry.kind)):return int(entry.uid)
+ return -1
+
+func deploy_fpv() -> bool:
+ var entry := operator.backpack.item(item_uid)
+ var point: Variant=deployment_point(FPV_FOOTPRINT,FPV_LIFTS)
+ if entry.is_empty() or point==null:
+  drone_notice="Немає місця, щоб поставити FPV-дрон. Відсунься від стіни або краю.";return false
+ var fpv: FPV_DRONE=FPV_DRONE.new()
+ operator.add_child(fpv)
+ fpv.setup_player(operator,entry)
+ fpv.global_transform=point;fpv.yaw=operator.rotation.y
+ if is_instance_valid(drone):parked_drone=drone
+ drone=fpv
+ drone_notice="FPV-дрон на землі · Y — зняти окуляри"
+ return true
+
+# Goggles off an FPV. In the air nobody flies it now; on the ground it never
+# left the pack's inventory and goes back. True when the hands put it back.
+func release_fpv() -> bool:
+ var fpv=drone
+ drone=parked_drone if is_instance_valid(parked_drone) else null
+ parked_drone=null
+ if fpv.launched():
+  fpv.abandon()
+  drone_notice="Окуляри знято: FPV-дрон без керування падає."
+  return false
+ if fpv.piloting:fpv.end_control()
+ fpv.queue_free()
+ drone_notice="FPV-дрон повернуто в наплічник."
+ return true
+
+# The FPV went off, broke up or was lost: goggles off, the recon drone back.
+func fpv_gone(fpv: ReconDrone, message: String="") -> void:
+ if drone!=fpv:return
+ drone=parked_drone if is_instance_valid(parked_drone) else null
+ parked_drone=null
+ if message!="":drone_notice=message
+ if mode in ["drone","goggles"]:mode="";timer=0;visible=false

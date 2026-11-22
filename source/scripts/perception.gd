@@ -3,6 +3,10 @@ extends RefCounted
 
 # Gameplay recognition, not an optical sensor or a clinically calibrated vision model.
 # Scores accumulate over time. A concealed target is harder to recognize, never invisible.
+static func optic(observer: Object) -> float:
+ var value=observer.get("optic")
+ return float(value) if value!=null else 1.0
+
 static func rate(distance: float, exposure: float, color_match: float, light: float, motion: float, recent_shot: float, foliage: float, prone: bool, ghillie: bool) -> float:
  if exposure<=0 or foliage<=0 or distance>220:return 0.0
  if distance<=10:return 9.0*maxf(exposure,0.35)
@@ -45,7 +49,8 @@ static func observe(bot: Node3D, player: Node3D, game: Node3D, eye: Vector3) -> 
   light/=exposure
   matching/=exposure
   foliage/=exposure
- var distance := eye.distance_to(player.camera.global_position)
+ # A sniper's optic brings the man nearer.
+ var distance := eye.distance_to(player.camera.global_position)/optic(bot)
  var speed := Vector2(player.velocity.x,player.velocity.z).length()
  return {"aim_point":aim_point,"exposure":exposure,"light":light,"matching":matching,"foliage":foliage,"rate":rate(distance,exposure,matching,light,speed,player.since_shot,foliage,player.prone,player.outfit_id.begins_with("ghillie"))}
 
@@ -73,4 +78,4 @@ static func observe_soldier(observer: Node3D, soldier: Hostile, game: Node3D, ey
   light/=exposure
   matching/=exposure
  var speed := Vector2(soldier.velocity.x,soldier.velocity.z).length()
- return {"aim_point":aim_point,"exposure":exposure,"light":light,"matching":matching,"foliage":1.0 if exposure>0 else 0.0,"rate":rate(eye.distance_to(aim_point),exposure,matching,light,speed,soldier.since_shot,1.0,maxf(soldier.collapse,soldier.tactical_prone)>0.5,soldier.outfit_id.begins_with("ghillie"))}
+ return {"aim_point":aim_point,"exposure":exposure,"light":light,"matching":matching,"foliage":1.0 if exposure>0 else 0.0,"rate":rate(eye.distance_to(aim_point)/optic(observer),exposure,matching,light,speed,soldier.since_shot,1.0,maxf(soldier.collapse,soldier.tactical_prone)>0.5,soldier.outfit_id.begins_with("ghillie"))}

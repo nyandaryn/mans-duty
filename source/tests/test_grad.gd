@@ -147,7 +147,8 @@ func run():
  var garrisoned:=0
  for item in grad.strongpoints:garrisoned+=item.garrison.size()
  var posted: int=game.bots.filter(func(a):return a.get_meta("battle_sector",-1)<0).size()
- check(garrisoned+posted==game.bots.size() and garrisoned==BattleMode.defence_counts(BattleMode.enemies(18)).slice(0,3).reduce(func(a,b):return a+b),"Every defender of a strongpoint is in its garrison, the posts in none (%d + %d / %d)" % [garrisoned,posted,game.bots.size()])
+ var crews: int=game.bots.filter(func(a):return a.get_meta("armour_crew",false)).size()
+ check(garrisoned+posted==game.bots.size() and garrisoned==BattleMode.defence_counts(BattleMode.enemies(18)-crews).slice(0,3).reduce(func(a,b):return a+b)+crews,"Every defender of a strongpoint is in its garrison, the posts in none (%d + %d / %d)" % [garrisoned,posted,game.bots.size()])
  check(game.battle.awaiting and game.battle.halted,"The assault waits for the commander's order")
  check(vehicle.remaining()==40 and vehicle.cover_on and vehicle.travel_lock and not vehicle.springs_locked,"Loaded, covered and locked for the march")
  check(game.player.global_position.distance_to(vehicle.global_position)<6,"Commander stands next to the vehicle")

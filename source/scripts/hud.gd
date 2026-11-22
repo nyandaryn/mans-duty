@@ -43,6 +43,10 @@ func _draw() -> void:
 		var w: WeaponState=game.player.current()
 		draw_string(font,Vector2(24,size.y-208),"ПСО-1 · 4×   БАРАБАН %d м   БОКОВА %+.1f · PgUp/PgDn · [ / ]" % [w.scope_zero,w.scope_windage*0.5],HORIZONTAL_ALIGNMENT_LEFT,-1,14,col)
 		draw_string(font,Vector2(24,size.y-184),"L · ПІДСВІТКА   Shift · ЗАТРИМАТИ ДИХАННЯ"+(" · ВІДНОВЛЕННЯ" if game.player.breath_recovery>0 else (" · ЗАТРИМАНО" if game.player.holding_breath else "")),HORIZONTAL_ALIGNMENT_LEFT,-1,14,col)
+	if game.player.current().id=="pkm" and not game.player.launcher.active():
+		var w: WeaponState=game.player.current()
+		draw_string(font,Vector2(24,size.y-208),"ПКМ · ПРИЦІЛ %d — %d м · PgUp/PgDn   СОШКИ: %s · X" % [w.scope_zero/100,w.scope_zero,"НА ОПОРІ" if game.player.bipod else "СКЛАДЕНІ"],HORIZONTAL_ALIGNMENT_LEFT,-1,14,col)
+		if game.player.bipod_notice_left>0:draw_string(font,Vector2(24,size.y-184),game.player.bipod_notice,HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("e5a17e"))
 	if game.player.barrel_blocked and not game.player.field_rig.active():draw_string(font,center+Vector2(-95,48),"СТВОЛ ПЕРЕКРИТО",HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("e5a17e"))
 	var status := ""
 	if game.player.last_wound=="blunt" and game.player.injury_time>0:status="УДАР У БРОНЕПЛИТУ · ЦІЛІСНІСТЬ %d %%" % int(game.player.plate_integrity*100)
@@ -82,9 +86,18 @@ func _draw() -> void:
 	if not launcher.active() and launcher.notice_left>0:
 		draw_string(font,Vector2(center.x-310,size.y-90),launcher.notice,HORIZONTAL_ALIGNMENT_LEFT,-1,15,col)
 	if launcher.active():
+		if launcher.through_scope():draw_pgo7(center)
+		var short: String={"rpo_a":"РПО-А","rpg7":"РПГ-7","rpg22":"РПГ-22"}[launcher.kind]
 		var text := "РПО-А «ШМЕЛЬ» · ПКМ — ПРИЦІЛ · ЛКМ — ПОСТРІЛ · 4 — ПРИБРАТИ"
-		if launcher.mode=="draw":text="ЗНЯТТЯ РПО-А З КРІПЛЕННЯ · %.1f с" % maxf(0,LauncherRig.ACCESS_TIME-launcher.timer)
-		elif launcher.mode=="stow":text="ПОВЕРНЕННЯ РПО-А НА КРІПЛЕННЯ"
+		if launcher.kind=="rpg7":text="РПГ-7В1 · %s · ПГ-7ВЛ У НАПЛІЧНИКУ: %d · ПКМ — ПГО-7 · ЛКМ — ПОСТРІЛ · R — ЗАРЯДИТИ · 4 — ПРИБРАТИ" % ["ЗАРЯДЖЕНО" if launcher.loaded() else "НЕ ЗАРЯДЖЕНО",game.player.backpack.count("pg7vl")]
+		elif launcher.kind=="rpg22":
+			if launcher.armed():text="РПГ-22 · БОЙОВЕ ПОЛОЖЕННЯ · РАМКА 5 / 15 / 25 — 50 / 150 / 250 м · ПКМ — ПРИЦІЛ · ЛКМ — ПОСТРІЛ · 4 — ПРИБРАТИ"
+			else:text="РПГ-22 · ПОХІДНЕ ПОЛОЖЕННЯ · R — ПРИВЕСТИ В БОЙОВЕ (НАЗАД НЕ СКЛАДАЄТЬСЯ) · 4 — ПРИБРАТИ"
+		if launcher.mode=="draw":
+			text="ЗНЯТТЯ %s З КРІПЛЕННЯ · %.1f с" % [short,maxf(0,float(LauncherRig.DRAW[launcher.kind])-launcher.timer)]
+		elif launcher.mode=="arm":text="ПЕРЕВЕДЕННЯ РПГ-22 В БОЙОВЕ ПОЛОЖЕННЯ · %.1f с" % maxf(0,LauncherRig.ARM_TIME-launcher.timer)
+		elif launcher.mode=="load":text="ЗАРЯДЖАННЯ ПГ-7ВЛ · %.1f с" % maxf(0,LauncherRig.LOAD_TIME-launcher.timer)
+		elif launcher.mode=="stow":text="ПОВЕРНЕННЯ %s НА КРІПЛЕННЯ" % short
 		elif launcher.mode=="spent":text="ВІДКИДАННЯ ВІДСТРІЛЯНОЇ ТРУБИ"
 		if launcher.notice!="":text=launcher.notice
 		draw_string(font,Vector2(center.x-325,size.y-90),text,HORIZONTAL_ALIGNMENT_LEFT,-1,15,col)
@@ -146,3 +159,47 @@ func draw_drone_view() -> void:
 		if drone.signal_strength<0.04:
 			draw_rect(screen,Color(0.04,0.05,0.04,0.96))
 			draw_string(font,center-Vector2(130,0),"ВТРАТА ВІДЕОЗВ’ЯЗКУ",HORIZONTAL_ALIGNMENT_LEFT,-1,23,ink)
+
+# The PGO-7V3 at the eye: the round eyepiece, the PG-7VL's range chevrons
+# 2…5 (200…500 m; the top one is the optical axis), the lead scale in
+# thousandths beside the top chevron and the stadia scale for a tank 2.7 m
+# high (2…10 — 200…1000 m) at the lower left. Every mark is laid off the
+# grenade's flight in the game (LauncherRig), so the chevron of the range on
+# the target sends the grenade there.
+func draw_pgo7(center: Vector2) -> void:
+	var camera: Camera3D=game.player.camera
+	var radius := size.y*0.45
+	var per_radian := size.y*0.5/tan(deg_to_rad(camera.fov)*0.5)
+	var ink := Color(0.03,0.03,0.025,0.95)
+	var font := ThemeDB.fallback_font
+	for i in range(96):
+		var a := TAU*i/96
+		var b := TAU*(i+1)/96
+		draw_colored_polygon(PackedVector2Array([center+Vector2(cos(a),sin(a))*radius,center+Vector2(cos(b),sin(b))*radius,center+Vector2(cos(b),sin(b))*size.x*2,center+Vector2(cos(a),sin(a))*size.x*2]),Color(0,0,0,1))
+	draw_arc(center,radius-5,0,TAU,96,Color(0,0,0,0.45),10)
+	for distance in [200,300,400,500]:
+		var y := center.y+tan(LauncherRig.pgo_chevron(distance))*per_radian
+		var arm := 10.0
+		draw_polyline(PackedVector2Array([Vector2(center.x-arm,y+arm*0.75),Vector2(center.x,y),Vector2(center.x+arm,y+arm*0.75)]),ink,2.0)
+		draw_string(font,Vector2(center.x+arm+5,y+13),str(distance/100),HORIZONTAL_ALIGNMENT_LEFT,-1,14,ink)
+	var mil := TAU/6000.0
+	for k in range(1,5):
+		for side in [-1,1]:
+			var x: float=center.x+float(side)*tan(k*10*mil)*per_radian
+			var tall := 14.0 if k%2==0 else 8.0
+			draw_line(Vector2(x,center.y-tall*0.5),Vector2(x,center.y+tall*0.5),ink,1.6)
+			if k%2==0:draw_string(font,Vector2(x-8,center.y-tall*0.5-4),str(k*10),HORIZONTAL_ALIGNMENT_LEFT,-1,12,ink)
+	var base_y := center.y+radius*0.55
+	var x_left := center.x-radius*0.78
+	var x_right := center.x-radius*0.12
+	draw_line(Vector2(x_left,base_y),Vector2(x_right,base_y),ink,1.6)
+	var curve := PackedVector2Array()
+	for step in range(33):
+		var hundreds := 2.0+step*0.25
+		var x := lerpf(x_left,x_right,(hundreds-2.0)/8.0)
+		curve.append(Vector2(x,base_y-tan(2.7/(hundreds*100.0))*per_radian))
+	for i in range(0,curve.size()-1,2):draw_line(curve[i],curve[i+1],ink,1.6)
+	for hundreds in [2,4,6,8,10]:
+		var x := lerpf(x_left,x_right,(hundreds-2.0)/8.0)
+		draw_line(Vector2(x,base_y),Vector2(x,base_y+5),ink,1.4)
+		draw_string(font,Vector2(x-5,base_y+19),str(hundreds),HORIZONTAL_ALIGNMENT_LEFT,-1,12,ink)

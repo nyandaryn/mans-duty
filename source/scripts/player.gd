@@ -64,6 +64,17 @@ var since_shot := 10.0
 const MEDICAL_TIME := 6.0
 var pain := 0.0
 var plate_integrity := 1.0
+# The body armour chosen in the loadout (VestKind).
+var vest := "korsar"
+# The PKM on its bipod (X): lying down or rested on a parapet or a sill; the
+# recoil then moves the gun three times less.
+var bipod := false
+var bipod_shown := false
+var bipod_notice := ""
+var bipod_notice_left := 0.0
+# The PKM's rear sight slider raised for the range (PgUp / PgDn, 1–15): at the
+# eye the gun tilts up by that much, the shot leaves along its bore.
+var sight_tilt := 0.0
 var last_wound := ""
 var plates: Array[Area3D]=[]
 var blood_loss := 0.0
@@ -85,6 +96,7 @@ var anchor := Callable()
 func setup(owner_game: Node3D, primary: String, secondary: String) -> void:
 	game = owner_game
 	outfit_id=game.player_outfit
+	vest=VestKind.valid(game.player_vest)
 	weapons = [WeaponState.new(primary),WeaponState.new(secondary)]
 	backpack=BackpackState.restore(game.loadout_bag.serialize())
 	for weapon in weapons:
@@ -112,7 +124,7 @@ func setup(owner_game: Node3D, primary: String, secondary: String) -> void:
 	chest_area=DamageModel.hitbox(self,self,"chest",Vector3.ZERO,Vector3(0.39,0.37,0.30))
 	abdomen_area=DamageModel.hitbox(self,self,"abdomen",Vector3.ZERO,Vector3(0.34,0.26,0.27))
 	for z in [-0.19,0.19]:
-		var plate := DamageModel.hitbox(self,self,"plate",Vector3.ZERO,Vector3(0.32,0.37,0.05))
+		var plate := DamageModel.hitbox(self,self,"plate",Vector3.ZERO,VestKind.plate_box(vest))
 		plate.position.z=z
 		plates.append(plate)
 	for x in [-0.13,0.13]:
@@ -162,6 +174,7 @@ func make_viewmodel() -> void:
 	viewmodel.position=hip_position()
 	ads_weight=0
 	gun_kick=0
+	bipod_shown=false
 	viewmodel.animate(current(),0)
 	ScopeSight.set_first_person(viewmodel)
 	scope_sight.attach(viewmodel)
@@ -187,7 +200,8 @@ func update_pose(delta: float) -> void:
 	if blind_mode!=0:
 		viewmodel.position=Vector3(0,0.62,-0.07) if blind_mode==2 else Vector3(blind_mode*0.62,-0.10,-0.07)
 	if bandage_time>0 or arm_injury>=0.5:viewmodel.position.y-=0.65
-	viewmodel.visible=bandage_time<=0 and (field_rig==null or not field_rig.active())
+	# The rifle is slung while a grenade launcher is in the hands.
+	viewmodel.visible=bandage_time<=0 and (field_rig==null or not field_rig.active()) and (launcher==null or not launcher.active())
 	medical_rig.animate(bandage_time,MEDICAL_TIME)
 	viewmodel.position.y-=switch_delay*0.45
 	viewmodel.rotation=viewmodel.phase_rotation+Vector3(gun_kick+sway.y*(1-ads_weight*0.9),sway.x*(1-ads_weight*0.9),-sway.x*0.4)
@@ -197,6 +211,22 @@ func update_pose(delta: float) -> void:
 		viewmodel.rotation+=Vector3(sin(symptom_clock*1.9)*amplitude+sin(symptom_clock*7.6)*amplitude*0.14,sin(symptom_clock*1.1)*amplitude*0.55,0)*ads_weight
 		if scope_adjust_time>0:
 			viewmodel.left_hand.position=viewmodel.left_hand.position.lerp(Vector3(-0.05,0.12,-0.035),minf(delta*16,1))
+	sight_tilt=0.0
+	if current().id=="pkm":
+		var settle := smoothstep(0,1,ads_weight)
+		# A 7.5 kg gun held up wanders; on its bipod it barely moves.
+		var amplitude := (0.0004 if bipod else (0.0012 if prone else (0.0022 if crouched else 0.0035)))*(1+arm_injury*3)
+		viewmodel.rotation+=Vector3(sin(symptom_clock*1.7)*amplitude+sin(symptom_clock*6.1)*amplitude*0.2,sin(symptom_clock*1.05)*amplitude*0.6,0)*ads_weight
+		# The slider rises up the frame by the elevation of the range (to the
+		# frame's top bar); the eye keeps notch and post in line, so the gun
+		# tilts up about the rear sight by the same angle.
+		var raised := minf(FlightModel.zero_angle("pkm",PkmArt.SIGHT_HEIGHT,float(current().scope_zero))*PkmArt.SIGHT_RADIUS,0.021)
+		var slider := viewmodel.get_node_or_null("RearSightSlider") as Node3D
+		if slider!=null:slider.position.y=PkmArt.SIGHT_HEIGHT+raised
+		sight_tilt=raised/PkmArt.SIGHT_RADIUS*settle
+		viewmodel.rotation.x+=sight_tilt
+		viewmodel.position.y-=raised*settle
+		if bipod!=bipod_shown:show_bipod(bipod)
 	if blind_mode!=0:viewmodel.rotation=Vector3(gun_kick,0,-blind_mode*0.12 if abs(blind_mode)==1 else 0)
 	if not aim and ads_weight<0.01 and blind_mode==0 and current().phase=="" and not field_rig.active() and not is_vaulting():
 		# Point the held model toward the same scene point as the hip-fire mark.
@@ -234,8 +264,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:crouch_requested=not crouch_requested
 		elif event.is_action_pressed("sprint") and crouch_requested and not prone_requested:crouch_requested=false
 	if launcher.active():launcher.handle_input(event);return
-	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_4:
-		launcher.toggle()
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode in [KEY_4,KEY_5]:
+		if event.physical_keycode==KEY_4:launcher.toggle()
+		else:launcher.cycle()
+		return
+	# Y: an FPV from the pack (in the air the drone takes the key itself).
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_Y and field_rig.mode!="drone":
+		field_rig.toggle_fpv()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_J:
 		field_rig.toggle_drone()
@@ -266,6 +301,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			scope_adjust_time=0.35
 			game.sound("click",-18)
 			return
+	if event is InputEventKey and event.pressed and not event.echo and current().id=="pkm":
+		match event.physical_keycode:
+			KEY_X:
+				toggle_bipod()
+				return
+			KEY_PAGEUP,KEY_PAGEDOWN:
+				# The slider of the frame sight, a hundred metres a notch.
+				if current().phase=="" and scope_adjust_time<=0:
+					var w: WeaponState=current()
+					w.scope_zero=clampi(w.scope_zero+(100 if event.physical_keycode==KEY_PAGEUP else -100),100,1500)
+					scope_adjust_time=0.35
+					game.sound("click",-18)
+				return
 	if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
 		var aim_scale := 1.0/field_rig.zoom if field_rig.mode=="rangefinder" else 0.22 if aim and current().id=="svd" else (0.65 if aim else 1.0)
 		var yaw_delta: float= -event.relative.x*sensitivity*aim_scale
@@ -332,6 +380,7 @@ func _physics_process(delta: float) -> void:
 			return
 	field_rig.tick(delta)
 	launcher.tick(delta)
+	update_bipod(delta)
 	if bandage_time>0:
 		bandage_time=maxf(0,bandage_time-delta)
 		if bandage_time==0:
@@ -392,7 +441,10 @@ func _physics_process(delta: float) -> void:
 	step_time+=delta*planar_speed*2.2
 	# Head/body transforms are resolved by update_cover, including collision limits.
 	var view_fov := field_rig.view_fov() if field_rig.mode=="rangefinder" else (50.0 if current().id=="svd" else 65.0) if aim else 78.0
-	if launcher.mode=="ready":view_fov=lerpf(78,60,launcher.ads)
+	if launcher.mode=="ready":
+		# Through the PGO-7 its 13° field fills the circle of the eyepiece.
+		var sighted: float=LauncherRig.PGO_FIELD/0.9 if launcher.kind=="rpg7" else (55.0 if launcher.kind=="rpg22" else 60.0)
+		view_fov=lerpf(78,sighted,smoothstep(0,1,launcher.ads))
 	camera.fov=lerpf(camera.fov,view_fov,minf(delta*12,1))
 	camera.far=4000.0 if game.player_class=="grad" and game.battle.active else 700.0 if game.battle.active else 1250.0 if field_rig.mode=="rangefinder" else (850.0 if launcher.active() else (900.0 if game.district.map_id==TrainingRange.ID else 160.0))
 	update_breath(delta,sprint and planar_speed>4.5)
@@ -451,15 +503,19 @@ func shoot(preserve_remainder: bool=false) -> bool:
 	game.alert_bots(global_position)
 	var profile: Dictionary=Ballistics.PROFILES[current().id]
 	var zero := float(profile.zero)
+	if current().id=="pkm":zero=float(current().scope_zero)
 	var sight_height := float(viewmodel.get_meta("sight_height"))
 	# Physical bore is below the iron-sight line. Fixed zero, no target snapping.
 	var elevation := FlightModel.zero_angle(current().id,sight_height,zero)
 	# SVD's bore is physical; its optical reticle moves for elevation/windage.
 	if current().id=="svd":elevation=0
+	# The PKM is already tilted up by its raised sight.
+	elevation-=sight_tilt
 	var direction := (-viewmodel.global_basis.z+viewmodel.global_basis.y*elevation).normalized()
 	if not aim and blind_mode==0:direction=-viewmodel.global_basis.z
 	var spread := 0.0005 if aim else 0.012
 	if current().id=="svd" and aim:spread=0.00022
+	if current().id=="pkm":spread=(0.0007 if bipod else 0.0016) if aim else (0.006 if bipod else 0.014)
 	spread+=arm_injury*0.008+injury_time*0.01
 	spread+=concussion.severity*0.04
 	if blind_mode!=0:spread=0.075
@@ -477,12 +533,52 @@ func shoot(preserve_remainder: bool=false) -> bool:
 	recoil_sequence+=1
 	var stability := (0.78 if aim else 1.1)*(0.50 if prone else (0.73 if crouched else 1.0))*(1.7 if blind_mode!=0 else 1.0)
 	if Vector2(velocity.x,velocity.z).length()>1:stability*=1.25
+	var braced := 0.33 if bipod else 1.0
+	stability*=braced
 	var impulse := float(current().data.recoil)*stability*(1+minf(recoil_sequence-1,8)*0.045)
 	recoil_velocity+=Vector2(randf_range(-0.35,0.35),1.0)*impulse*33.0
 	gun_kick=minf(gun_kick+impulse*1.8,0.18)
-	recoil=minf(recoil+float(current().data.recoil)*0.4,0.1)
-	pitch=clampf(pitch+float(current().data.recoil)*0.08,-1.45,1.45)
+	recoil=minf(recoil+float(current().data.recoil)*0.4*braced,0.1)
+	pitch=clampf(pitch+float(current().data.recoil)*0.08*braced,-1.45,1.45)
 	return true
+
+# --- The PKM's bipod ---------------------------------------------------------------
+# A surface under the bipod's hinge within the legs' reach: a parapet, a sill,
+# a car's bonnet. Lying down, the ground.
+func bipod_support() -> Dictionary:
+	if not is_instance_valid(viewmodel):return {}
+	var hinge: Vector3=viewmodel.to_global(PkmArt.BIPOD_HINGE)
+	var query := PhysicsRayQueryParameters3D.create(hinge+Vector3.UP*0.05,hinge+Vector3.DOWN*0.32,1,[get_rid()])
+	return get_world_3d().direct_space_state.intersect_ray(query)
+
+func toggle_bipod() -> void:
+	if bipod:
+		bipod=false
+		game.sound("click",-16)
+		return
+	if Vector2(velocity.x,velocity.z).length()>0.6:
+		bipod_notice="СОШКИ: СПЕРШУ ЗУПИНИСЬ";bipod_notice_left=2.0
+		return
+	if not prone and bipod_support().is_empty():
+		bipod_notice="СОШКИ: ЛЯЖ (Z) АБО ПОКЛАДИ КУЛЕМЕТ НА ОПОРУ — БРУСТВЕР, ПІДВІКОННЯ, СТІНКУ";bipod_notice_left=2.5
+		return
+	bipod=true
+	game.sound("click",-14)
+
+# Folded again by moving off, by standing up from it, by another weapon.
+func update_bipod(delta: float) -> void:
+	bipod_notice_left=maxf(0,bipod_notice_left-delta)
+	if not bipod:return
+	if current().id!="pkm" or Vector2(velocity.x,velocity.z).length()>0.6 or is_vaulting() or launcher.active() or field_rig.active() or (not prone and bipod_support().is_empty()):
+		bipod=false
+
+func show_bipod(open: bool) -> void:
+	bipod_shown=open
+	var legs := viewmodel.get_node_or_null("Bipod")
+	if legs==null:return
+	for side in [["LegLeft",-1.0],["LegRight",1.0]]:
+		var leg := legs.get_node_or_null(String(side[0])) as Node3D
+		if leg!=null:leg.rotation=Vector3(0.30,0,0.22*float(side[1])) if open else Vector3(-PI/2,0,0)
 
 func point_fire_direction(origin: Vector3) -> Vector3:
 	# Geometric convergence only: no actor selection and no drop compensation.
@@ -629,7 +725,9 @@ func update_damage_pose(height: float) -> void:
 	for i in range(plates.size()):
 		var plate := plates[i]
 		plate.rotation=Vector3(PI/2,0,0) if prone else Vector3.ZERO
-		plate.position=Vector3(0,0.10 if i==0 else 0.42,0.30) if prone else chest_area.position+Vector3(0,0,-0.19 if i==0 else 0.19)
+		# Its top at the notch of the breastbone, the top of the chest.
+		var lift:=(0.37-VestKind.plate_box(vest).y)*0.5-0.01
+		plate.position=Vector3(0,0.10 if i==0 else 0.42,0.30-lift) if prone else chest_area.position+Vector3(0,lift,-0.19 if i==0 else 0.19)
 	for i in range(leg_areas.size()):
 		var leg := leg_areas[i]
 		var leg_height := 0.80 if prone or not crouched else 0.42
@@ -678,7 +776,7 @@ func medical_count() -> int:return bandages+backpack.count("medkit")
 
 func carried_mass() -> float:
 	var crew_load: float=game.crew.carried_mass() if game!=null and game.crew!=null and game.player==self else 0.0
-	return Equipment.carried_mass(weapons,backpack,bandages)+(0.4 if field_rig!=null and is_instance_valid(field_rig.drone) else 0.0)+crew_load
+	return Equipment.carried_mass(weapons,backpack,bandages,vest)+(0.4 if field_rig!=null and is_instance_valid(field_rig.drone) else 0.0)+crew_load
 
 func start_medical(uid: int=-1) -> void:
 	if concussion.blackout_left>0 or concussion.incapacitated():return
@@ -697,6 +795,9 @@ func begin_bandage() -> bool:
 	if bandages<=0:return field_rig.request(backpack.first("medkit"))
 	start_medical()
 	return true
+
+# Fragments of a burst: what the vest keeps off (BlastSystem.detonate).
+func blast_protection(_where: Vector3) -> float:return VestKind.blast_factor(vest)
 
 func receive_blast(amount: float, severity: float, _incoming: Vector3) -> void:
 	if game.debug_invulnerable or not game.running:return

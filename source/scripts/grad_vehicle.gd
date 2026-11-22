@@ -64,6 +64,15 @@ var shudder_rate := Vector3.ZERO
 var package_rock := Vector2.ZERO
 var package_rate := Vector2.ZERO
 var mirrors: Array[GradMirror]=[]
+# Under fire (VehicleArmor.bm21: no armour). Whose: the defenders' FPV and
+# grenades hunt it.
+var friendly := true
+var hull: VehicleDamage
+var destroyed := false
+var immobile := false
+# The rockets in the package burning: pops and bursts until it goes up.
+var cooking := false
+var cook_clock := 0.0
 # The receiver on the dashboard; runs on the ignition and plays the tracks
 # in turn.
 const RADIO_TRACKS := [["res://assets/audio/radio/zalizna_zgraya.mp3","Залізна зграя"]]
@@ -153,8 +162,11 @@ func setup(owner_game: Node3D) -> void:
  collision_layer=1
  collision_mask=1|64
  set_meta("ballistic_material","steel")
+ hull=VehicleDamage.new();hull.setup(self,VehicleArmor.bm21())
+ add_to_group("vehicles")
  art=GradArt.build()
  add_child(art.root)
+ VehicleMarkings.apply(self,friendly)
  dashboard=GradDashboard.new();dashboard.setup(self)
  for i in range(GradArt.MIRRORS.size()):
   var mirror:=GradMirror.new();mirror.setup(self,GradArt.MIRRORS[i],i);mirrors.append(mirror)
@@ -349,6 +361,82 @@ func remaining() -> int:
  for item in loaded:if item:count+=1
  return count
 
+# --- Damage -----------------------------------------------------------------
+func vehicle_hit(point: Vector3, direction: Vector3, round: String, pen_mm: float=-1.0) -> Dictionary:
+ return hull.strike(point,direction,round,pen_mm)
+
+func blast_hit(where: Vector3, kind: String) -> void:hull.blast(where,kind)
+
+func out_of_action() -> bool:return hull.out_of_action()
+
+# The player in the cab (the commander's or the driver's seat). The crew of
+# the battery are figures outside, not inside.
+func occupants() -> Array:
+ var command=game.get("grad")
+ if command==null or command.vehicle!=self or command.seat=="" or not is_instance_valid(game.player):return []
+ var at:=GradArt.DRIVER_EYE if command.seat=="driver" else GradArt.COMMANDER_EYE
+ if command.seat=="gunner":at=Vector3(-0.9,1.6,1.6)
+ return [[game.player,at+Vector3(0,-0.45,0)]]
+
+func has_rockets() -> bool:return remaining()>0
+
+func on_immobile(reason: String) -> void:
+ immobile=true
+ say(reason.left(1).to_upper()+reason.substr(1)+": машина знерухомлена",4)
+
+func on_fire() -> void:
+ say("ПОЖЕЖА! Покинути машину!",6)
+ var command=game.get("grad")
+ if command!=null and command.vehicle==self and command.seat!="":command.leave()
+
+# A jet or a burst in the package lights the rocket motors and the
+# warheads begin to go: pops, then the package goes up all at once.
+func cook_off_rockets() -> void:
+ if cooking or not has_rockets():return
+ cooking=true;cook_clock=0.4
+
+func cook(delta: float) -> void:
+ if destroyed:cooking=false;return
+ cook_clock-=delta
+ if cook_clock>0.0:return
+ cook_clock=randf_range(0.5,1.8)
+ var tube:=next_tube()
+ if tube<0:return
+ loaded[tube]=false
+ art.rockets.set_instance_transform(tube,Transform3D(Basis.from_scale(Vector3.ONE*0.0001),Vector3.ZERO))
+ var spot:=to_global(GradArt.TURNTABLE+Vector3(randf_range(-0.7,0.7),0.9,randf_range(-1.2,0.8)))
+ var flash:=BlastEffect.new();game.world_root.add_child(flash);flash.setup(game,spot,0.5)
+ game.spatial_shot("mine_blast",spot,0)
+ GradEffects.shared(game).puff(spot,1.6,0.25,Vector3(0.3,1.4,0))
+
+func on_destroyed(blast: bool) -> void:
+ destroyed=true;immobile=true;running=false;cooking=false
+ ignition=false;throttle=0.0
+ set_radio(false)
+ var left:=remaining()
+ for i in range(loaded.size()):
+  if loaded[i]:art.rockets.set_instance_transform(i,Transform3D(Basis.from_scale(Vector3.ONE*0.0001),Vector3.ZERO))
+  loaded[i]=false
+ # The rockets left in the package (each 6.4 kg of explosive) go up together.
+ if blast and left>0:
+  var package:=to_global(GradArt.TURNTABLE+Vector3(0,0.9,0))
+  game.blasts.detonate(package,"cookoff")
+  if left>12:game.blasts.detonate(package+global_basis.z*1.2,"cookoff")
+  for k in range(mini(left/5,8)):
+   GradEffects.shared(game).puff(package+Vector3(randf_range(-6,6),3.0+k*1.5,randf_range(-6,6)),4.0+k*0.4,0.2,Vector3(0.6,1.8,0))
+ burnt()
+
+static var burnt_material: StandardMaterial3D
+func burnt() -> void:
+ if burnt_material==null:
+  burnt_material=StandardMaterial3D.new()
+  burnt_material.vertex_color_use_as_albedo=true
+  burnt_material.albedo_color=Color(0.22,0.20,0.19)
+  burnt_material.roughness=0.95
+ for item in art.root.find_children("*","MeshInstance3D",true,false):
+  if item.name=="Flames":continue
+  (item as MeshInstance3D).material_override=burnt_material
+
 func in_cab_zone() -> bool:return absf(azimuth)<CAB_ZONE and elevation<CAB_ELEVATION
 
 func circuit_ready() -> bool:
@@ -432,6 +520,8 @@ func _physics_process(delta: float) -> void:
  if game!=null and is_instance_valid(engine_sound):engine_sound.stream_paused=game.paused or not game.running
  if game==null or not game.running or game.paused:return
  clock+=delta
+ hull.tick(delta)
+ if cooking:cook(delta)
  if notice_left>0:notice_left-=delta
  if lamp_test>0:lamp_test-=delta
  grind=maxf(0,grind-delta)
@@ -480,9 +570,9 @@ func simulate_engine(delta: float) -> void:
  omega=maxf(omega,0.0)
  drive_force=transmitted*ratio*EFFICIENCY/GradArt.WHEEL_RADIUS
  if catching>0.0:catching-=delta
- if starter and ignition and not running and rpm()>200.0 and crank_left<=0.0:
+ if starter and ignition and not running and rpm()>200.0 and crank_left<=0.0 and not immobile:
   running=true;catching=1.5;say("Двигун запущено",2)
- if running and ((rpm()<STALL_RPM and catching<=0.0) or not ignition):
+ if running and ((rpm()<STALL_RPM and catching<=0.0) or not ignition or immobile):
   running=false
   if ignition:say("Двигун заглух",3)
  # The engine sound follows the crankshaft.
