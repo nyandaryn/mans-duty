@@ -20,6 +20,12 @@ extends ReconDrone
 #   the picture is usable to ~2500 m, the control to ~3500 m). The 5.8 GHz
 #   picture dies behind a house or a ridge and fades close to the ground far
 #   out, where the soil fills the Fresnel zone; 900 MHz bends round more.
+#   The picture is a link budget: the margin over the noise that distance
+#   leaves (free-space loss, 6 dB per doubling: 22 dB at 200 m, 0 at 2.5 km),
+#   less what the worst edge in the way takes by knife-edge diffraction
+#   (ITU-R P.526): a parapet just over the line near the pilot ~10 dB, a
+#   house or a ridge 20–35 dB. Close in, a low edge only adds snow.
+#   https://www.itu.int/rec/R-REC-P.526/en
 #   https://www.blue-bird.tech/en/products/quadrocopter-for-kamikade-or-reconnaissancefpv-7/
 # - Flight controller in angle (self-levelling) mode: the sticks set the lean,
 #   the lean and the throttle make the thrust; momentum, gravity and drag do
@@ -45,6 +51,8 @@ const CONTROL_RANGE := 3500.0
 const ANTENNA_HEIGHT := 1.5
 # 5.8 GHz.
 const WAVELENGTH := 0.0517
+# Higher than this over the line an edge counts as no higher.
+const EDGE_PROBE := 30.0
 const CRUISE_TILT := 0.61
 const BOOST_TILT := 0.87
 # Loaded thrust to weight of about 2.4.
@@ -470,17 +478,81 @@ func update_link(delta: float) -> void:
   return
  var station := antenna()
  var distance := station.distance_to(global_position)
- var open_video := clampf(1.0-pow(distance/VIDEO_RANGE,2.0),0.0,1.0)
  var open_control := clampf(1.0-pow(distance/CONTROL_RANGE,2.0),0.0,1.0)
- var blocked := not ray(station,global_position,1).is_empty()
+ var hit := ray(station,global_position,1)
  var shade := terrain_shadow(station,distance)
- video=open_video*shade*(0.12 if blocked else 1.0)
- control=open_control*lerpf(0.4,1.0,shade)*(0.5 if blocked else 1.0)
+ var margin := 20.0*log(VIDEO_RANGE/maxf(distance,1.0))/log(10.0)
+ var loss := maxf(terrain_loss(station,distance),obstacle_loss(station,hit))
+ video=picture_left(margin-loss)
+ control=open_control*lerpf(0.4,1.0,shade)*(0.5 if not hit.is_empty() else 1.0)
  signal_strength=video
 
+# The picture for the margin left over the noise (dB): 1 − 10^(−margin/10),
+# so with nothing in the way it falls as 1 − (d/2500)².
+static func picture_left(margin: float) -> float:
+ return clampf(1.0-pow(10.0,-margin/10.0),0.0,1.0)
+
+# Knife-edge diffraction loss in dB (ITU-R P.526, eq. 31) for v = √2·h/r₁:
+# h how far the edge stands into the line, r₁ the first Fresnel zone's
+# radius there. Nothing with the zone clear, 6 dB grazing, ~25 dB with the
+# edge four zone radii up.
+static func edge_loss(h: float, zone: float) -> float:
+ var v := sqrt(2.0)*h/maxf(zone,0.05)
+ if v<= -0.78:return 0.0
+ return 6.9+20.0*log(sqrt(pow(v-0.1,2.0)+1.0)+v-0.1)/log(10.0)
+
+static func fresnel(d1: float, distance: float) -> float:
+ return sqrt(WAVELENGTH*clampf(d1,0.0,distance)*maxf(distance-d1,0.0)/maxf(distance,0.01))
+
+# The ground under the line, its worst point as a knife edge.
+func terrain_loss(station: Vector3, distance: float) -> float:
+ if distance<30.0 or not is_instance_valid(game.district):return 0.0
+ var worst := 0.0
+ for i in range(1,13):
+  var t := i/13.0
+  var point := station.lerp(global_position,t)
+  worst=maxf(worst,edge_loss(float(game.district.ground_height(point))-point.y,maxf(fresnel(distance*t,distance),0.3)))
+ return worst
+
+# A wall, a house, a parapet across the line (hit, from the pilot's side, and
+# the one nearest the drone): how high it stands over the line where the line
+# meets it, as a knife edge.
+func obstacle_loss(station: Vector3, hit: Dictionary) -> float:
+ if hit.is_empty():return 0.0
+ var distance := station.distance_to(global_position)
+ var worst := edge_over(hit,station,distance)
+ var back := ray(global_position,station,1)
+ if not back.is_empty() and back.collider!=hit.collider:
+  worst=maxf(worst,edge_over(back,global_position,distance))
+ return worst
+
+# How far over the line the top of what it hit stands: short rays along the
+# line raised step by step (the first to pass is over it), then one down to
+# find the top itself. Walls built as one-sided surfaces are found too.
+const EDGE_STEPS := [0.25,0.5,1.0,2.0,3.5,6.0,10.0,16.0,25.0]
+func edge_over(hit: Dictionary, from: Vector3, distance: float) -> float:
+ if hit.collider.has_meta("terrain"):return 0.0
+ var at: Vector3=hit.position
+ var along := (at-from).normalized()
+ var d1 := from.distance_to(at)
+ if from!=antenna():d1=distance-d1
+ var space := get_world_3d().direct_space_state
+ var clear := EDGE_PROBE
+ for step in EDGE_STEPS:
+  var lifted := at+Vector3.UP*float(step)
+  var probe := PhysicsRayQueryParameters3D.create(lifted-along*0.3,lifted+along*1.5,1,[get_rid()])
+  if space.intersect_ray(probe).is_empty():
+   clear=float(step)
+   break
+ var top := at.y+clear
+ # A little inside it, so the ray down does not slip past its face.
+ var inside := at+along*0.05
+ var down := space.intersect_ray(PhysicsRayQueryParameters3D.create(inside+Vector3.UP*clear,inside+Vector3.UP*0.01,1,[get_rid()]))
+ if not down.is_empty():top=float(down.position.y)
+ return edge_loss(top-at.y,fresnel(d1,distance))
+
 # The ground under the line between the antennas, against the first Fresnel
-# zone of 5.8 GHz: well clear — no loss; grazing — half the picture; the
-# soil across it — the picture is gone. Houses are left to the ray above.
+# zone: for the control link (900 MHz bends round more), 0.4 of it at worst.
 func terrain_shadow(station: Vector3, distance: float) -> float:
  if distance<30.0 or not is_instance_valid(game.district):return 1.0
  var worst := INF

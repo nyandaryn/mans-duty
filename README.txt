@@ -1,13 +1,18 @@
-MANS DUTY / 0.32.3 / Linux x86_64
+MANS DUTY / 0.32.4 / Linux x86_64
 
 Запуск: ./play.sh або bash play.sh у цій папці.
 Godot включено; тримайте kvartal.x86_64, kvartal.pck та play.sh поруч.
 Усі збірки: https://github.com/nyandaryn/mans-duty/releases
-macOS (Apple Silicon та Intel): kvartal-0.32.3-macos.zip.
-Windows 10/11 (64-біт): kvartal-0.32.3-windows.zip.
+macOS (Apple Silicon та Intel): kvartal-0.32.4-macos.zip.
+Windows 10/11 (64-біт): kvartal-0.32.4-windows.zip.
 Версія та сама, що й тут. Збірки не підписані: як дозволити перший запуск
 (Gatekeeper на Mac, SmartScreen на Windows) — у README-macOS.txt
 і README-Windows.txt в архівах.
+
+Зв'язок з FPV — 0.32.4:
+Картинку FPV-дрона більше не глушить власний бруствер оператора чи
+низька стінка поруч: така перешкода лише додає трохи «снігу». Пропадає
+вона, як і раніше, за будинком, за пагорбом і дуже далеко.
 
 Лежачи серед поранених — 0.32.3:
 Лежачи, можна відповзти й розвернутися серед поранених і залеглих бійців:

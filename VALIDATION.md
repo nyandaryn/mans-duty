@@ -1,3 +1,25 @@
+# 0.32.4 validation — 2026-11-22
+
+The FPV picture no longer drops behind the operator's own parapet.
+
+- Measured first (forest_01, village_01, district_01, forest_03, the UAV
+  operator's start, the line to every enemy at 20 points, the drone 3, 10 and
+  30 m over the ground): the 5.8 GHz picture was lost (< 0.04) at 21–39 % of
+  the points at 3 m and up to 23 % at 10 m. Almost every block was the 7 ×
+  1.7 m parapet 5 m in front of him: the antenna at 1.5 m is under its top,
+  and anything in the line cut the picture to 0.12 like a house.
+- Now a link budget: the margin distance leaves (20·log10(2500/d) dB, the
+  same curve as before with nothing in the way), less the worst knife-edge
+  loss (ITU-R P.526 eq. 31) of the obstacle the line meets (its top found by
+  stepped rays along the line, then one down) or of the ground (12 points).
+  After: lost at 0–1 % at 10 m (drones behind houses), 7–15 % at 3 m (behind
+  ridges and houses); the parapet costs 10–15 dB.
+- test_fpv: 64 checks (new: over his parapet the picture holds, 0.5–0.97;
+  behind a house by the drone it is gone). Against the 0.32.3 link code the
+  parapet check fails (0.12). Distance curve unchanged (near 0.99, 1.9 km
+  0.37, past 2.5 km 0, low far out 0).
+- Full suite from source: 75 scenarios pass with no script errors.
+
 # 0.32.3 validation — 2026-11-22
 
 Crawling out from among men lying on the ground.
