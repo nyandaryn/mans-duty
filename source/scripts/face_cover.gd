@@ -142,7 +142,7 @@ static func wear(model: Node3D, id: String, outfit: String="ua_pixel") -> void:
  mask.material_override=cloth
  group.add_child(mask)
  # Down the neck into the collar: just inside the mask at its lower edge
- # (the neck there is 0.154 m across, 0.127 m deep).
- var neck := CharacterArt.shell(group,[Vector4(-0.075,0.172,0.165,-0.015),Vector4(-0.02,0.166,0.152,-0.016),Vector4(0.01,0.158,0.135,-0.018),Vector4(0.03,0.150,0.120,-0.02)],"cloth",0.0,20,1.0,true)
+ # (the neck there is 0.154 m across, 0.127 m deep, squarish: square 0.7).
+ var neck := CharacterArt.shell(group,[Vector4(-0.075,0.172,0.165,-0.015),Vector4(-0.02,0.172,0.156,-0.016),Vector4(0.01,0.164,0.138,-0.018),Vector4(0.03,0.150,0.120,-0.02)],"cloth",0.0,24,0.7,true)
  neck.name="Neck"
  neck.material_override=cloth
