@@ -1,13 +1,17 @@
-MANS DUTY / 0.32.2 / Linux x86_64
+MANS DUTY / 0.32.3 / Linux x86_64
 
 Запуск: ./play.sh або bash play.sh у цій папці.
 Godot включено; тримайте kvartal.x86_64, kvartal.pck та play.sh поруч.
 Усі збірки: https://github.com/nyandaryn/mans-duty/releases
-macOS (Apple Silicon та Intel): kvartal-0.32.2-macos.zip.
-Windows 10/11 (64-біт): kvartal-0.32.2-windows.zip.
+macOS (Apple Silicon та Intel): kvartal-0.32.3-macos.zip.
+Windows 10/11 (64-біт): kvartal-0.32.3-windows.zip.
 Версія та сама, що й тут. Збірки не підписані: як дозволити перший запуск
 (Gatekeeper на Mac, SmartScreen на Windows) — у README-macOS.txt
 і README-Windows.txt в архівах.
+
+Лежачи серед поранених — 0.32.3:
+Лежачи, можна відповзти й розвернутися серед поранених і залеглих бійців:
+вони більше не тримають, як стіна. Той, хто стоїть, і далі заважає.
 
 Влучання куль — 0.32.2:
 Куля в бетон чи цеглу збиває хмару пилу й відколи, у ґрунт — підкидає

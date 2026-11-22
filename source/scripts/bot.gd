@@ -138,6 +138,9 @@ var n_capsule: CapsuleShape3D
 var sight_points: Array[Node3D]=[]
 var shape_down := -1.0
 var shape_stance := -1.0
+# Lying on the ground (down, wounded or prone by choice): the player can
+# crawl past and over him (Operator.let_through).
+var lying := false
 # A drone of the other side: heard close by or seen in the air, noticed after
 # a moment, then shot at with a lead when no man of the other side in sight
 # nearer than DRONE_FIRST comes first and the shells do not keep heads down.
@@ -739,6 +742,9 @@ func animate_pose(delta: float, moving: bool) -> void:
 		n_shape.rotation.x=down*PI*0.5
 		n_capsule.height=lerpf(1.82-stance*0.48,1.82,down)
 		n_shape.position=Vector3(0,lerpf(n_capsule.height*0.5,0.32,down),-down*0.22)
+		if (down>0.5)!=lying:
+			lying=down>0.5
+			if game!=null and is_instance_valid(game.player):game.player.let_through(self,lying)
 	# Wound motion is an absolute, bounded offset, never accumulated per frame.
 	lean_roll=move_toward(lean_roll,-lean_target*0.22*(1-down),delta*0.9)
 	var flinch := sin(injury_age*17.0)*0.025*exp(-injury_age*3.0) if wound_timer>0 else 0.0
@@ -1092,6 +1098,8 @@ func die() -> void:
 	collision_layer=0
 	collision_mask=0
 	for hitbox in hitboxes:hitbox.collision_layer=0
+	if lying and is_instance_valid(game.player):game.player.let_through(self,false)
+	lying=false
 	call_deferred("create_corpse")
 	if not friendly:game.bot_down()
 

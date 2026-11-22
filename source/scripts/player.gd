@@ -104,6 +104,10 @@ var scope_adjust_time := 0.0
 # be. The operator neither walks nor falls nor changes posture there; he
 # looks, aims and shoots.
 var anchor := Callable()
+# Soldiers lying on the ground near him, wounded or prone: he crawls past and
+# over them, as over any body on the ground, instead of being caught in a
+# ring of them. Standing men still stop him.
+var passable: Dictionary = {}
 
 func setup(owner_game: Node3D, primary: String, secondary: String) -> void:
 	game = owner_game
@@ -691,13 +695,26 @@ func fitted_prone_surface(shape: Shape3D, yaw_delta: float=0.0) -> Variant:
 		if posture_clear(shape,pose,yaw_delta):return fitted
 	return null
 
+func let_through(body: PhysicsBody3D, on: bool) -> void:
+	if on:
+		add_collision_exception_with(body)
+		body.add_collision_exception_with(self)
+		passable[body.get_instance_id()]=body.get_rid()
+	elif passable.has(body.get_instance_id()):
+		passable.erase(body.get_instance_id())
+		if is_instance_valid(body):
+			remove_collision_exception_with(body)
+			body.remove_collision_exception_with(self)
+
 func posture_clear(shape: Shape3D, local_pose: Transform3D, yaw_delta: float=0.0) -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape=shape
 	var body_basis := Basis(Vector3.UP,yaw_delta)*global_basis
 	query.transform=Transform3D(body_basis,global_position+Vector3.UP*0.035)*local_pose
 	query.collision_mask=1|4
-	query.exclude=[get_rid()]
+	var skip: Array[RID]=[get_rid()]
+	skip.append_array(passable.values())
+	query.exclude=skip
 	query.margin=0.005
 	return get_world_3d().direct_space_state.intersect_shape(query,1).is_empty()
 

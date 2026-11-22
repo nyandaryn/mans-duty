@@ -1,3 +1,22 @@
+# 0.32.3 validation — 2026-11-22
+
+Crawling out from among men lying on the ground.
+
+- Reproduced first: eight men round the prone player (four within 0.7 m,
+  four at 1.1 m). Wounded men down: forward 0.06 m in 2 s, a 90° turn
+  blocked (a lying bot was a 1.8 m capsule on the ground, on the layer the
+  player collides with and his posture check reads). The dead already let
+  him through (their ragdolls are on layer 8), 1.7 m in 2 s every way.
+- New test_prone_bodies (11 checks, --fixed-fps 60): among the wounded he
+  turns ±90° and crawls out over them (> 1.2 m in 2 s); past men lying prone
+  by choice and over the dead the same; a wounded man who gets up is solid
+  again; a man standing in front of him stops him (< 0.4 m); the dead leave
+  no collision exceptions behind.
+- test_prone_spawn (35), test_surface_posture (117), test_vault (92),
+  test_tactics (35), test_corpse_stability pass.
+- Full suite from source: 75 scenarios pass with no script errors.
+  `--quit-after 300` exits clean.
+
 # 0.32.2 validation — 2026-11-22
 
 Bullet impact effects by material: powder, chips, splinters, sparks, soil
