@@ -95,7 +95,7 @@ func tick(unit: Dictionary) -> void:
    if alarm(unit):
     unit.state="manning"
     for role in unit.crew:
-     var actor: Hostile=unit.crew[role]
+     var actor=unit.crew[role]
      if BotKit.alive_actor(actor):
       Idle.stop(actor)
       actor.alerted=true
@@ -103,7 +103,7 @@ func tick(unit: Dictionary) -> void:
    if vehicle.hull.out_of_action():bail(unit);return
    var waiting:=0
    for role in unit.crew:
-    var actor: Hostile=unit.crew[role]
+    var actor=unit.crew[role]
     if not is_instance_valid(actor) or actor.dead or actor.vehicle!=null:continue
     if actor.collapse>0.3 or actor.concussion.incapacitated():continue
     var spot:=board_spot(vehicle,role)
@@ -121,7 +121,7 @@ func alarm(unit: Dictionary) -> bool:
  var vehicle: BmpVehicle=unit.vehicle
  if vehicle.hull.hits>0:return true
  for role in unit.crew:
-  var actor: Hostile=unit.crew[role]
+  var actor=unit.crew[role]
   if is_instance_valid(actor) and actor.alerted and not actor.dead:return true
  for actor in game.bots:
   if actor.dead or int(actor.get_meta("battle_sector",-2))!=int(unit.sector):continue
@@ -147,7 +147,7 @@ func bail(unit: Dictionary) -> void:
  unit.state="lost"
  var index_out:=0
  for role in unit.crew:
-  var actor: Hostile=unit.crew[role]
+  var actor=unit.crew[role]
   if not is_instance_valid(actor) or actor.dead:continue
   if actor.vehicle!=null:
    vehicle.crew.erase(actor)

@@ -1,13 +1,18 @@
-MANS DUTY / 0.32.4 / Linux x86_64
+MANS DUTY / 0.32.5 / Linux x86_64
 
 Запуск: ./play.sh або bash play.sh у цій папці.
 Godot включено; тримайте kvartal.x86_64, kvartal.pck та play.sh поруч.
 Усі збірки: https://github.com/nyandaryn/mans-duty/releases
-macOS (Apple Silicon та Intel): kvartal-0.32.4-macos.zip.
-Windows 10/11 (64-біт): kvartal-0.32.4-windows.zip.
+macOS (Apple Silicon та Intel): kvartal-0.32.5-macos.zip.
+Windows 10/11 (64-біт): kvartal-0.32.5-windows.zip.
 Версія та сама, що й тут. Збірки не підписані: як дозволити перший запуск
 (Gatekeeper на Mac, SmartScreen на Windows) — у README-macOS.txt
 і README-Windows.txt в архівах.
+
+Посадка у Великому штурмі — 0.32.5:
+Якщо не пропускати старт, а чекати, колона більше не стоїть без кінця
+після залпу «Градів»: навідник, що опинився за кормою, обходить машину
+до свого люка, а боєць, який не може дійти до дверей, сідає за 45 с.
 
 Зв'язок з FPV — 0.32.4:
 Картинку FPV-дрона більше не глушить власний бруствер оператора чи

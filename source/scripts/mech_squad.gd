@@ -19,6 +19,10 @@ const CLEAR_RADIUS := 80.0
 const BOARD_REACH := 4.0
 const CONTACT_RANGE := 130.0
 const PICKUP_PATIENCE := 70.0
+# Boarding at the start takes some ten seconds; past this, whoever is still
+# outside (held up somewhere, or the gunner stuck behind the hull) climbs in
+# at once, so that the column never waits for ever.
+const BOARD_PATIENCE := 45.0
 
 var game: Node3D
 var battle: BattleMode
@@ -270,7 +274,7 @@ func board_gunner() -> bool:
   return true
  Idle.stop(actor)
  var hatch:=vehicle.to_global(Vector3(2.0,0,-0.4))
- move_to(actor,hatch,0.8)
+ move_to(actor,gunner_way(actor),0.8)
  actor.sprinting=true
  if actor.global_position.distance_to(hatch)<1.9:
   actor.set_meta("mech_control",false)
@@ -279,6 +283,20 @@ func board_gunner() -> bool:
   gunner_out=null
   return true
  return false
+
+# The way to the turret hatch on the right: the hull is not on the walking
+# map, so from behind or ahead of it he goes round its right corner first,
+# and from its left side round the nearer end (straight at the hatch he
+# stood against the stern and the column waited for him for ever).
+func gunner_way(actor: Hostile) -> Vector3:
+ var local:=vehicle.to_local(actor.global_position)
+ var half_width:=BmpArt.WIDTH*0.5
+ var end:=signf(local.z) if absf(local.z)>0.3 else 1.0
+ if local.x< -half_width+0.3 and absf(local.z)<BmpArt.HALF+0.8:
+  return vehicle.to_global(Vector3(-half_width-1.0,0,end*(BmpArt.HALF+1.4)))
+ if local.x<half_width+0.5:
+  return vehicle.to_global(Vector3(half_width+1.2,0,end*(BmpArt.HALF+1.2)))
+ return vehicle.to_global(Vector3(2.0,0,-0.4))
 
 # Straight into the turret (the start skipped).
 func gunner_in_now() -> void:
@@ -301,14 +319,23 @@ func mount_up() -> void:
 
 func tick_board(delta: float) -> void:
  driver.stop()
- vehicle.open_doors(true)
  var men:=on_foot()
+ # The rear doors are for the troops: once they are in, the doors shut
+ # while the gunner goes up to his hatch.
+ vehicle.open_doors(not men.is_empty() or battle.waiting_for_player(self))
+ if state_time>BOARD_PATIENCE:
+  for actor in men:
+   Idle.stop(actor)
+   control(actor,false)
+   vehicle.board(actor)
+  gunner_in_now()
+  men=on_foot()
  for i in range(men.size()):
   control(men[i],true)
   run_to_door(men[i],i)
   try_board(men[i],i)
- var gunner_in:=board_gunner()
- if not on_foot().is_empty() or not gunner_in or vehicle.troops.busy() or battle.waiting_for_player(self):
+ var gunner_in:=board_gunner() or state_time>BOARD_PATIENCE
+ if (not on_foot().is_empty() and state_time<=BOARD_PATIENCE) or not gunner_in or vehicle.troops.busy() or battle.waiting_for_player(self):
   boarded_clock=0.0
   return
  boarded_clock+=delta

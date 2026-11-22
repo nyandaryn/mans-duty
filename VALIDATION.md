@@ -1,3 +1,31 @@
+# 0.32.5 validation — 2026-11-22
+
+The column of the great assault no longer stands for ever at the start when
+the player waits instead of skipping.
+
+- Reproduced first (repro script, the great assault waited out, 1 s steps):
+  rifleman 27 and 54 with boarding, rifleman 27 without, the BMP driver at
+  54. The driver at 54 (seed 4711): after the Grad barrage squad 1 stayed in
+  "board" for 390 s with every man aboard; prep "mount" never ended, the
+  other squads "wait" all the while. Its gunner stood 4.1 m from his hatch,
+  behind the stern (hull-local x 1.19, z 3.62), not moving: he walked
+  straight at the turret hatch through the hull, which is not on the
+  walking map, and stood against the stern.
+- Now the gunner goes round the hull's right corner (from its left side,
+  round the nearer end) and then to the hatch; the rear doors shut once the
+  troops are in. A safeguard: after 45 s of boarding whoever is still out
+  climbs in at once. After: the same run is under way by t = 80 s (all squads
+  boarded by ≈72 s); rifleman 27 and 54 with boarding go on to the march,
+  the approach and the assault as before.
+- Found on the way: "Trying to assign invalid previously freed instance" at
+  EnemyArmour.bail (a crewman of an enemy BMP cleared away before the crew
+  bailed out): its crew is read untyped and checked first.
+- test_board_stuck (new, 8 checks): the gunner put behind the stern gets in
+  within 25 s (1.1 s) and his squad waits with the doors shut; a man held
+  15 m off keeps his squad boarding at 40 s and is in at 45 s. Against the
+  0.32.4 squad code it fails (the gunner never in, the squad in "board").
+- Full suite from source: 76 scenarios pass with no script errors.
+
 # 0.32.4 validation — 2026-11-22
 
 The FPV picture no longer drops behind the operator's own parapet.
