@@ -28,12 +28,8 @@ func setup(owner_operator: Operator) -> void:
  goggles.name="PilotGoggles"
  model.get_node("Head").add_child(goggles)
  goggles.position=Vector3(0,CharacterArt.EYE.y,-0.195)
- controller=Models.group(model,"Controller")
- Models.bevel(controller,Vector3.ZERO,Vector3(0.17,0.055,0.10),"#343d36",0.014)
- for x in [-0.052,0.052]:
-  Models.tube(controller,Vector3(x,0.031,0),0.018,0.004,"#171f1b",Vector3.UP)
-  Models.limb(controller,Vector3(x,0.031,0),Vector3(x,0.047,0),0.004,"#9a9e92")
- Models.limb(controller,Vector3(0,0.018,-0.045),Vector3(0,0.07,-0.095),0.004,"#202923")
+ controller=DroneArt.radio()
+ model.add_child(controller)
  refresh_weapon()
  update_pose()
 
@@ -87,15 +83,19 @@ func update_pose() -> void:
  if operator.is_vaulting():
   vault_pose()
   return
- var pilot := operator.field_rig!=null and operator.field_rig.mode in ["drone","goggles"]
+ var pilot := operator.field_rig!=null and operator.field_rig.mode in ["drone","goggles","fpv_up"]
+ # FPV goggles pushed up onto the helmet's brim, the radio still in hand.
+ var lifted := pilot and operator.field_rig.mode=="fpv_up"
  var low := operator.prone
  var knee := operator.crouched and not low
  # The body's anatomical neck matches the player's existing head hitbox.
  var frame := operator.prone_surface if low else Transform3D.IDENTITY
  model.transform=frame*Transform3D(Basis(Vector3.RIGHT,-PI/2) if low else Basis.IDENTITY,Vector3(0,0.23,1.5) if low else Vector3(0,-0.71 if knee else -0.075,0))
  var head: Node3D=model.get_node("Head")
- head.rotation.x=PI/2 if low else (0.08 if pilot else operator.pitch*0.5)
+ head.rotation.x=PI/2 if low else (0.08 if pilot and not lifted else operator.pitch*0.5)
  goggles.visible=pilot
+ goggles.position=Vector3(0,CharacterArt.EYE.y+(0.085 if lifted else 0.0),-0.195+(0.03 if lifted else 0.0))
+ goggles.rotation.x=0.75 if lifted else 0.0
  controller.visible=pilot
  var moving := minf(Vector2(operator.velocity.x,operator.velocity.z).length(),1)
  for side in ["Left","Right"]:

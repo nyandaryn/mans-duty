@@ -148,7 +148,8 @@ func _draw() -> void:
 			draw_rect(Rect2(bar.position,Vector2(bar.size.x*clampf(field.timer/maxf(field.work_time,0.01),0,1),bar.size.y)),Color("c6bb92"))
 		elif field.mode=="pouch":text="ДАЛЕКОМІР З ПІДСУМКА НА БРОНІ"
 		elif field.mode=="pouch_stow":text="ДАЛЕКОМІР У ПІДСУМОК"
-		elif field.mode=="goggles":text="НАДЯГАННЯ FPV-ОКУЛЯРІВ"
+		elif field.mode=="goggles":text="ОКУЛЯРИ НА ОЧІ" if field.goggles_back else "НАДЯГАННЯ FPV-ОКУЛЯРІВ"
+		elif field.mode=="fpv_up":text="FPV-ДРОН ВИСИТЬ НА ВІДПУЩЕНИХ СТІКАХ · ОКУЛЯРИ ПІДНЯТО · ПУЛЬТ У РУКАХ"
 		elif field.mode=="recover_drone":text="СКЛАДАННЯ ДРОНА В НАПЛІЧНИК"
 		elif field.mode!="":text="НАПЛІЧНИК · "+("ПОВЕРНЕННЯ ПРЕДМЕТА" if field.mode=="stow" else "ДІСТАВАННЯ · %.1f с" % maxf(0,FieldRig.ACCESS_TIME-field.timer))
 		elif game.inventory.transfer.active:

@@ -120,6 +120,18 @@ static func build_fpv(kind: String) -> Node3D:
    rotor.set_meta("rotor",true)
  return model
 
+# The pilot's radio transmitter: a gamepad-style box, two gimbal sticks,
+# the antenna up from its back.
+static func radio() -> Node3D:
+ var model := Node3D.new()
+ model.name="Controller"
+ Models.bevel(model,Vector3.ZERO,Vector3(0.17,0.055,0.10),"#343d36",0.014)
+ for x in [-0.052,0.052]:
+  Models.tube(model,Vector3(x,0.031,0),0.018,0.004,"#171f1b",Vector3.UP)
+  Models.limb(model,Vector3(x,0.031,0),Vector3(x,0.047,0),0.004,"#9a9e92")
+ Models.limb(model,Vector3(0,0.018,-0.045),Vector3(0,0.07,-0.095),0.004,"#202923")
+ return model
+
 # Analog box goggles of a strike-drone pilot: one screen behind a Fresnel
 # lens, a cooling grille in the front, a patch and a whip antenna on the
 # receiver module and the head strap.

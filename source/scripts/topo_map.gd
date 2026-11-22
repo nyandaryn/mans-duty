@@ -74,7 +74,7 @@ func toggle() -> void:
 
 func open() -> bool:
  if not game.running or game.paused or game.commands_open or game.inventory_open:return false
- if game.player.field_rig.mode in ["drone","goggles"]:return false
+ if game.player.field_rig.mode in ["drone","goggles","fpv_up"]:return false
  if built_for!=game.district.get_instance_id():build()
  # In the vehicle or out on the approach: the route sheet.
  var at: Vector3=game.player.global_position

@@ -89,6 +89,8 @@ func toggle() -> void:
  if game.player.launcher.active():game.player.launcher.toggle();return
  if game.player.is_vaulting():return
  if game.player.field_rig.mode=="drone":game.player.field_rig.cancel()
+ # Goggles up, the radio in both hands: no reaching into the pack.
+ if game.player.field_rig.mode=="fpv_up" and not visible:game.player.field_rig.drone_notice="Руки зайняті пультом FPV: Y — окуляри, ~ — відпустити дрон.";return
  if visible:close();return
  game.squad.close()
  game.inventory_open=true

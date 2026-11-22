@@ -463,8 +463,10 @@ func _physics_process(delta: float) -> void:
 	if prone:speed=0.85
 	if aiming_weapon: speed=minf(speed,2.4)
 	speed*=1-leg_injury*0.65
-	if bandage_time>0 or blood_loss>0.65 or field_rig.busy():speed=0
-	if field_rig.mode in ["rangefinder","pouch","pouch_stow"]:speed=minf(speed,1.4)
+	# With the FPV hanging in the air and the radio in his hands he can step
+	# aside at a walk.
+	if bandage_time>0 or blood_loss>0.65 or (field_rig.busy() and field_rig.mode!="fpv_up"):speed=0
+	if field_rig.mode in ["rangefinder","pouch","pouch_stow","fpv_up"]:speed=minf(speed,1.4)
 	speed*=concussion.movement_multiplier()
 	if injury_time>0:speed*=0.45
 	velocity.x=move_toward(velocity.x,direction.x*speed,delta*22)
@@ -990,6 +992,7 @@ func timed_action() -> String:
 			"access":return "ДІСТАВАННЯ З НАПЛІЧНИКА"
 			"fpv_place":return "FPV-ДРОН НА ЗЕМЛЮ"
 			"goggles":return "НАДЯГАННЯ ОКУЛЯРІВ"
+			"fpv_up":return "FPV-ДРОН ВИСИТЬ, ОКУЛЯРИ ПІДНЯТО"
 			"recover_drone":return "СКЛАДАННЯ ДРОНА"
 			"stow":return "ПОВЕРНЕННЯ В НАПЛІЧНИК"
 			"belt":return "АПТЕЧКА В ПІДСУМОК НА ПОЯСІ"
@@ -1010,6 +1013,7 @@ func mortar_relaying() -> bool:
 func cancel_hint() -> String:
 	var what := timed_action()
 	if what=="":return ""
+	if field_rig.mode=="fpv_up":return "Y — НАДІТИ ОКУЛЯРИ · "+CANCEL_LABEL+" — ВІДПУСТИТИ ДРОН (ВПАДЕ)"
 	var hands := launcher.active() or field_rig.mode!="" or field_rig.transfer().active
 	return CANCEL_LABEL+(" АБО КРОК" if field_rig.mode=="work" else "")+" — СКАСУВАТИ"+("" if hands else " · "+what)
 

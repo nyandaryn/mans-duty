@@ -156,6 +156,10 @@ var goggles: CanvasLayer
 var picture: ColorRect
 var osd: Control
 var hud_hidden := false
+# The pilot has pushed his goggles up: the sticks are let go to the centre,
+# the flight controller holds it level and the throttle hand stays where it
+# was (FieldRig "fpv_up").
+var hands_off := false
 var picture_clock := 0.0
 static var buzz: AudioStreamWAV
 static var picture_shader: Shader
@@ -261,13 +265,22 @@ static func buzz_audio() -> AudioStreamWAV:
 # --- Goggles ----------------------------------------------------------------------
 func begin_control() -> bool:
  if over or health<=0 or battery<=0:return false
- piloting=true;camera.make_current();open_goggles()
+ piloting=true;hands_off=false;camera.make_current();open_goggles()
  notice="" if launched() else "SPACE — ГАЗ, ЗЛІТ"
  return true
 
 func end_control() -> void:
  super.end_control()
  close_goggles()
+
+# Goggles up in the air: the pilot lets the sticks go. In angle mode it levels
+# out and holds its height, its momentum dying away in the drag; the battery
+# runs down. It does not hold its place: it drifts on until it stops.
+func hover() -> void:
+ if over:return
+ if piloting:end_control()
+ cmd_pitch=0.0;cmd_roll=0.0;cmd_throttle=0.0;boost=false
+ hands_off=true
 
 # The picture of the analog link over the whole view (fisheye of the wide
 # lens, a cheap camera's washed colour, interlaced lines, the snow of a weak
@@ -425,7 +438,7 @@ func draw_osd() -> void:
  for i in range(warnings.size()):
   if blink or i>0:osd_text(Vector2(0,view.y*0.30+i*big*1.3)+jitter,warnings[i],big,ink,HORIZONTAL_ALIGNMENT_CENTER,view.x)
  if notice!="":osd_text(Vector2(left,view.y*0.79)+jitter,notice,small,ink)
- osd_text(Vector2(0,view.y*0.955),"W/S — ТАНГАЖ · A/D — КРЕН · МИША — КУРС / НАХИЛ КАМЕРИ · SPACE / CTRL — ГАЗ · SHIFT — ФОРСАЖ · ЛКМ — ПІДРИВ · Y — ЗНЯТИ ОКУЛЯРИ",int(14*u),Color(0.85,0.88,0.82,0.55),HORIZONTAL_ALIGNMENT_CENTER,view.x)
+ osd_text(Vector2(0,view.y*0.955),"W/S — ТАНГАЖ · A/D — КРЕН · МИША — КУРС / НАХИЛ КАМЕРИ · SPACE / CTRL — ГАЗ · SHIFT — ФОРСАЖ · ЛКМ — ПІДРИВ · "+("Y — ПІДНЯТИ ОКУЛЯРИ (ДРОН ЗАВИСНЕ)" if launched() else "Y — ЗНЯТИ ОКУЛЯРИ"),int(14*u),Color(0.85,0.88,0.82,0.55),HORIZONTAL_ALIGNMENT_CENTER,view.x)
 
 # --- The player's sticks ----------------------------------------------------------
 func handle_input(event: InputEvent) -> void:
@@ -630,7 +643,7 @@ func fly(delta: float) -> bool:
   att_pitch=atan2(-frame.y.z,frame.y.y);att_roll=asin(clampf(frame.y.x,-1.0,1.0))
  var attitude := Basis(Vector3.UP,yaw)*frame
  var force := attitude.y*thrust+Vector3.DOWN*G-velocity*velocity.length()*DRAG
- if armed and manual and piloting and cmd_throttle==0.0:force.y-=velocity.y*1.2
+ if armed and manual and (piloting or hands_off) and cmd_throttle==0.0:force.y-=velocity.y*1.2
  velocity+=force*delta
  if not launched():
   # On its warhead in the grass: it only goes up, when the motors lift it.
@@ -776,6 +789,7 @@ func _exit_tree() -> void:
 func abandon() -> void:
  if over:return
  if piloting:end_control()
+ hands_off=false
  goal="";target=null;picker=Callable()
  if armed and launched():coast_left=COAST_TIME
  state="falling"

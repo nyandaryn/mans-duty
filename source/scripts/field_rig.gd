@@ -46,6 +46,10 @@ const FPV_PLACE_TIME := 1.0
 const FPV_FOOTPRINT := Vector3(0.46,0.17,0.62)
 const FPV_LIFTS := [0.12,0.15,0.20]
 var fpv_warhead := "heat"
+# Goggles pushed up onto the helmet are pulled down again quicker than they
+# are put on from the hands.
+const GOGGLES_BACK := 0.8
+var goggles_back := false
 var parked_drone: ReconDrone
 # Hands-on work in place: mortar deployment, taking a mine out of the box.
 var work_title := ""
@@ -151,7 +155,7 @@ func cancel() -> void:
  var stow := FPV_DRONE.is_fpv_kind(kind) and mode=="fpv_place"
  if is_instance_valid(drone) and drone is FPV_DRONE:stow=release_fpv() or stow
  elif is_instance_valid(drone) and drone.piloting:drone.end_control()
- mode="";timer=0;sample_left=0;visible=false;to_belt=false;work_done=Callable();work_target=Vector3.INF
+ mode="";timer=0;sample_left=0;visible=false;to_belt=false;work_done=Callable();work_target=Vector3.INF;goggles_back=false
  transfer().cancel()
  if stow and operator.game.running and operator.arm_injury<0.5 and operator.injury_time<=0:mode="stow";timer=0
 
@@ -168,7 +172,16 @@ func interrupt() -> bool:
   "":
    if not transfer().active:return false
    transfer().cancel()
-  "access","goggles","recover_drone","fpv_place":cancel()
+  "goggles":
+   # Pulling the goggles down again off the helmet: they go back up, the
+   # FPV hangs on in the air.
+   if goggles_back:mode="fpv_up";timer=0;goggles_back=false
+   else:cancel()
+  "access","recover_drone","fpv_place":cancel()
+  # Goggles up, the radio let go: nobody flies the FPV, it falls.
+  "fpv_up":
+   cancel()
+   drone_notice="Пульт відпущено: FPV-дрон без керування падає."
   "stow","belt","pouch_stow":mode="";timer=0;visible=false
   "pouch":mode="pouch_stow";timer=POUCH_STOW*(1.0-clampf(timer/POUCH_TIME,0,1))
   "work":interrupt_work("СКАСОВАНО")
@@ -228,8 +241,8 @@ func tick(delta: float) -> void:
     var done := work_done
     mode="";work_done=Callable();work_target=Vector3.INF
     if done.is_valid():done.call()
-  elif mode=="goggles" and timer>=1.2:
-   if is_instance_valid(drone) and drone.begin_control():mode="drone";timer=0
+  elif mode=="goggles" and timer>=(GOGGLES_BACK if goggles_back else 1.2):
+   if is_instance_valid(drone) and drone.begin_control():mode="drone";timer=0;goggles_back=false
    else:cancel()
   elif mode=="recover_drone" and timer>=2.2:
    finish_drone_recovery();cancel()
@@ -481,6 +494,19 @@ func animate() -> void:
   else:
    left.position=Vector3(-0.16,-0.52+swing,-0.42);right.position=Vector3(0.17,-0.50-swing,-0.40)
    left.rotation=Vector3(-0.9,0,0.3);right.rotation=Vector3(-0.9,0,-0.3)
+ elif mode=="fpv_up":
+  # The goggles up on the helmet, the radio held in both hands low in front.
+  if visual_key!="fpv_radio":
+   visual_key="fpv_radio"
+   if is_instance_valid(item_prop):item_prop.free()
+   item_prop=DroneArt.radio();add_child(item_prop);paint(self)
+  pack.visible=false
+  for node in [source_mag,target_mag,cartridge,belt_train]:
+   if is_instance_valid(node):node.visible=false
+  var sway := sin(timer*1.3)*0.004
+  item_prop.position=Vector3(0,-0.24+sway,-0.37);item_prop.rotation=Vector3(0.95,0,0);item_prop.visible=true
+  left.position=item_prop.position+Vector3(-0.095,-0.01,0.02);right.position=item_prop.position+Vector3(0.095,-0.01,0.02)
+  left.rotation=Vector3(-0.5,0,0.6);right.rotation=Vector3(-0.5,0,-0.6)
  elif mode=="goggles":
   var fpv := FPV_DRONE.is_fpv_kind(kind)
   if visual_key!=("fpv_goggles" if fpv else "goggles"):
@@ -492,7 +518,9 @@ func animate() -> void:
   if is_instance_valid(source_mag):source_mag.visible=false
   if is_instance_valid(cartridge):cartridge.visible=false
   if is_instance_valid(belt_train):belt_train.visible=false
-  item_prop.position=Vector3(0,-0.28,-0.42).lerp(Vector3(0,-0.01,-0.08),smoothstep(0,1.2,timer))
+  # From the hands up to the eyes, or (pushed up before) down off the helmet.
+  if goggles_back:item_prop.position=Vector3(0,0.16,-0.05).lerp(Vector3(0,-0.01,-0.08),smoothstep(0,GOGGLES_BACK,timer))
+  else:item_prop.position=Vector3(0,-0.28,-0.42).lerp(Vector3(0,-0.01,-0.08),smoothstep(0,1.2,timer))
   item_prop.rotation=Vector3.ZERO;item_prop.visible=true
   left.position=item_prop.position+Vector3(-0.09,0,0);right.position=item_prop.position+Vector3(0.09,0,0)
  else:
@@ -548,6 +576,7 @@ func toggle_drone() -> void:
  if operator.concussion.acute_left>0 or operator.concussion.incapacitated():return
  if operator.is_vaulting():return
  # J again calls off the goggles, the drone being reached for or folded.
+ if mode=="fpv_up":drone_notice="Руки зайняті пультом FPV: Y — окуляри, ~ — відпустити дрон.";return
  if mode in ["drone","goggles"] or (kind=="recon_drone" and mode in ["access","recover_drone"]):cancel();return
  if active() or operator.current().phase!="" or operator.arm_injury>=0.5 or operator.injury_time>0 or operator.bandage_time>0:return
  if is_instance_valid(drone):
@@ -611,12 +640,19 @@ func recon_parked() -> bool:return is_instance_valid(drone) and not (drone is FP
 
 # --- FPV ----------------------------------------------------------------------
 # Y: an FPV from the pack (the kind asked for, else the first), out (3.4 s),
-# set down (1 s), goggles on; Y again in its goggles takes them off (in the
-# air it flies on a moment and falls; still on the ground it goes back into
-# the pack).
+# set down (1 s), goggles on. Y again in its goggles: in the air they go up
+# onto the helmet and the drone hangs on the sticks let go (Y once more pulls
+# them down, 0.8 s; ~ lets the radio go and the drone falls); still on the
+# ground it goes back into the pack.
 func toggle_fpv(which: String="") -> void:
  if operator.concussion.acute_left>0 or operator.concussion.incapacitated():return
  if operator.is_vaulting():return
+ if FPV_DRONE.is_fpv_kind(kind) and fpv_flying():
+  match mode:
+   "drone":lift_goggles();return
+   "fpv_up":mode="goggles";timer=0;goggles_back=true;drone_notice="";return
+   "goggles":
+    if goggles_back:mode="fpv_up";timer=0;goggles_back=false;return
  if FPV_DRONE.is_fpv_kind(kind) and mode in ["access","fpv_place","goggles","drone"]:cancel();return
  if mode in ["drone","goggles"]:drone_notice="Спершу зніми окуляри розвіддрона (J).";return
  if active() or operator.current().phase!="" or operator.arm_injury>=0.5 or operator.injury_time>0 or operator.bandage_time>0:return
@@ -624,6 +660,16 @@ func toggle_fpv(which: String="") -> void:
  if uid<0:uid=first_fpv()
  if uid<0:drone_notice="Додай FPV-дрон до наплічника в лодауті.";return
  if not request(uid):drone_notice="Зараз не дістати FPV-дрон."
+
+# The player's FPV up and under power: it can be left to hang a while.
+func fpv_flying() -> bool:
+ return is_instance_valid(drone) and drone is FPV_DRONE and drone.launched() and drone.armed and not drone.over and drone.coast_left<=0 and drone.state!="falling"
+
+# Goggles up: his own eyes and the HUD back, the radio still in his hands.
+func lift_goggles() -> void:
+ drone.hover()
+ mode="fpv_up";timer=0;goggles_back=false
+ drone_notice=""
 
 func first_fpv() -> int:
  for entry in operator.backpack.items:
@@ -665,4 +711,4 @@ func fpv_gone(fpv: ReconDrone, message: String="") -> void:
  drone=parked_drone if is_instance_valid(parked_drone) else null
  parked_drone=null
  if message!="":drone_notice=message
- if mode in ["drone","goggles"]:mode="";timer=0;visible=false
+ if mode in ["drone","goggles","fpv_up"]:mode="";timer=0;visible=false;goggles_back=false
