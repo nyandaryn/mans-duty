@@ -1122,6 +1122,8 @@ func pain_voice(actor: Node3D, severe: bool=true) -> void:
 	voice.play()
 
 func _exit_tree() -> void:
+	BotKit.clear_models()
+	BlastSystem.clear_grenade_models()
 	for output in audio_pool:
 		output.stop()
 		output.stream=null

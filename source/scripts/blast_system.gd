@@ -139,6 +139,11 @@ static func rocket_time(kind: String, distance: float) -> float:
 # The grenade in flight: the model of its launcher's art (fins open), built
 # once and copied; a plain body when that art is missing.
 static var grenade_models := {}
+# The templates are out of the tree: freed with the game (see BotKit).
+static func clear_grenade_models() -> void:
+ for kind in grenade_models:
+  if is_instance_valid(grenade_models[kind]):(grenade_models[kind] as Node).free()
+ grenade_models.clear()
 func grenade_node(kind: String) -> Node3D:
  if not grenade_models.has(kind) or not is_instance_valid(grenade_models[kind]):grenade_models[kind]=build_grenade(kind)
  return (grenade_models[kind] as Node3D).duplicate()

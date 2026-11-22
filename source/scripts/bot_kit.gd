@@ -389,8 +389,14 @@ func show_launcher(on: bool) -> void:
  launcher_node.position=Vector3(0.18,1.28,0.25)
  launcher_node.rotation=Vector3(PI/2,0,-0.2)
 
-# Built once per kind and state, then copied: the meshes are shared.
+# Built once per kind and state, then copied: the meshes are shared. The
+# templates stay out of the tree, so the game frees them when it leaves
+# (clear_models), or they would leak at exit.
 static var models := {}
+static func clear_models() -> void:
+ for key in models:
+  if is_instance_valid(models[key]):(models[key] as Node).free()
+ models.clear()
 static func launcher_model(which: String, ready: bool) -> Node3D:
  var key:="%s/%s" % [which,str(ready)]
  if models.has(key) and is_instance_valid(models[key]):return (models[key] as Node3D).duplicate()

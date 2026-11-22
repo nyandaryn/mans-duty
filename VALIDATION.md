@@ -40,6 +40,12 @@ operator classes; bot roles on both sides; FPV kamikaze drones.
   by the vehicle, the marks on BMPs and a «Grad», the roles, the vests; one
   side view of their BMP is partly behind a wall).
 - Full suite from source: 63 scenarios pass, no script errors.
+- The first release build's smoke run stopped on leaks at exit: the RPG-7,
+  RPG-22 and PG-7VL templates that BotKit and BlastSystem copy from were kept
+  out of the tree and never freed. The game now frees them when it leaves the
+  tree; `--quit-after 300` exits clean, and test_player_weapons, test_bot_roles,
+  test_vehicle_armor, test_shmel, test_operator_body, test_loadout_preview,
+  test_fpv and test_battle pass without leak messages.
 
 # 0.30.0 validation — 2026-11-21
 
