@@ -7,7 +7,8 @@ extends SceneTree
 #   outside with the squad and climbs into the turret when they board;
 # - a BMP-2 of theirs at each strongpoint, engine off, its driver and gunner
 #   beside it; on the alarm they run to it, get in, start it, man the gun;
-# - the marks: «Z» and the tricolour on theirs, the Ukrainian flag on ours;
+# - the marks: the painted «Z» and the tricolour on the whip on theirs, the
+#   Ukrainian flag on the whip of ours and on the staff of the BM-21;
 # - a grenadier brings the RPG-7 up and fires on an enemy vehicle in reach;
 # - a shaped charge on a thin wall hits the man behind it, a thick wall
 #   stops it.
@@ -85,10 +86,12 @@ func run():
  check(crews_by,"…the driver and the gunner idling beside it")
  # Marks.
  var enemy_bmp: BmpVehicle=armour.vehicles[0]
- check(enemy_bmp.art.root.get_node_or_null("Markings")!=null and enemy_bmp.art.turret.get_node_or_null("Markings")!=null,"«Z» and the tricolour on their BMP")
- check(lead.vehicle.art.root.get_node_or_null("Markings")!=null and lead.vehicle.art.turret.get_node_or_null("Markings")!=null,"The flag of Ukraine on ours")
- var grad_marked:=battle.battery!=null and not battle.battery.launchers.is_empty() and battle.battery.launchers[0].art.root.get_node_or_null("Markings")!=null
- check(grad_marked,"…and on the cab of our BM-21")
+ var enemy_flag: Node=enemy_bmp.art.turret.get_node_or_null("Flag")
+ check(enemy_bmp.art.root.get_node_or_null("Markings")!=null and enemy_flag!=null and enemy_flag.get_meta("bands")==VehicleMarkings.RUSSIA,"«Z» painted on their BMP, the tricolour on its whip")
+ var our_flag: Node=lead.vehicle.art.turret.get_node_or_null("Flag")
+ check(our_flag!=null and our_flag.get_meta("bands")==VehicleMarkings.UKRAINE and lead.vehicle.art.turret.get_node_or_null("Markings")==null,"The flag of Ukraine on the whip of ours, nothing painted")
+ var grad_flag: Node=battle.battery.launchers[0].art.root.get_node_or_null("Flag") if battle.battery!=null and not battle.battery.launchers.is_empty() else null
+ check(grad_flag!=null and grad_flag.get_meta("bands")==VehicleMarkings.UKRAINE,"…and on the staff of our BM-21")
  # --- «По машинах!»: the gunner climbs in -----------------------------------------
  battle.skip_field()
  await frames(5)

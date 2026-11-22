@@ -228,9 +228,17 @@ func shoot_ap(muzzle: Vector3) -> void:
 func shoot_pkt() -> void:
  pkt-=1
  var origin: Vector3=vehicle.art.coax.global_position
- var direction:=(barrel()+spread(0.0025)).normalized()
+ # The barrel is laid on the point; the sight's scale for the PKT turns it
+ # up by the range (judged on the stadia scale beyond the direct-fire range,
+ # a gunner's own error for a band of 50 m).
+ var point:=aim_point()
+ var distance:=origin.distance_to(point) if point!=Vector3.INF else 300.0
+ var line:=barrel()
+ if distance>FlightModel.direct_fire("svd"):distance*=1.0+(float(absi(hash([vehicle.get_instance_id(),int(distance/50.0)]))%2001)/1000.0-1.0)*0.10
+ if absf(line.y)<0.98:line=line.rotated(line.cross(Vector3.UP).normalized(),FlightModel.aim_angle("svd",distance))
+ var direction:=(line+spread(0.0025)).normalized()
  game.ballistics.launch(origin,direction,"svd",95.0,vehicle)
- if shots%3==0:streak(origin,origin+direction*minf(600.0,origin.distance_to(aim_point())+20.0),0.05,Color(1.0,0.35,0.25))
+ if shots%3==0:streak(origin,origin+direction*minf(600.0,(distance if point!=Vector3.INF else 580.0)+20.0),0.05,Color(1.0,0.35,0.25))
  game.spatial_shot("svd",origin,-4)
  game.alert_opponents(vehicle,origin)
 

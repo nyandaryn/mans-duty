@@ -109,6 +109,9 @@ func rides() -> void:
  battle.skip_approach()
  game.player.set_physics_process(false)
  var lead: MechSquad=battle.mech[0]
+ # The bench is about the rides: the enemy's grenades and drones may not
+ # set his vehicle burning on the way (a roof hit through the fuel doors did).
+ lead.vehicle.hull.invulnerable=true
  check(game.bmp.squad==lead and is_instance_valid(battle.vehicle_mark),"The player's squad has its vehicle marked")
  await frames(10)
  check(battle.vehicle_mark.visible and battle.vehicle_mark.text.contains("БМП-1"),"The mark shows over his BMP while he is out (%s)" % battle.vehicle_mark.text)
@@ -151,6 +154,9 @@ func rides() -> void:
  while not (lead.aboard().size()>=lead.living() and not lead.vehicle.troops.busy()) and t<6000:await frames(1);t+=1
  for actor in game.allies.duplicate():
   if is_instance_valid(actor) and actor.vehicle==null and not actor.dead:actor.take_damage(10000)
+ # The vehicles hold where they are (as under the mortarman's halt): the
+ # handover is checked in place, not at the next objective.
+ battle.halted=true
  await frames(2)
  var riders:=lead.aboard().size()
  check(riders>0,"Men are still in the vehicle (%d)" % riders)
@@ -158,9 +164,14 @@ func rides() -> void:
  game.player.health=0
  battle.player_fell()
  t=0
- while battle.respawn_left>0 and t<1200:await frames(1);t+=1
+ # Nobody on foot until the handover: men of the other squads getting out
+ # meanwhile would be nearer successors.
+ while battle.respawn_left>0 and t<1200:
+  for actor in game.allies.duplicate():
+   if is_instance_valid(actor) and actor.vehicle==null and not actor.dead:actor.take_damage(10000)
+  await frames(1);t+=1
  await frames(5)
  check(not battle.finished,"Not «all fighters out» with men in the vehicle (%s)" % battle.result_reason)
- check(game.bmp.seat=="troop" and game.bmp.vehicle==lead.vehicle,"The player takes over in the compartment of his BMP")
+ check(game.bmp.seat=="troop" and game.bmp.vehicle==lead.vehicle,"The player takes over in the compartment of his BMP (seat «%s»)" % game.bmp.seat)
  check(lead.aboard().size()==riders-1,"The man he replaced has left the compartment (%d of %d)" % [lead.aboard().size(),riders])
  game.queue_free();await frames(5)

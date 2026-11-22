@@ -318,7 +318,7 @@ func tick_board(delta: float) -> void:
 
 # The commander's order on the radio, heard by the player's own squad.
 func voice(id: String) -> void:
- if game.bmp.squad==self:game.radio_voice.say(id)
+ if game.bmp.squad==self and not battle.skipping:game.radio_voice.say(id)
 
 func tick_wait() -> void:
  driver.stop()

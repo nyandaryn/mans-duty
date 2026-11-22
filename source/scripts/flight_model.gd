@@ -84,12 +84,22 @@ const G1 = [
  Vector2(4.80,0.4990),
  Vector2(5.00,0.4988)
 ]
-const BC = {"ak74":0.31,"m16":0.304,"svd":0.411,"pm":0.12,"m9":0.16,"pkm":0.374}
+const BC = {"ak74":0.30,"m16":0.304,"svd":0.411,"pm":0.12,"m9":0.16,"pkm":0.374}
+# Direct-fire range (дальність прямого пострілу) of the manuals, metres: the
+# trajectory, aimed at a target's lower edge, never rises above the target
+# on its way to the range. Chest figure 0.5 m and running figure 1.5 m:
+# AK-74 440 / 625, SVD 430 / 640, PKM 420 / 640. The M16A2 has none in US
+# doctrine: its values here are those of this model (300 m battlesight
+# zero), kept as a reference against change. Pistols: the 50 m sighting
+# range. See WEAPONS-REFERENCES.md and tests/test_direct_fire.gd.
+const DIRECT_FIRE = {"ak74":[440.0,625.0],"svd":[430.0,640.0],"pkm":[420.0,640.0],"m16":[460.0,660.0],"pm":[50.0,50.0],"m9":[50.0,50.0]}
 const AIR_DENSITY := 1.225
 const SOUND_SPEED := 340.3
 const BC_TO_SI := 703.06958 # lb/in² to kg/m² (BC uses diameter², not frontal area).
 const MAX_STEP := 1.0/240.0
+const TABLE_STEP := 5.0
 static var zero_cache: Dictionary={}
+static var drop_tables: Dictionary={}
 
 static func drag_coefficient(mach: float) -> float:
  var lo := 0
@@ -143,3 +153,36 @@ static func zero_angle(id: String, height: float, distance: float) -> float:
   else:high=angle
  zero_cache[key]=(low+high)*0.5
  return zero_cache[key]
+
+# The drop of a level shot, every TABLE_STEP metres, built once a weapon.
+static func drop_table(id: String) -> PackedFloat32Array:
+ if drop_tables.has(id):return drop_tables[id]
+ var table := PackedFloat32Array([0.0])
+ var point := Vector3.ZERO
+ var velocity := Vector3(0,0,-float(Ballistics.PROFILES[id].speed))
+ var next_mark := TABLE_STEP
+ for i in range(int(8.0/MAX_STEP)):
+  var next := advance(point,velocity,float(BC[id]),MAX_STEP)
+  while -next[0].z>=next_mark:
+   var fraction := (next_mark+point.z)/(point.z-next[0].z)
+   table.append(lerpf(point.y,next[0].y,fraction))
+   next_mark+=TABLE_STEP
+  point=next[0];velocity=next[1]
+  if next_mark>1500.0:break
+ drop_tables[id]=table
+ return table
+
+# Elevation of the bore over the line to a point at a range that puts the
+# round on that point: a soldier's sight set for the range (bots, the BMP's
+# coaxial gun). The level shot's drop turned up by the angle; it differs
+# from zero_angle(id, 0, distance) by well under a tenth of a thousandth.
+static func aim_angle(id: String, distance: float) -> float:
+ var table := drop_table(id)
+ var at := clampf(distance,TABLE_STEP,(table.size()-1)*TABLE_STEP)
+ var index := mini(int(at/TABLE_STEP),table.size()-2)
+ var drop := lerpf(table[index],table[index+1],at/TABLE_STEP-index)
+ return -drop/at
+
+# The direct-fire range of the chest figure, where a soldier stops simply
+# aiming low and sets his sight for the range.
+static func direct_fire(id: String) -> float:return float(DIRECT_FIRE.get(id,[300.0])[0])

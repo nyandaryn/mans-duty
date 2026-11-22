@@ -2,8 +2,8 @@ extends SceneTree
 
 # Screenshots of the roles and the quiet before the great assault: their
 # BMP-2 parked by a strongpoint with its crew idling, the marks on theirs and
-# ours, our squad and its gunner waiting by the vehicle, the flag on the cab
-# of a «Grad», a machine gunner behind the PKM's bipod, the RPG-7 and the
+# ours (the flags on the turret whips), our squad and its gunner waiting by
+# the vehicle, the flag on its staff behind the cab of a «Grad», a machine gunner behind the PKM's bipod, the RPG-7 and the
 # RPG-22 on the shoulder, and the three vests side by side.
 # KVARTAL_PREVIEW_DIR=<dir> godot --path source --script res://tests/render_roles.gd
 var game: Node3D
@@ -94,13 +94,13 @@ func run():
  look(ours.to_global(Vector3(11,3.2,9)),ours.to_global(Vector3(0,0.8,4)))
  await snap("our-squad-idle",20)
  near_report("squad")
- look(ours.to_global(Vector3(6.5,1.9,-1.0)),ours.to_global(Vector3(1.4,1.6,-0.2)),45)
+ look(ours.to_global(Vector3(6.5,3.4,5.0)),ours.to_global(Vector3(0.75,3.4,0.4)),45)
  await snap("our-bmp-flag",10)
  if battle.battery!=null and not battle.battery.launchers.is_empty():
   var grad: GradVehicle=battle.battery.launchers[0]
   game.district.operation_area.stream(grad.global_position,60)
   await frames(30)
-  look(grad.to_global(Vector3(5.5,2.2,-4.0)),grad.to_global(Vector3(1.1,1.7,-1.4)),45)
+  look(grad.to_global(Vector3(6.0,3.6,2.0)),grad.to_global(Vector3(0.9,3.0,-0.6)),45)
   await snap("grad-flag",20)
  # The roles, on open ground by the column.
  var base: Vector3=ours.to_global(Vector3(-25,0,10))

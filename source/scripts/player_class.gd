@@ -14,18 +14,19 @@ const ITEMS := {
 # the plate carrier (K), so older presets lose the pack copy.
  "rifleman":["rpo_a","rpg22","ammo_ak74","ammo_m16","ammo_pm","ammo_m9","medkit","recon_drone"],
  "machinegunner":["ammo_pkm","ammo_pm","ammo_m9","medkit","recon_drone"],
- "grenadier":["rpg7","pg7vl","rpg22","ammo_ak74","ammo_pm","ammo_m9","medkit"],
+ "grenadier":["rpg7","pg7vl","og7v","rpg22","ammo_ak74","ammo_pm","ammo_m9","medkit","recon_drone"],
  "uav":["fpv_heat","fpv_frag","recon_drone","ammo_ak74","ammo_m16","ammo_pm","ammo_m9","medkit"],
  "sniper":["ammo_svd","ammo_pm","ammo_m9","medkit","recon_drone"],
  "mortarman":["mortar_mine","ammo_ak74","ammo_pm","ammo_m9","medkit","recon_drone"],
- # The drone of the BM-21 belongs to the observation post, not to the pack.
- "grad":["ammo_ak74","ammo_pm","ammo_m9","medkit"],
+ # Every class may carry a recon drone in the pack; the BM-21's commander
+ # also has the observation post's drone at the terminal in his cab.
+ "grad":["ammo_ak74","ammo_pm","ammo_m9","medkit","recon_drone"],
  "bmp":["ammo_ak74","ammo_pm","ammo_m9","medkit","recon_drone"]
 }
 const BRIEF := {
  "rifleman":"АК-74М або M16A4, пістолет, РПО-А «Шмель» або РПГ-22. Набої 5.45 / 5.56 / 9 мм. Діє самостійно: без власної групи й команд.",
  "machinegunner":"ПКМ (7,5 кг, коробки по 100 набоїв, 650 постр./хв), пістолет. Вогонь на придушення і по групах. X — сошки (лежачи чи на опорі віддача втричі менша), PgUp / PgDn — приціл 1–15.",
- "grenadier":"РПГ-7В1 з ПГО-7В3 і пострілами ПГ-7ВЛ, РПГ-22, АК-74М, пістолет. Б'є по техніці, по вогневих точках у будівлях. 4 — гранатомет, 5 — інший, R — заряджання РПГ-7 або переведення РПГ-22 в бойове положення (назад не складається).",
+ "grenadier":"РПГ-7В1 з ПГО-7В3 і пострілами ПГ-7ВЛ (кумулятивні) та ОГ-7В (осколкові), РПГ-22, АК-74М, пістолет. Б'є по техніці, по вогневих точках у будівлях. 4 — гранатомет (утримай — вибір), 5 — інший, R — заряджання РПГ-7 (утримай — вибір пострілу) або переведення РПГ-22 в бойове положення (назад не складається).",
  "uav":"FPV-дрони 7\" (кумулятивні й осколкові), розвіддрон, АК-74М, пістолет. Шукає противника з повітря і вражає техніку й піхоту. Y — FPV, J — розвіддрон.",
  "sniper":"СВД з ПСО-1, пістолет. Набої 7.62 × 54R / 9 мм. Діє самостійно: без власної групи й команд.",
  "mortarman":"Міномет 2Б14 «Піднос» (ствол і двонога — 30,1 кг), АК-74М, пістолет, 82-мм міни. Помічник несе опорну плиту й ящик мін. G — команди, N — міномет.",

@@ -133,7 +133,7 @@ func refresh() -> void:
  settings.text="ЗАРЯД %s · ПРИЦІЛ %s · АЗИМУТ %s" % [MortarBallistics.CHARGES[mortar.charge],MortarBallistics.mils_text(mortar.elevation),MortarBallistics.mils_text(mortar.azimuth)]
  var offset := mortar.traverse_offset()
  var state := "Поворотний механізм: %+d тис. від напрямку двоноги (межа ±%d, далі — перенесення двоноги)." % [offset,Mortar.TRAVERSE]
- if mortar.relay_left>0:state="ПЕРЕНЕСЕННЯ ДВОНОГИ · %.1f с" % mortar.relay_left
+ if mortar.relay_left>0:state="ПЕРЕНЕСЕННЯ ДВОНОГИ · %.1f с · ~ — СКАСУВАТИ" % mortar.relay_left
  elif mortar.reload_left>0:state="ЗАРЯДЖАННЯ · %.1f с" % mortar.reload_left
  var limits := MortarBallistics.range_limits(mortar.charge)
  details.text="%s\nЗаряд %s: дальність %d – %d м · початкова швидкість %d м/с · кут %.1f°" % [state,MortarBallistics.CHARGES[mortar.charge],roundi(limits.x),roundi(limits.y),roundi(MortarBallistics.VELOCITY[mortar.charge]),mortar.elevation*0.06]
@@ -165,6 +165,9 @@ func _input(event: InputEvent) -> void:
    if not event.echo:fire()
   KEY_F,KEY_ESCAPE:
    if not event.echo:close()
+  KEY_QUOTELEFT:
+   if not event.echo and crew.mortar.cancel_relay():
+    azimuth_box.set_value_no_signal(crew.mortar.azimuth);refresh()
   KEY_UP:nudge_elevation(fast)
   KEY_DOWN:nudge_elevation(-fast)
   KEY_RIGHT:nudge_azimuth(fast)

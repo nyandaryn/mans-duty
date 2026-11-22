@@ -25,7 +25,8 @@ func _initialize():
   var partial := w.rounds()
   check(w.reload(1),id+": selected pouch swap")
   complete(w)
-  check(w.pouches[1].serial==1 and w.pouches[1].rounds==partial,id+": partial magazine returns to selected pouch")
+  # The PKM's round on the feed tray goes back into the belt it came from.
+  check(w.pouches[1].serial==1 and w.pouches[1].rounds==partial+(1 if id=="pkm" else 0),id+": partial magazine returns to selected pouch")
   check(w.magazine.serial==3,id+": chosen magazine is inserted")
   check(w.ammunition_total()+w.shots_fired==initial,id+": no rounds created by reload")
   w.reload(1)
@@ -39,9 +40,15 @@ func _initialize():
   check(w.ammunition_total()==total and w.live_ejections==0,id+": inspection neither consumes nor ejects ammunition")
   w.rack()
   w.update(0.4)
-  check(w.live_ejections==1 and not w.chambered,id+": live cartridge ejects at bolt pull")
-  complete(w)
-  check(w.chambered and w.ammunition_total()==total-1,id+": manual rack ejects one cartridge and chambers another")
+  if id=="pkm":
+   # Open bolt: the chamber is empty, recocking throws nothing out.
+   check(w.live_ejections==0,id+": recocking the open bolt ejects nothing")
+   complete(w)
+   check(w.chambered and w.cocked and w.ammunition_total()==total,id+": recocked, nothing lost")
+  else:
+   check(w.live_ejections==1 and not w.chambered,id+": live cartridge ejects at bolt pull")
+   complete(w)
+   check(w.chambered and w.ammunition_total()==total-1,id+": manual rack ejects one cartridge and chambers another")
   # Interrupt every reload checkpoint; resume cannot duplicate or lose a magazine.
   for elapsed in [0.2,0.8,1.8,2.5]:
    w.reload(0)

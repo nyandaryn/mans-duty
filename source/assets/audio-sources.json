@@ -68,13 +68,6 @@
   "license": "CC BY 4.0, Ministry of Defence of the Russian Federation"
  },
  {
-  "name": "dvids_506875_pk",
-  "url": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Marines_fire_foreign_weapons_as_part_of_pre-deployment_training_%28B-Roll%29.ogv",
-  "page": "https://www.dvidshub.net/video/506875/marines-fire-foreign-weapons-part-pre-deployment-training-b-roll",
-  "sha256": "9526baecc32b30f7675c8ee0a4375692e19c98892dfc585f2be930a6cd89f12d",
-  "license": "Public domain (US Government work; Sgt. Lucas Hopkins, II MEF, 2017)"
- },
- {
   "name": "dvids_701773_rpg7",
   "url": "https://d34w7g4gy10iej.cloudfront.net/video/1908/DOD_107099395/DOD_107099395-1024x576-1769k.mp4",
   "page": "https://www.dvidshub.net/video/701773/agile-spirit-19-rpg-7-range",
@@ -87,5 +80,47 @@
   "page": "https://www.dvidshub.net/video/896823/us-marines-test-fire-m72-law-with-robotic-goat",
   "sha256": "900c54440090226cd338c28881252d2b4c9ef0573bae09962045e4305ef33c70",
   "license": "Public domain (US Government work; LCpl. Connor Webb, 2023)"
+ },
+ {
+  "name": "dvids_706007_pkm",
+  "url": "https://d34w7g4gy10iej.cloudfront.net/video/1908/DOD_107176586/DOD_107176586.mp4",
+  "page": "https://www.dvidshub.net/video/706007/iraqi-security-forces-pkm-range",
+  "sha256": "af99bd1f8a7003cf82abd42a4e854d1f55dca1fab7b5325e0e79c1e5259d7b7a",
+  "license": "Public domain (US Government work; Spc. Zachary Myers, U.S. Army, 2019)"
+ },
+ {
+  "name": "freesound_171632_wasr_rpk_back",
+  "url": "https://cdn.freesound.org/previews/171/171632_968159-hq.ogg",
+  "page": "https://freesound.org/people/Pjkasinski3/sounds/171632/",
+  "sha256": "1df71f73c63c0bd5bfd0ba339e4369c9470d81d683d6b26250972a909d4ce866",
+  "license": "CC0 1.0 (Pjkasinski3, 2012)"
+ },
+ {
+  "name": "freesound_171631_wasr_rpk_forward",
+  "url": "https://cdn.freesound.org/previews/171/171631_968159-hq.ogg",
+  "page": "https://freesound.org/people/Pjkasinski3/sounds/171631/",
+  "sha256": "60829e76ced535f9f314d2fc851b4f42d70174fb628a381fdb04909ee3f277ad",
+  "license": "CC0 1.0 (Pjkasinski3, 2012)"
+ },
+ {
+  "name": "freesound_142892_ak47_chambering",
+  "url": "https://cdn.freesound.org/previews/142/142892_2578302-hq.ogg",
+  "page": "https://freesound.org/people/ceremonialchapstick/sounds/142892/",
+  "sha256": "fc4103973030e5d7b2d7b7f023fc3a408042f7705aef9824ad5d97083bffe824",
+  "license": "CC0 1.0 (ceremonialchapstick, 2012)"
+ },
+ {
+  "name": "freesound_855599_m82a1_charging",
+  "url": "https://cdn.freesound.org/previews/855/855599_71257-hq.ogg",
+  "page": "https://freesound.org/people/qubodup/sounds/855599/",
+  "sha256": "7268b0752ecda8d30aae020be815f50951cac8dca5b584a82eeb162d6fb89685",
+  "license": "CC0 1.0 (qubodup, 2026); extracted from public-domain DVIDS video by Spc. Stephen Wright, NGMTC, 2019"
+ },
+ {
+  "name": "freesound_174059_m4_charging_handle",
+  "url": "https://cdn.freesound.org/previews/174/174059_968159-hq.ogg",
+  "page": "https://freesound.org/people/Pjkasinski3/sounds/174059/",
+  "sha256": "812cfc1baf8ff23eb930648bc413b88092184b9ca2fb6e0373c33e0d9f6aed2f",
+  "license": "CC BY 3.0 (Pjkasinski3, 2013)"
  }
 ]

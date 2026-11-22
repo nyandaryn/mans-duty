@@ -524,7 +524,8 @@ func _input(event: InputEvent) -> void:
   if key==KEY_ESCAPE and hud.open_panel()!="":
    hud.close_all();accept();return
  if seat=="":
-  if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_J:
+  # On foot J is the commander's own drone from his pack, if he took one.
+  if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_J and game.player.backpack.first("recon_drone")<0 and not is_instance_valid(game.player.field_rig.drone):
    vehicle.say("Дрон СП керується з термінала в кабіні командира",3);accept()
   return
  if hud.open_panel()!="" and hud.open_panel()!="console":

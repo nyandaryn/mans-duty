@@ -107,7 +107,7 @@ func build_home() -> void:
  var entries:=[
   ["01","КАМПАНІЯ","Дві гілки, десять операцій: лісосмуги, села й міські квартали",func():show_screen("campaign"),""],
   ["02","ВЕЛИКИЙ ШТУРМ","Авдіївка: БМП-2 з десантом, зачистка села, три ОП, до 54 бійців на сторону",func():show_screen("battle"),""],
-  ["03","НАВЧАННЯ","Стрілець, снайпер, мінометник, «Град» і БМП: крок за кроком",func():show_screen("training"),"НОВЕ"],
+  ["03","НАВЧАННЯ","Вісім курсів — від стрільця й кулеметника до «Града» і БМП: крок за кроком",func():show_screen("training"),"НОВЕ"],
   ["04","СПОРЯДЖЕННЯ","Клас, зброя, одяг і наплічник",func():show_screen("loadout"),""],
   ["05","НАЛАШТУВАННЯ","Звук, миша, екран і керування",func():show_screen("settings"),""],
   ["06","ВИЙТИ","",func():get_tree().quit(),""]]
@@ -145,7 +145,7 @@ func build_home() -> void:
  badge.add_child(UiKit.text("НОВЕ",12,UiKit.DARK_TEXT,"head"));tags.add_child(badge)
  tags.add_child(UiKit.text("ВЕРСІЯ %s" % ProjectSettings.get_setting("application/config/version","—"),12,UiKit.MUTED,"head"))
  page.add_child(UiKit.text("НАВЧАННЯ ДЛЯ ВСІХ КЛАСІВ",30,UiKit.INK,"display"))
- page.add_child(UiKit.wrapped("Новий полігон: стрілець, снайпер і мінометник крок за кроком — рух, стрільба, магазини, ПСО-1, міномет від розгортання до ураження. Широкі монітори 21:9 і 32:9, авторозрахунок у планшеті «Града».",14,UiKit.SOFT))
+ page.add_child(UiKit.wrapped("Вісім курсів: нові — кулеметник, гранатометник і оператор БпЛА. У «Великому штурмі» F6 двічі пропускає обстріл і марш, ~ скасовує будь-яку дію, утримання клавіші — кільце вибору дронів і пострілів.",14,UiKit.SOFT))
  var go:=UiKit.ghost("ПОЧАТИ НАВЧАННЯ   →",func():show_screen("training"),15)
  go.size_flags_horizontal=Control.SIZE_SHRINK_BEGIN;page.add_child(go)
  # Footer: version and the keys of the menu.
@@ -220,21 +220,23 @@ func build_training() -> Control:
  var screen:=Control.new()
  game.place(screen,game.menu,0,0,1,1)
  UiKit.sheet(game,screen,0.78)
- UiKit.header(game,screen,"ГОЛОВНЕ МЕНЮ   /   НАВЧАННЯ","НАВЧАННЯ","П’ЯТЬ КУРСІВ · БЕЗ ПРОТИВНИКА · БУДЬ-ЯКИЙ РОЗДІЛ ОКРЕМО",back)
- # One tab per class.
- var tabs:=HBoxContainer.new();tabs.add_theme_constant_override("separation",8)
- game.place(tabs,screen,0.035,0.215,0.965,0.285)
+ UiKit.header(game,screen,"ГОЛОВНЕ МЕНЮ   /   НАВЧАННЯ","НАВЧАННЯ","ВІСІМ КУРСІВ · БЕЗ ПРОТИВНИКА · БУДЬ-ЯКИЙ РОЗДІЛ ОКРЕМО",back)
+ # One tab per class, four to a row: the infantry above, the rest below.
+ var tabs:=GridContainer.new();tabs.columns=4
+ tabs.add_theme_constant_override("h_separation",8);tabs.add_theme_constant_override("v_separation",6)
+ game.place(tabs,screen,0.035,0.205,0.965,0.345)
  for id in game.COURSE_IDS:
   var tab:=CourseTab.new()
   tab.setup(game,id,select_course.bind(id))
+  tab.size_flags_vertical=Control.SIZE_EXPAND_FILL
   tabs.add_child(tab);course_tabs.append(tab)
- chapter_list=VBoxContainer.new();chapter_list.add_theme_constant_override("separation",8)
- game.place(chapter_list,screen,0.035,0.31,0.47,0.87)
+ chapter_list=VBoxContainer.new();chapter_list.add_theme_constant_override("separation",6)
+ game.place(chapter_list,screen,0.035,0.365,0.47,0.875)
  var detail:=PanelContainer.new()
  var style:=UiKit.flat(UiKit.PANEL,UiKit.LINE,1)
  style.content_margin_left=28;style.content_margin_right=28;style.content_margin_top=22;style.content_margin_bottom=22
  detail.add_theme_stylebox_override("panel",style)
- game.place(detail,screen,0.5,0.31,0.965,0.87)
+ game.place(detail,screen,0.5,0.365,0.965,0.875)
  var page:=VBoxContainer.new();page.add_theme_constant_override("separation",10);detail.add_child(page)
  chapter_state=UiKit.text("",13,UiKit.ACCENT,"head");page.add_child(chapter_state)
  chapter_title=UiKit.text("",34,UiKit.INK,"display");chapter_title.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;page.add_child(chapter_title)
@@ -302,7 +304,7 @@ class CourseTab extends Button:
  var game: Node3D
  func setup(owner_game: Node3D, course_id: String, on_press: Callable) -> void:
   game=owner_game;id=course_id;flat=true;text=""
-  custom_minimum_size=Vector2(0,50);size_flags_horizontal=Control.SIZE_EXPAND_FILL
+  custom_minimum_size=Vector2(0,44);size_flags_horizontal=Control.SIZE_EXPAND_FILL
   mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
   add_theme_stylebox_override("focus",StyleBoxEmpty.new())
   mouse_entered.connect(queue_redraw);mouse_exited.connect(queue_redraw)
@@ -313,12 +315,13 @@ class CourseTab extends Button:
   var hot:=is_hovered() or has_focus()
   draw_rect(Rect2(Vector2.ZERO,size),Color(UiKit.ACCENT,0.14) if selected else (Color(1,1,1,0.07) if hot else Color(0.03,0.045,0.04,0.7)))
   draw_rect(Rect2(0,size.y-3,size.x,3),UiKit.ACCENT if selected else UiKit.LINE)
-  draw_string(UiKit.font("head"),Vector2(16,22),course.course_title(),HORIZONTAL_ALIGNMENT_LEFT,size.x-80,19,UiKit.INK if selected or hot else UiKit.SOFT)
-  draw_string(UiKit.font("body"),Vector2(16,40),course.course_role(),HORIZONTAL_ALIGNMENT_LEFT,size.x-80,12,UiKit.MUTED)
+  var middle:=size.y*0.5
+  draw_string(UiKit.font("head"),Vector2(16,middle-1),course.course_title(),HORIZONTAL_ALIGNMENT_LEFT,size.x-80,19,UiKit.INK if selected or hot else UiKit.SOFT)
+  draw_string(UiKit.font("body"),Vector2(16,middle+15),course.course_role(),HORIZONTAL_ALIGNMENT_LEFT,size.x-80,12,UiKit.MUTED)
   var count:="%d / %d" % [course.done_chapters().size(),course.chapters().size()]
   var font:=UiKit.font("head")
   var w:=font.get_string_size(count,HORIZONTAL_ALIGNMENT_LEFT,-1,14).x
-  draw_string(font,Vector2(size.x-w-14,30),count,HORIZONTAL_ALIGNMENT_LEFT,-1,14,UiKit.GOOD if course.done_chapters().size()==course.chapters().size() else UiKit.FAINT)
+  draw_string(font,Vector2(size.x-w-14,middle+5),count,HORIZONTAL_ALIGNMENT_LEFT,-1,14,UiKit.GOOD if course.done_chapters().size()==course.chapters().size() else UiKit.FAINT)
 
 class ChapterCard extends Button:
  var index := 0
@@ -328,7 +331,7 @@ class ChapterCard extends Button:
  var course: TrainingCourse
  func setup(owner_game: Node3D, owner_course: TrainingCourse, i: int, on_press: Callable) -> void:
   game=owner_game;course=owner_course;index=i;flat=true;text=""
-  custom_minimum_size=Vector2(0,72)
+  custom_minimum_size=Vector2(0,64)
   size_flags_vertical=Control.SIZE_SHRINK_BEGIN
   mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
   add_theme_stylebox_override("focus",StyleBoxEmpty.new())

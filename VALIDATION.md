@@ -1,3 +1,50 @@
+# 0.32.0 validation — 2026-11-22
+
+Skipping the barrage and the march in the great assault; training courses
+for the machine gunner, the grenadier and the UAV operator; the radial
+choice; cancelling any timed action; the OG-7V; the PKM's belt, reload and
+open bolt; the AK's released handle; sights laid for the direct-fire range;
+the recon drone's flight; RPG lethality on BMPs; flags on staffs.
+
+- New test_assault_skip (41 checks): F6 twice rushes the salvo (×8: the
+  defenders left match a normal salvo over seeds 11/22/33), boards, places
+  each vehicle at its drop point heading along its route and dismounts; one
+  press only warns; a new start cancels it; the march alone; the mortarman's
+  halted column; the BMP driver at his own drop with his men aboard.
+- New test_class_training (94): every step of the three new courses played
+  through real state (bursts, PG-7VL and RPG-22 on hulls, the FPV's dive and
+  airburst); F6 runs all three; class, map and pack restored.
+- New test_radial_menu (52) and test_cancel_actions (65): the ring opens only
+  with two kinds or more, a tap takes the last kind, Esc and right click close
+  it; every timed action cancelled by ~ and by its own key, with magazines,
+  rounds, the medkit and the mortar's lay conserved.
+- New test_direct_fire (57): direct-fire ranges from the game's flight within
+  2 % of the manuals (AK-74 436 / 631 m on «П», PKM 427 / 634 m, SVD, M16,
+  PG-7VL, RPG-22); the player's shot meets the line of sight at the setting
+  within 0.5–2.3 cm; bots and the BMP's PKT raise the barrel for the range.
+- New test_recon_drone_flight (35): hovering 30 s with no input holds within
+  a metre (the drift was the old 195 m map fence pushing at 2 m/s), top
+  speeds, acceleration and stopping distances, climb and descent, yaw, wind.
+- New test_rpg_lethality (7): one PG-7VL / RPG-22 hit through a BMP-2's side
+  puts it out of action in ≥ 88 % / 78 %, some blown up at once, the rest
+  burning; a 30 mm AP round does not as surely.
+- New test_barrage_tablet (9): the «Grads» tablet for every field class,
+  again in a new battle after U; the squads stay by their BMPs while they
+  wait (an idle spot off the walking grid used to snap to its edge).
+- New test_vehicle_flags (27): the flags on the BMP's aerial and the BM-21's
+  staff, ours and theirs, flying with the wind and the speed.
+- Updated for the PKM's belt and open bolt: test_player_weapons (68: the
+  order cover, belt, box and back; a fired-out belt leaves the carrier
+  forward, V pulls the handle back and pushes it forward, nothing thrown
+  out), test_weapons, test_inspection_reload, test_equipment (a whole belt
+  from the can), test_combat_inventory.
+- test_bmp_bench keeps the player's vehicle out of harm on the ride (a roof
+  hit through the fuel doors set it burning) and holds the column during the
+  handover, so it checks the riding, not the armour.
+- Full suite from source: 72 scenarios pass with no script errors;
+  test_assault_halt (seeded, two seeds in three) at --fixed-fps 60, like the
+  other live-battle tests. `--quit-after 300` exits clean.
+
 # 0.31.0 validation — 2026-11-22
 
 PKM, RPG-7V1 with PGO-7V3 and PG-7VL, RPG-22; vehicle armour and damage;

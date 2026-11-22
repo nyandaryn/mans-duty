@@ -48,7 +48,13 @@ func setup(owner_game: Node3D, parent: Control) -> void:
 	caption.hide()
 
 func reset() -> void:
-	queue.clear();heard.clear();current="";current_left=0.0;gap_left=0.0;caption_left=0.0
+	hush()
+	heard.clear()
+
+# What is being said and what waits cut off (the skipped start of the great
+# assault: the orders it skips are not heard after it).
+func hush() -> void:
+	queue.clear();current="";current_left=0.0;gap_left=0.0;caption_left=0.0
 	if is_instance_valid(output):output.stop()
 	if is_instance_valid(caption):caption.hide()
 

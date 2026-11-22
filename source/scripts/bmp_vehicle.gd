@@ -594,6 +594,7 @@ func animate(delta: float) -> void:
  art.troop_hatch.rotation.z=-smoothstep(0.0,1.0,troop_hatch)*1.65
  hatch=move_toward(hatch,1.0 if hatch_open else 0.0,delta*2.5)
  art.hatch.rotation.z=-hatch*1.75
+ VehicleMarkings.flutter(self,art)
 
 # A hull moving over a soldier on foot: nobody survives under 14 t.
 func crush() -> void:

@@ -2,6 +2,11 @@ class_name MagazineTransfer
 extends RefCounted
 
 const ROUND_TIME := 0.9
+# The PKM's belt is not filled round by round: the box's lid up, what is left
+# of the old belt lifted out into the can, the new belt of 100 taken from the
+# can and laid in folds, its end in the mouth, the lid shut.
+const BELT_TIME := 5.0
+var belt := false
 var weapon: WeaponState
 var source: Dictionary={}
 var destination: Dictionary={}
@@ -25,6 +30,9 @@ static func magazine_at(w: WeaponState, slot: int) -> Dictionary:
 
 func begin(w: WeaponState, from_slot: int, to_slot: int) -> bool:
  if active or from_slot==to_slot or w.phase!="" or w.pending_slot>=0:return false
+ # Nobody repacks a machine-gun belt from box to box by hand.
+ if w.id=="pkm":return false
+ belt=false
  var a := magazine_at(w,from_slot)
  var b := magazine_at(w,to_slot)
  if a.is_empty() or b.is_empty():return false
@@ -58,7 +66,10 @@ func begin_box(w: WeaponState, bag: BackpackState, uid: int, to_slot: int) -> bo
  if entry.is_empty() or Equipment.ITEMS[entry.kind].get("weapon","")!=w.id:return false
  var target := magazine_at(w,to_slot)
  if target.is_empty():return false
- planned=mini(int(entry.rounds),int(w.data.capacity)-int(target.rounds))
+ belt=w.id=="pkm"
+ # A whole belt for what is left in the box: only when it holds more.
+ if belt:planned=1 if int(entry.rounds)>int(target.rounds) else 0
+ else:planned=mini(int(entry.rounds),int(w.data.capacity)-int(target.rounds))
  if planned<=0:return false
  box_bag=bag;box_uid=uid;weapon=w;source=entry;destination=target
  source_slot=-1;destination_slot=to_slot
@@ -81,6 +92,16 @@ func update(delta: float) -> void:
   if stow_left<=0:cancel()
   return
  clock+=delta
+ if belt:
+  if clock>=BELT_TIME:
+   # The belts change places: the new one in the box, the rest of the old
+   # one in the can (an empty belt is thrown away with the can).
+   var old:=int(destination.rounds)
+   destination.rounds=int(source.rounds)
+   source.rounds=old
+   moved=1
+   stow_left=2.2
+  return
  while clock>=ROUND_TIME and moved<planned:
   if int(source.rounds)<=0 or int(destination.rounds)>=int(weapon.data.capacity):cancel();return
   clock-=ROUND_TIME
@@ -96,4 +117,5 @@ func cancel() -> void:
 
 func progress() -> float:
  if not active:return 1
+ if belt:return 1.0 if moved>0 else clampf(clock/BELT_TIME,0,1)
  return clampf((moved+clock/ROUND_TIME)/maxi(1,planned),0,1)

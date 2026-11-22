@@ -196,10 +196,14 @@ static func controls(root: Node3D, bolt: Node3D) -> void:
 	# Right side: charging-handle slot, carrier face and the handle itself.
 	Models.bevel(root,Vector3(0.0232,-0.026,0.0425),Vector3(0.001,0.0065,0.185),"gun_recess",0.001)
 	block(bolt,Vector3(0.0237,-0.026,-0.031),Vector3(0.0012,0.0045,0.022),"gun_edge")
-	Models.bevel(bolt,Vector3(0.029,-0.026,-0.033),Vector3(0.012,0.0065,0.010),"gun_metal",0.001)
-	Models.bevel(bolt,Vector3(0.0355,-0.036,-0.033),Vector3(0.005,0.024,0.011),"gun_metal",0.0012).rotation.z=0.32
-	rod(bolt,Vector3(0.041,-0.047,-0.033),0.0058,0.016,"gun_edge",Vector3.FORWARD,12)
-	for z in [-0.0405,-0.0255]:rod(bolt,Vector3(0.041,-0.047,z),0.0062,0.0015,"gun_metal",Vector3.FORWARD,12)
+	# The handle is not fixed to the carrier: pulled back it takes the carrier
+	# with it onto the sear, then it is pushed forward by hand and stays there
+	# while the gun fires.
+	var handle := Models.group(root,"CockingHandle")
+	Models.bevel(handle,Vector3(0.029,-0.026,-0.033),Vector3(0.012,0.0065,0.010),"gun_metal",0.001)
+	Models.bevel(handle,Vector3(0.0355,-0.036,-0.033),Vector3(0.005,0.024,0.011),"gun_metal",0.0012).rotation.z=0.32
+	rod(handle,Vector3(0.041,-0.047,-0.033),0.0058,0.016,"gun_edge",Vector3.FORWARD,12)
+	for z in [-0.0405,-0.0255]:rod(handle,Vector3(0.041,-0.047,z),0.0062,0.0015,"gun_metal",Vector3.FORWARD,12)
 
 # Skeleton butt with a real opening, steel butt plate and folding shoulder rest.
 static func stock(root: Node3D) -> void:

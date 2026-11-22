@@ -25,11 +25,29 @@ Cut from **public-domain US Government video** (DVIDS; works of US service membe
 
 | In-game file | Source | Range | What it is |
 |---|---|---|---|
-| `audio/pkm.wav` | DVIDS 506875 «Marines fire foreign weapons as part of pre-deployment training (B-Roll)», video by Sgt. Lucas Hopkins, II MEF, Camp Lejeune 2017 | 18.735–19.835 s | The last shot of a four-round burst of a PK-family machine gun (PKM pattern in the frame), close microphone, open range |
+| `audio/pkm.wav` | DVIDS 706007 «Iraqi Security Forces PKM Range», U.S. Army video by Spc. Zachary Myers, Al Taqaddum, Iraq, 2019-07-04 — https://www.dvidshub.net/video/706007/iraqi-security-forces-pkm-range | 66.1885–66.8085 s | A PKM: the last shot of a three-round burst, camera over the gunner's shoulder, open range. Cut at 0.62 s, before a 150 Hz hum of the camera rises in the tail; fade-out 120 ms |
 | `audio/rpg7_launch.wav` | DVIDS 701773 «Agile Spirit 19 — RPG-7 Range», video by Spc. Ethan Valetski, 5th Mobile Public Affairs Detachment, Vaziani 2019 | 84.645–86.155 s | RPG-7 with a PG-7 round: the booster, the sustainer igniting 0.17 s later, the rocket's roar; the impact is left out |
 | `audio/rpg22_launch.wav` | DVIDS 896823 «U.S. Marines test fire the M72 LAW with a Robotic Goat», video by LCpl. Connor Webb, Twentynine Palms 2023 | 276.152–276.447 s | **An M72 LAW, NOT an RPG-22**: the same kind of disposable launcher whose motor burns out in the tube (one report, no sustainer). Cut before a second thump at 0.30 s (echo or impact) |
 
 No licensed recording of an RPG-18/22/26 launch was found on Wikimedia Commons or DVIDS. Source URLs and SHA-256 of the files used are in `audio-sources.json`, trims in `audio-processing.json`.
+
+Until 0.31 `pkm.wav` came from DVIDS 506875 (Camp Lejeune 2017, 18.735–19.835 s). It was replaced: that microphone stood off to the side and caught 10–15 dB less below 150 Hz than the PKM shots of DVIDS 706007, and its tail was the camera's flat hiss at about −55 dB rather than a decaying echo, so at 650 rounds a minute the overlapping tails merged into a steady wash. The new shot keeps the low report, and its tail decays between shots; ten overlapping shots at 650 rpm were mixed offline as the game plays them (±1 % pitch) without clipping or comb filtering.
+
+## AK and PKM handling (0.31)
+
+Charging the AK (the handle pulled back, then let go so the carrier slams home) and loading the PKM (feed cover, belt, bolt pulled back, handle pushed forward on its own). Each recording was mixed to mono, given 6 dB of headroom, high-pass filtered at 55 Hz, resampled to 44.1 kHz 16-bit, faded in over 3 ms and out at the end, and normalised to −2 dBFS. The two cuts from the DVIDS PKM video were also high-pass filtered at 250 Hz and noise-reduced with SoX (`noisered 0.25`, with a profile taken from the wind right next to them), since the camera stood a few metres away on a windy range.
+
+| In-game file | Source | Range | What it is | License |
+|---|---|---|---|---|
+| `audio/ak_bolt_back.wav` | Freesound 171632 «Wasr RPK Charge Back1» by Pjkasinski3 — https://freesound.org/people/Pjkasinski3/sounds/171632/ | 0.160–0.710 s | **Real**: the charging handle of a WASR RPK (a Romanian civilian RPK-pattern Kalashnikov) pulled to the rear | CC0 1.0 |
+| `audio/ak_bolt_release.wav` | Freesound 171631 «Wasr RPK Charge Foreward1» by Pjkasinski3 — https://freesound.org/people/Pjkasinski3/sounds/171631/ | 0.035–0.635 s | **Real**: the same rifle's handle let go from the rear, the carrier slamming home (indoor, a room echo in the tail) | CC0 1.0 |
+| `audio/pkm_cover_open.wav` | DVIDS 706007 (above) | 16.836–17.236 s | **Real PKM**: the feed-cover latch and the cover swinging up (the cover is up in the frame at 17.1 s) | Public domain |
+| `audio/pkm_belt.wav` | DVIDS 706007 (above) | 23.400–24.100 s | **Real PKM**: the loader working the belt on the open feed tray, three metallic clicks | Public domain |
+| `audio/pkm_cover_close.wav` | Freesound 142892 «AK47 chambering.aif» by ceremonialchapstick — https://freesound.org/people/ceremonialchapstick/sounds/142892/ | 6.360–6.810 s | **Stand-in, NOT a PKM cover**: the carrier of a Romanian AK slamming home, used for the steel feed cover snapping shut | CC0 1.0 |
+| `audio/pkm_bolt_back.wav` | Freesound 855599 «Pulling and Releasing Barrett M82A1 Charging Handle to Load Round 2» by qubodup — https://freesound.org/people/qubodup/sounds/855599/ — extracted from the DVIDS video «Snipers Fire at 48th Winston P. Wilson and 28th Armed Forces Skill at Arms Meeting — Sniper Championships» by Spc. Stephen Wright, National Guard Marksmanship Training Center, 2019-03-31 | 0.010–0.430 s | **Stand-in, NOT a PKM**: the heavy charging handle of a Barrett M82A1 pulled back (only the pull; its release is left out), outdoors | CC0 1.0 (the DVIDS original is public domain) |
+| `audio/pkm_handle_forward.wav` | Freesound 174059 «M4 Charging Handle 1» by Pjkasinski3 — https://freesound.org/people/Pjkasinski3/sounds/174059/ | 0.420–0.920 s | **Stand-in, NOT a PKM**: the charging handle of a Bushmaster AR-15 pushed forward on its own and latching while the bolt stays back, as the PKM's handle is | **CC BY 3.0** (https://creativecommons.org/licenses/by/3.0/) — Pjkasinski3 |
+
+No freely licensed recording of a PKM's feed cover closing or of its handle being worked was found on Freesound or Wikimedia Commons; in the two DVIDS PK videos checked (706007 and 506875) the cover is closed and the gun charged off-camera or under the wind. The Freesound files were taken from the site's high-quality OGG previews; their URLs and SHA-256 are in `audio-sources.json`.
 
 ## Magazine and bolt handling
 

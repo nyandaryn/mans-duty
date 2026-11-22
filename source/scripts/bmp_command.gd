@@ -509,9 +509,11 @@ func bench_work(delta: float) -> void:
 func work_text() -> String:
  var tx: MagazineTransfer=game.inventory.transfer
  if not tx.active:return ""
- if tx.box_bag!=null and tx.draw_left>0:return "ПАЧКА З НАПЛІЧНИКА"
+ var cancel:=" · %s — СКАСУВАТИ" % Operator.CANCEL_LABEL
+ if tx.belt:return ("ЦИНК ЗІ СТРІЧКОЮ З НАПЛІЧНИКА" if tx.draw_left>0 else ("ЦИНК У НАПЛІЧНИК" if tx.moved>0 else "ЗАМІНА СТРІЧКИ В КОРОБЦІ ПКМ"))+cancel
+ if tx.box_bag!=null and tx.draw_left>0:return "ПАЧКА З НАПЛІЧНИКА"+cancel
  if tx.moved>=tx.planned:return "МАГАЗИН У ПІДСУМОК"
- return "СПОРЯДЖЕННЯ МАГАЗИНА · %d / %d · TAB — ІНВЕНТАР, «ЗУПИНИТИ»" % [int(tx.destination.rounds),int(tx.weapon.data.capacity)]
+ return "СПОРЯДЖЕННЯ МАГАЗИНА · %d / %d" % [int(tx.destination.rounds),int(tx.weapon.data.capacity)]+cancel
 
 func read_controls(delta: float) -> void:
  var v:=vehicle
@@ -580,6 +582,7 @@ func column_text() -> String:
   "wait":return "ОЧІКУЄ НАКАЗУ" if game.battle.awaiting else "ВИШИКОВУЄТЬСЯ"
   "march":return "МАРШ · ДО СЕЛА %d м" % roundi(squad.driver.remaining())
   "approach","transfer":return "ВИХІД НА РУБІЖ СПІШУВАННЯ"
+  "dismount":return "СПІШУВАННЯ"
  return squad.state.to_upper()
 
 # --- Commands ---------------------------------------------------------------
@@ -669,7 +672,7 @@ func _input(event: InputEvent) -> void:
   KEY_V when seat=="troop":set_head_out(not head_out)
   _:
    if seat!="driver":
-    if event.physical_keycode in [KEY_ESCAPE,KEY_F11]:return
+    if event.physical_keycode in [KEY_ESCAPE,KEY_F11,Operator.CANCEL_KEY]:return
     # In the hatch: the rifle, the magazines and the rangefinder, but not
     # stance, the launcher, the drone or the mortar.
     if head_out and not (event.is_action("crouch") or event.is_action("prone") or event.is_action("jump") or event.is_action("sprint") or event.physical_keycode in [KEY_4,KEY_J,KEY_U,KEY_N,KEY_G]):return

@@ -53,6 +53,7 @@ static func item_model(kind: String) -> Node3D:
  if kind=="mortar_mine":return MineBox.mine_model()
  if kind in ["rpg7","rpg22"]:return BotKit.launcher_model(kind,kind=="rpg22")
  if kind=="pg7vl":return grenade_model()
+ if kind=="og7v":return LauncherRig.og7v_model(true)
  if kind in Equipment.FPV:return fpv_model(kind)
  var root := Node3D.new()
  root.name="EquipmentItem"

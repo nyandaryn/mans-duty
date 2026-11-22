@@ -15,6 +15,9 @@ var elevation := 1200
 var azimuth := 0
 var bipod_azimuth := 0
 var relay_left := 0.0
+# Where the bipod stood and the barrel pointed before the relay began.
+var relay_from := 0
+var relay_azimuth := 0
 var reload_left := 0.0
 var shots := 0
 var kick := 0.0
@@ -165,11 +168,21 @@ func set_charge(value: int) -> void:charge=clampi(value,0,MortarBallistics.CHARG
 func set_elevation(value: int) -> void:
  elevation=clampi(value,MortarBallistics.ELEVATION_MIN,MortarBallistics.ELEVATION_MAX);pose()
 func set_azimuth(value: int) -> void:
+ var before := azimuth
  azimuth=posmod(value,MortarBallistics.CIRCLE)
  if absi(traverse_offset())>TRAVERSE:
+  if relay_left<=0:relay_from=bipod_azimuth;relay_azimuth=before
   bipod_azimuth=azimuth;relay_left=RELAY_TIME
   lay_bipod()
  pose()
+
+# The universal cancel (~ at the sight): the bipod stays where it was laid,
+# the barrel back on the direction it had.
+func cancel_relay() -> bool:
+ if relay_left<=0:return false
+ bipod_azimuth=relay_from;azimuth=relay_azimuth;relay_left=0
+ lay_bipod();pose()
+ return true
 
 func ready_to_fire() -> bool:return state=="deployed" and relay_left<=0 and reload_left<=0
 

@@ -18,6 +18,8 @@ var vehicle: Node3D
 var armor: VehicleArmor
 var game: Node3D
 var immobile := false
+# Benches that test the riding, not the armour, keep a vehicle out of harm.
+var invulnerable := false
 var burning := false
 var destroyed := false
 var catastrophic := false
@@ -46,7 +48,7 @@ func turret_yaw() -> float:
 
 # A round strikes the hull at a point (world) going along a direction.
 func strike(point: Vector3, direction: Vector3, round: String, pen_mm: float=-1.0) -> Dictionary:
- if destroyed:return {}
+ if destroyed or invulnerable:return {}
  if pen_mm<0.0:pen_mm=VehicleArmor.penetration(round)
  # Fragments rattling on the armour are not counted as hits.
  if round!="frag":hits+=1
@@ -105,6 +107,18 @@ func strike(point: Vector3, direction: Vector3, round: String, pen_mm: float=-1.
      note("займання ракет у пакеті")
      if vehicle.has_method("cook_off_rockets"):vehicle.cook_off_rockets()
      ignite(randf_range(6,14))
+ # A grenade launcher's charge through thin armour (a BMP's 7–33 mm, a
+ # truck's cab) spends little of its jet on the plate: the jet and the
+ # spall it tears off fill the inside with burning metal, and the fuel,
+ # the hydraulic fluid and the ammunition stowed all round catch. Such a
+ # vehicle is lost to one hit nearly always: at once in an explosion, or
+ # after a short fire the crew bails out of.
+ if heat and not destroyed and float(result.residual)>200.0:
+  var lethal: float={"pg7vl":0.95,"rpg22":0.85}.get(round,0.6)
+  if randf()<lethal*0.35:explode()
+  elif randf()<lethal:
+   note("займання після пробиття")
+   ignite(randf_range(8,25))
  return result
 
 # The men inside: on the line of the jet (or slug) dead, near it hit by
@@ -225,7 +239,7 @@ func show_flames(on: bool) -> void:
 # Fragments of a burst nearby: a few rays of fragments at the vehicle's
 # box, each a strike with what the fragment still pierces at that range.
 func blast(where: Vector3, kind: String) -> void:
- if destroyed:return
+ if destroyed or invulnerable:return
  var spec: Array={"grad":[14.0,26.0,10],"mine":[6.0,9.0,6],"cannon":[2.5,4.0,3],"heat":[3.0,4.0,3],"rpo":[4.0,5.0,4],"fpv_frag":[5.0,8.0,5],"cookoff":[20.0,30.0,12]}.get(kind,[0.0,0.0,0])
  var reach: float=spec[0]
  if reach<=0.0:return

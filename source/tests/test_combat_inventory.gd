@@ -8,6 +8,10 @@ func _initialize():call_deferred("run")
 func run():
  for id in WeaponState.DATA:
   var w := WeaponState.new(id)
+  # The PKM's belts are changed whole from a can (test_equipment).
+  if id=="pkm":
+   check(not MagazineTransfer.new().begin(w,0,1),"PKM boxes are not repacked round by round")
+   continue
   w.pouches[0].rounds=2
   var total := w.ammunition_total()
   var serial: int=w.magazine.serial

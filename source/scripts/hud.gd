@@ -47,6 +47,11 @@ func _draw() -> void:
 		var w: WeaponState=game.player.current()
 		draw_string(font,Vector2(24,size.y-208),"ПКМ · ПРИЦІЛ %d — %d м · PgUp/PgDn   СОШКИ: %s · X" % [w.scope_zero/100,w.scope_zero,"НА ОПОРІ" if game.player.bipod else "СКЛАДЕНІ"],HORIZONTAL_ALIGNMENT_LEFT,-1,14,col)
 		if game.player.bipod_notice_left>0:draw_string(font,Vector2(24,size.y-184),game.player.bipod_notice,HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("e5a17e"))
+	# The rifle's sight while aiming or being set.
+	if game.player.current().id in ["ak74","m16"] and not game.player.launcher.active() and (game.player.aim or game.player.scope_adjust_time>0):
+		var w: WeaponState=game.player.current()
+		var direct: bool=w.scope_zero==int(Ballistics.PROFILES[w.id].zero)
+		draw_string(font,Vector2(24,size.y-208),"%s · ПРИЦІЛ %s — %d м · PgUp/PgDn%s" % [w.data.name,w.sight_label(),w.scope_zero,"   ПРЯМИЙ ПОСТРІЛ: ЦІЛЬСЯ В НИЖНІЙ КРАЙ ЦІЛІ" if direct else ""],HORIZONTAL_ALIGNMENT_LEFT,-1,14,col)
 	if game.player.barrel_blocked and not game.player.field_rig.active():draw_string(font,center+Vector2(-95,48),"СТВОЛ ПЕРЕКРИТО",HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("e5a17e"))
 	var status := ""
 	if game.player.last_wound=="blunt" and game.player.injury_time>0:status="УДАР У БРОНЕПЛИТУ · ЦІЛІСНІСТЬ %d %%" % int(game.player.plate_integrity*100)
@@ -83,24 +88,43 @@ func _draw() -> void:
 		draw_string(font,popup.position+Vector2(16,28),estimate,HORIZONTAL_ALIGNMENT_LEFT,-1,17,col)
 	var field: FieldRig=game.player.field_rig
 	var launcher: LauncherRig=game.player.launcher
+	# Every action that takes time: how to call it off (Operator.cancel_action).
+	var cancel_line: String=game.player.cancel_hint()
+	if cancel_line!="":
+		var width := font.get_string_size(cancel_line,HORIZONTAL_ALIGNMENT_LEFT,-1,15).x
+		draw_string(font,Vector2(center.x-width*0.5,size.y-64),cancel_line,HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("e4bf68"))
+	elif game.player.cancel_notice!="":
+		var width := font.get_string_size(game.player.cancel_notice,HORIZONTAL_ALIGNMENT_LEFT,-1,15).x
+		draw_string(font,Vector2(center.x-width*0.5,size.y-64),game.player.cancel_notice,HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("e5a17e"))
 	if not launcher.active() and launcher.notice_left>0:
 		draw_string(font,Vector2(center.x-310,size.y-90),launcher.notice,HORIZONTAL_ALIGNMENT_LEFT,-1,15,col)
 	if launcher.active():
 		if launcher.through_scope():draw_pgo7(center)
 		var short: String={"rpo_a":"РПО-А","rpg7":"РПГ-7","rpg22":"РПГ-22"}[launcher.kind]
 		var text := "РПО-А «ШМЕЛЬ» · ПКМ — ПРИЦІЛ · ЛКМ — ПОСТРІЛ · 4 — ПРИБРАТИ"
-		if launcher.kind=="rpg7":text="РПГ-7В1 · %s · ПГ-7ВЛ У НАПЛІЧНИКУ: %d · ПКМ — ПГО-7 · ЛКМ — ПОСТРІЛ · R — ЗАРЯДИТИ · 4 — ПРИБРАТИ" % ["ЗАРЯДЖЕНО" if launcher.loaded() else "НЕ ЗАРЯДЖЕНО",game.player.backpack.count("pg7vl")]
+		if launcher.kind=="rpg7":
+			var stock := PackedStringArray()
+			for which in LauncherRig.RPG7_ROUNDS:
+				var count: int=game.player.backpack.count(which)
+				if count>0 or which=="pg7vl":stock.append("%s %d" % [LauncherRig.ROUND_TITLE[which],count])
+			var choice := " (УТРИМАЙ — ВИБІР)" if launcher.rpg7_rounds().size()>1 else ""
+			text="РПГ-7В1 · %s · ПОСТРІЛИ: %s · ПКМ — ПГО-7 · ЛКМ — ПОСТРІЛ · R — ЗАРЯДИТИ%s · 4 — ПРИБРАТИ" % [("ЗАРЯДЖЕНО "+LauncherRig.ROUND_TITLE[launcher.loaded_round()]) if launcher.loaded() else "НЕ ЗАРЯДЖЕНО"," / ".join(stock),choice]
+			# The PGO-7's chevrons are laid for the PG-7VL (LauncherRig.OG7V_PGO).
+			if launcher.loaded_round()=="og7v":
+				var hint := LauncherRig.og7v_hint()
+				draw_string(font,Vector2(center.x-font.get_string_size(hint,HORIZONTAL_ALIGNMENT_LEFT,-1,15).x*0.5,size.y-114),hint,HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("e4bf68"))
 		elif launcher.kind=="rpg22":
 			if launcher.armed():text="РПГ-22 · БОЙОВЕ ПОЛОЖЕННЯ · РАМКА 5 / 15 / 25 — 50 / 150 / 250 м · ПКМ — ПРИЦІЛ · ЛКМ — ПОСТРІЛ · 4 — ПРИБРАТИ"
 			else:text="РПГ-22 · ПОХІДНЕ ПОЛОЖЕННЯ · R — ПРИВЕСТИ В БОЙОВЕ (НАЗАД НЕ СКЛАДАЄТЬСЯ) · 4 — ПРИБРАТИ"
 		if launcher.mode=="draw":
 			text="ЗНЯТТЯ %s З КРІПЛЕННЯ · %.1f с" % [short,maxf(0,float(LauncherRig.DRAW[launcher.kind])-launcher.timer)]
 		elif launcher.mode=="arm":text="ПЕРЕВЕДЕННЯ РПГ-22 В БОЙОВЕ ПОЛОЖЕННЯ · %.1f с" % maxf(0,LauncherRig.ARM_TIME-launcher.timer)
-		elif launcher.mode=="load":text="ЗАРЯДЖАННЯ ПГ-7ВЛ · %.1f с" % maxf(0,LauncherRig.LOAD_TIME-launcher.timer)
+		elif launcher.mode=="load":text="ЗАРЯДЖАННЯ %s · %.1f с" % [LauncherRig.ROUND_TITLE.get(launcher.loading,"ПОСТРІЛУ"),maxf(0,LauncherRig.LOAD_TIME-launcher.timer)]
 		elif launcher.mode=="stow":text="ПОВЕРНЕННЯ %s НА КРІПЛЕННЯ" % short
 		elif launcher.mode=="spent":text="ВІДКИДАННЯ ВІДСТРІЛЯНОЇ ТРУБИ"
 		if launcher.notice!="":text=launcher.notice
-		draw_string(font,Vector2(center.x-325,size.y-90),text,HORIZONTAL_ALIGNMENT_LEFT,-1,15,col)
+		# A long line (the RPG-7's) is centred to stay on the screen.
+		draw_string(font,Vector2(center.x-maxf(325,font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,15).x*0.5),size.y-90),text,HORIZONTAL_ALIGNMENT_LEFT,-1,15,col)
 		return
 	if field!=null and field.active():
 		var text := ""
@@ -117,7 +141,7 @@ func _draw() -> void:
 			draw_string(font,center+Vector2(-150,80),field.reading,HORIZONTAL_ALIGNMENT_LEFT,-1,25,Color("edb962"))
 			text="ДАЛЕКОМІР · %d× · КОЛІЩАТКО — КРАТНІСТЬ %d–%d× · ЛКМ — ВИМІРЯТИ · K — ПРИБРАТИ" % [field.zoom,FieldRig.ZOOM_MIN,FieldRig.ZOOM_MAX]
 		elif field.mode=="work":
-			text="%s · %.1f с · РУХ — СКАСУВАТИ" % [field.work_title,maxf(0,field.work_time-field.timer)]
+			text="%s · %.1f с" % [field.work_title,maxf(0,field.work_time-field.timer)]
 			var bar := Rect2(center.x-160,size.y-118,320,8)
 			draw_rect(bar,Color(0.12,0.16,0.14,0.9))
 			draw_rect(Rect2(bar.position,Vector2(bar.size.x*clampf(field.timer/maxf(field.work_time,0.01),0,1),bar.size.y)),Color("c6bb92"))
@@ -128,7 +152,8 @@ func _draw() -> void:
 		elif field.mode!="":text="НАПЛІЧНИК · "+("ПОВЕРНЕННЯ ПРЕДМЕТА" if field.mode=="stow" else "ДІСТАВАННЯ · %.1f с" % maxf(0,FieldRig.ACCESS_TIME-field.timer))
 		elif game.inventory.transfer.active:
 			var tx: MagazineTransfer=game.inventory.transfer
-			text=("ДІСТАВАННЯ З НАПЛІЧНИКА" if tx.box_bag!=null and tx.draw_left>0 else "СПОРЯДЖЕННЯ МАГАЗИНА")+" · TAK — ПЕРЕРВАТИ"
+			if tx.belt:text="ЦИНК ЗІ СТРІЧКОЮ З НАПЛІЧНИКА" if tx.draw_left>0 else ("ЦИНК У НАПЛІЧНИК" if tx.moved>0 else "ЗАМІНА СТРІЧКИ В КОРОБЦІ ПКМ")
+			else:text="ДІСТАВАННЯ З НАПЛІЧНИКА" if tx.box_bag!=null and tx.draw_left>0 else "СПОРЯДЖЕННЯ МАГАЗИНА"
 		draw_string(font,Vector2(center.x-260,size.y-90),text,HORIZONTAL_ALIGNMENT_LEFT,-1,16,col)
 
 func draw_drone_view() -> void:
@@ -141,7 +166,7 @@ func draw_drone_view() -> void:
 	draw_rect(screen,Color(0.015,0.022,0.018,0.9),false,24)
 	draw_rect(Rect2(24,24,size.x-48,52),Color(0.015,0.025,0.018,0.72))
 	draw_string(font,Vector2(40,57),"FPV / РОЗВІДКА     АКБ %d %% · ≈%d хв     ЗВ’ЯЗОК %d %%" % [roundi(drone.battery*100),floori(drone.battery*ReconDrone.FLIGHT_SECONDS/60.0),roundi(drone.signal_strength*100)],HORIZONTAL_ALIGNMENT_LEFT,-1,20,ink)
-	draw_string(font,Vector2(40,103),"НАД ЗЕМЛЕЮ %.1f м     %.1f км/год     ДО ПІЛОТА %.0f м" % [drone.floor_height,drone.velocity.length()*3.6,drone.global_position.distance_to(game.player.global_position)],HORIZONTAL_ALIGNMENT_LEFT,-1,17,ink)
+	draw_string(font,Vector2(40,103),"НАД ЗЕМЛЕЮ %.1f м     %.1f км/год     ВЕРТ %+.1f м/с     ДО ПІЛОТА %.0f м     %s" % [drone.floor_height,Vector2(drone.velocity.x,drone.velocity.z).length()*3.6,drone.velocity.y,drone.global_position.distance_to(game.player.global_position),drone.mode_text()],HORIZONTAL_ALIGNMENT_LEFT,-1,17,ink)
 	for side in [-1,1]:draw_line(center+Vector2(side*10,0),center+Vector2(side*45,0),ink,1)
 	draw_line(center+Vector2(0,-8),center+Vector2(0,8),ink,1)
 	draw_string(font,Vector2(40,size.y-95),drone.notice,HORIZONTAL_ALIGNMENT_LEFT,-1,16,ink)
@@ -149,7 +174,7 @@ func draw_drone_view() -> void:
 	if alarm!="":
 		var blink := 0.55+0.45*absf(sin(float(Time.get_ticks_msec())*0.008))
 		draw_string(font,Vector2(0,size.y*0.30),alarm,HORIZONTAL_ALIGNMENT_CENTER,size.x,26,Color(0.92,0.32,0.26,blink))
-	draw_string(font,Vector2(40,size.y-65),"WASD — РУХ · МИША — КУРС / КАМЕРА · SPACE / CTRL — ВИСОТА · SHIFT — ШВИДШЕ",HORIZONTAL_ALIGNMENT_LEFT,-1,15,ink)
+	draw_string(font,Vector2(40,size.y-65),"WASD — РУХ (ВІДПУСТИ — ГАЛЬМУЄ Й ЗАВИСАЄ) · МИША — КУРС / КАМЕРА · SPACE / CTRL — ВИСОТА · SHIFT — СПОРТ",HORIZONTAL_ALIGNMENT_LEFT,-1,15,ink)
 	draw_string(font,Vector2(40,size.y-39),"J — ЗНЯТИ ОКУЛЯРИ (ДРОН ЗАВИСНЕ, КАРТИНКА — НА НАРУЧНОМУ ЕКРАНІ, U) · F — МОТОРИ ПІСЛЯ ПОСАДКИ",HORIZONTAL_ALIGNMENT_LEFT,-1,15,ink)
 	if drone.signal_strength<0.3:
 		var loss := 1-drone.signal_strength/0.3

@@ -4,8 +4,9 @@ extends Node3D
 # The grenade launchers in the player's hands (key 4; 5 — the next one in the
 # pack):
 # - RPO-A «Шмель»: one-shot capsule off the pack's outer mount;
-# - RPG-7V1 with the PGO-7V3: taken off the mount, loaded with a PG-7VL from
-#   the pack (R, 6 s), aimed through the 2.7× sight whose range chevrons
+# - RPG-7V1 with the PGO-7V3: taken off the mount, loaded with a PG-7VL or
+#   an OG-7V from the pack (R, 6 s; held R with both in the pack — the ring
+#   of choices), aimed through the 2.7× sight whose range chevrons
 #   (2…5 — 200…500 m) and stadia scale are laid off the PG-7VL's own flight;
 #   it stays in the hands after the shot, empty;
 # - RPG-22: taken off the mount, then brought into the firing position (R):
@@ -28,12 +29,30 @@ const ARM_LOCK := 0.6
 const ROUND := {"rpo_a":"rpo","rpg7":"pg7vl","rpg22":"rpg22"}
 const REPORT := {"rpo_a":"rpo_launch","rpg7":"rpg7_launch","rpg22":"rpg22_launch"}
 const TITLE := {"rpo_a":"РПО-А «ШМЕЛЬ»","rpg7":"РПГ-7В1","rpg22":"РПГ-22"}
+const SHORT := {"rpo_a":"РПО-А","rpg7":"РПГ-7","rpg22":"РПГ-22"}
+# Rounds of the RPG-7 a pack may hold, in the order a man reaches for them:
+# the PG-7VL against armour, the OG-7V (40 mm fragmentation head, no
+# sustainer) against men in the open and behind light cover.
+const RPG7_ROUNDS := ["pg7vl","og7v"]
+const ROUND_TITLE := {"pg7vl":"ПГ-7ВЛ","og7v":"ОГ-7В"}
 # The backblast: how far behind the breech it maims (stylised, not firing
 # guidance: the real danger zones are 15–30 m).
 const BLAST_REACH := {"rpo_a":3.0,"rpg7":8.0,"rpg22":5.0}
 # The PGO-7: field of view and the range of the top chevron.
 const PGO_FIELD := 13.0
 const PGO_TOP := 200.0
+# The PGO-7's chevrons are laid off the PG-7VL's flight. The OG-7V has no
+# sustainer and drops more: the chevron to aim with for an OG-7V at a range,
+# from the two flights of BlastSystem (game data, not the firing tables; the
+# test test_radial_menu checks them against the flights): 150 m — «3»
+# (the PG-7VL's 276 m), 200 m — «4» (423 m), 250 m — «5» (553 m); past
+# that the scale runs out.
+const OG7V_PGO := [[150,3],[200,4],[250,5]]
+static func og7v_hint() -> String:
+ var marks:=PackedStringArray()
+ for row in OG7V_PGO:marks.append("%d м — «%d»" % [row[0],row[1]])
+ return "ОГ-7В: ПГО-7 РОЗМІЧЕНИЙ ПІД ПГ-7ВЛ — ЦІЛЬСЯ "+", ".join(marks)+" · ДАЛІ — ПОНАД ШКАЛУ"
+
 # Front frame of the RPG-22: its bars, by range.
 const FRAME_RANGES := [50,150,250]
 # Where the tube rests on the shoulder, as seen from the eye.
@@ -45,6 +64,8 @@ var timer := 0.0
 var item_uid := -1
 var ads := 0.0
 var queued := ""
+# The round being pushed into the RPG-7 (it leaves the pack once seated).
+var loading := ""
 var tube: Node3D
 var models := {}
 var left: Node3D
@@ -87,7 +108,11 @@ func use_model(which: String, extended: bool=true) -> void:
  if not models.has(key):
   var built: Node3D
   match which:
-   "rpg7":built=Rpg7Art.build(false)
+   "rpg7":
+    built=Rpg7Art.build(false)
+    var og:=Models.group(built,"GrenadeOG",Rpg7Art.MUZZLE)
+    og.add_child(og7v_model(true))
+    og.visible=false
    "rpg22":built=Rpg22Art.build(extended,frame_marks())
    _:built=ShmelArt.build()
   add_child(built)
@@ -99,6 +124,39 @@ func use_model(which: String, extended: bool=true) -> void:
 func active() -> bool:return mode!=""
 
 func carried(which: String) -> bool:return operator.backpack.first(which)>=0
+
+# The OG-7V: the 40 mm fragmentation body with its nose fuze ahead of the
+# muzzle, the stabiliser and the PG-7P charge inside the tube (with_charge),
+# or with the fins out in flight. Origin on the muzzle face, as the PG-7VL.
+static func og7v_model(with_charge: bool=true) -> Node3D:
+ var root:=Node3D.new();root.name="OG7V"
+ Models.tube(root,Vector3(0,0,-0.392),0.0055,0.034,"#a5a08a",Vector3.FORWARD,0.003)
+ Models.tube(root,Vector3(0,0,-0.345),0.0195,0.060,"#55603f",Vector3.FORWARD,0.0075)
+ Models.tube(root,Vector3(0,0,-0.200),0.0200,0.230,"#4f5a3a",Vector3.FORWARD)
+ # The notched steel of the body under the paint.
+ for z in [-0.29,-0.25,-0.21,-0.17,-0.13,-0.09]:Models.tube(root,Vector3(0,0,z),0.0203,0.004,"#3c4430",Vector3.FORWARD)
+ Models.tube(root,Vector3(0,0,-0.065),0.0200,0.040,"#3f4434",Vector3.FORWARD,0.016)
+ if with_charge:Models.tube(root,Vector3(0,0,0.22),0.0193,0.47,"#8d8461",Vector3.FORWARD)
+ else:
+  Models.tube(root,Vector3(0,0,0.20),0.0085,0.40,"#2f322c",Vector3.FORWARD)
+  for i in range(4):
+   var a:=TAU*i/4+PI/4
+   var fin:=Models.part(root,Vector3(cos(a),sin(a),0)*0.045+Vector3(0,0,0.38),Vector3(0.0016,0.085,0.03),"2f322c")
+   fin.rotation.z=a-PI/2
+ Models.merge_rigid(root)
+ return root
+
+# The rounds for the RPG-7 the pack holds, in the order a man reaches for them.
+func rpg7_rounds() -> Array:
+ var list:=[]
+ for which in RPG7_ROUNDS:
+  if carried(which):list.append(which)
+ return list
+
+# The round seated in the RPG-7 (older saves: a PG-7VL).
+func loaded_round() -> String:
+ if kind!="rpg7" or not loaded():return ""
+ return str(operator.backpack.item(item_uid).get("round","pg7vl"))
 
 # The first launcher of the pack in the order a man reaches for them, or the
 # next one after the current.
@@ -152,7 +210,33 @@ func stow() -> void:
  mode="stow";timer=0;ads=0
 
 func cancel() -> void:
- mode="";timer=0;ads=0;visible=false;queued=""
+ mode="";timer=0;ads=0;visible=false;queued="";loading=""
+
+# The universal cancel (Operator.cancel_action): the motion in hand goes back
+# the way it came. Taking it off the mount turns into putting it back from
+# where it got to, and putting it back into taking it up again; a round half
+# pushed in comes out and stays in the pack; the RPG-22's sleeve, if not yet
+# locked, slides back (locked, it stays drawn out and the tube is ready).
+func interrupt() -> bool:
+ match mode:
+  "draw":
+   var done:=clampf(timer/float(DRAW[kind]),0,1)
+   mode="stow";timer=float(STOW[kind])*(1.0-done);queued="";ads=0
+  "stow":
+   if operator.backpack.item(item_uid).is_empty():return false
+   var done:=clampf(timer/float(STOW[kind]),0,1)
+   mode="draw";timer=float(DRAW[kind])*(1.0-done);queued="";ads=0
+  "load":
+   mode="ready";timer=0;loading=""
+   notice="ЗАРЯДЖАННЯ ПЕРЕРВАНО · ПОСТРІЛ У НАПЛІЧНИКУ";notice_left=2
+  "arm":
+   mode="ready";timer=0
+   notice="РПГ-22 ЛИШИВСЯ РОЗКЛАДЕНИМ" if armed() else "ПЕРЕВЕДЕННЯ ПЕРЕРВАНО · РПГ-22 СКЛАДЕНИЙ"
+   notice_left=2
+  "spent":cancel()
+  _:return false
+ show_round()
+ return true
 
 # Ready to fire: the RPG-7 with a round in it, the RPG-22 armed.
 func loaded() -> bool:
@@ -168,15 +252,23 @@ func armed() -> bool:
 
 func show_round() -> void:
  if kind!="rpg7":return
+ var seated:=loaded_round() if loaded() else (loading if mode=="load" and timer>LOAD_TIME*0.55 else "")
  var round:=tube.get_node_or_null("Grenade") as Node3D
- if round!=null:round.visible=loaded() or (mode=="load" and timer>LOAD_TIME*0.55)
+ if round!=null:round.visible=seated=="pg7vl"
+ var og:=tube.get_node_or_null("GrenadeOG") as Node3D
+ if og!=null:og.visible=seated=="og7v"
 
-# R with the RPG-7 in the hands: a PG-7VL from the pack into the muzzle.
-func load_round() -> bool:
+# R with the RPG-7 in the hands: a round from the pack into the muzzle (the
+# kind asked for, or the first the pack holds).
+func load_round(which: String="") -> bool:
  if kind!="rpg7" or mode!="ready":return false
  if loaded():notice="РПГ-7 ВЖЕ ЗАРЯДЖЕНО";notice_left=1.5;return false
- if operator.backpack.first("pg7vl")<0:notice="НЕМАЄ ПОСТРІЛІВ ПГ-7ВЛ У НАПЛІЧНИКУ";notice_left=2;return false
- mode="load";timer=0;ads=0;notice=""
+ if which=="":
+  var rounds:=rpg7_rounds()
+  which=rounds[0] if not rounds.is_empty() else "pg7vl"
+ if which not in RPG7_ROUNDS or operator.backpack.first(which)<0:
+  notice="НЕМАЄ ПОСТРІЛІВ %s У НАПЛІЧНИКУ" % ROUND_TITLE.get(which,"ДО РПГ-7");notice_left=2;return false
+ mode="load";timer=0;ads=0;notice="";loading=which
  return true
 
 # R with the RPG-22 in the hands: into the firing position, once and for good.
@@ -198,7 +290,7 @@ func handle_input(event: InputEvent) -> void:
    KEY_5:cycle()
  if event.is_action_pressed("reload") and not event.is_echo():
   if kind=="rpg22":arm()
-  else:load_round()
+  else:load_round(operator.preferred("round"))
  if event.is_action_pressed("fire") and not event.is_echo():fire()
 
 func tick(delta: float) -> void:
@@ -209,12 +301,14 @@ func tick(delta: float) -> void:
  timer+=delta
  if mode=="draw" and timer>=float(DRAW[kind]):mode="ready";timer=0
  elif mode=="load" and timer>=LOAD_TIME:
-  var round:=operator.backpack.first("pg7vl")
+  var which:=loading if loading!="" else "pg7vl"
+  var round:=operator.backpack.first(which)
   if round>=0:
    if not operator.game.debug_invulnerable:operator.backpack.remove(round)
    operator.backpack.item(item_uid)["loaded"]=true
+   operator.backpack.item(item_uid)["round"]=which
    operator.game.sound("mag_in",-8)
-  mode="ready";timer=0
+  mode="ready";timer=0;loading=""
  elif mode=="arm" and timer>=ARM_TIME:mode="ready";timer=0
  elif mode=="stow" and timer>=float(STOW[kind]):
   var next:=queued
@@ -234,7 +328,7 @@ func tick(delta: float) -> void:
  show_round()
  # Folded, the RPG-22 has its sights down: nothing to aim with.
  var sighted:=mode=="ready" and (kind!="rpg22" or armed())
- ads=move_toward(ads,1.0 if sighted and Input.is_action_pressed("aim") and operator.concussion.can_aim() else 0.0,delta*(3.0 if kind=="rpg7" else 4.0))
+ ads=move_toward(ads,1.0 if sighted and Input.is_action_pressed("aim") and not operator.hands_held() and operator.concussion.can_aim() else 0.0,delta*(3.0 if kind=="rpg7" else 4.0))
  animate()
 
 # The eye at the sight: where the tube stands then, and how it is tilted.
@@ -337,7 +431,7 @@ func fire() -> bool:
  if operator.backpack.item(item_uid).get("kind","")!=kind:cancel();return false
  if not loaded():
   operator.game.sound("click",-12)
-  notice="РПГ-7 НЕ ЗАРЯДЖЕНО · R — ЗАРЯДИТИ ПГ-7ВЛ" if kind=="rpg7" else "РПГ-22 У ПОХІДНОМУ ПОЛОЖЕННІ · R — ПРИВЕСТИ В БОЙОВЕ"
+  notice="РПГ-7 НЕ ЗАРЯДЖЕНО · R — ЗАРЯДИТИ" if kind=="rpg7" else "РПГ-22 У ПОХІДНОМУ ПОЛОЖЕННІ · R — ПРИВЕСТИ В БОЙОВЕ"
   notice_left=2
   return false
  var muzzle: Vector3=muzzle_point()
@@ -357,7 +451,7 @@ func fire() -> bool:
  direction=(direction+tube.global_basis.x*sin(operator.symptom_clock*1.3)*operator.concussion.severity*0.02).normalized()
  var rear: Vector3=breech_point()
  var back := tube.global_basis.z
- operator.game.blasts.launch(muzzle,direction,operator,ROUND[kind])
+ operator.game.blasts.launch(muzzle,direction,operator,loaded_round() if kind=="rpg7" else ROUND[kind])
  operator.shots+=1
  var report: String=REPORT[kind]
  operator.game.sound(report if operator.game.sounds.has(report) else "rpo_launch",-3)
@@ -367,6 +461,7 @@ func fire() -> bool:
  if kind=="rpg7":
   # The launcher stays in the hands, empty; the next round from the pack (R).
   operator.backpack.item(item_uid)["loaded"]=false
+  operator.backpack.item(item_uid).erase("round")
   show_round()
   timer=0;notice=""
  else:

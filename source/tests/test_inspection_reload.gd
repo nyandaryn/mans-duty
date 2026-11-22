@@ -35,15 +35,17 @@ func run():
     check(unique_magazines(w) and w.ammunition_total()==initial,"Interruption preserves all magazines and rounds")
     check(w.reload(),"Interrupted prepared reload resumes")
     w.update(10)
-    check(w.magazine.serial==slot+2 and w.pouches[slot].serial==1 and w.pouches[slot].rounds==old_rounds,"Selected held magazine loaded and partial old one returned to its pouch")
+    # The PKM's round on the feed tray goes back into its old belt.
+    check(w.magazine.serial==slot+2 and w.pouches[slot].serial==1 and w.pouches[slot].rounds==old_rounds+(1 if id=="pkm" else 0),"Selected held magazine loaded and partial old one returned to its pouch")
     check(unique_magazines(w) and w.ammunition_total()==initial,"Completed fast reload conserves inventory")
    var loaded := WeaponState.new(id)
    loaded.inspect_magazine()
    loaded.update(0.9)
    var initial := loaded.ammunition_total()
    check(loaded.reload(slot) and loaded.phase=="stow" and loaded.magazine.is_empty(),"Loaded inspection skips repeated removal")
-   # Stow, draw, insert: 2.25 s; the PKM's new belt takes longer to lay.
-   var finish := 0.65+0.7+(2.2 if id=="pkm" else 0.9)
+   # Stow, draw, insert: 2.25 s; the PKM's box goes on, the belt is laid on
+   # the tray and the cover shut.
+   var finish := 0.65+0.7+(2.6 if id=="pkm" else 0.9)
    loaded.update(finish)
    check(loaded.phase=="" and loaded.magazine.serial==slot+2 and loaded.ammunition_total()==initial,"Loaded inspection reload finishes in %.2f s" % finish)
   var rig: WeaponRig=Models.weapon(id)

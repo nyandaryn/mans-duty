@@ -34,6 +34,9 @@ const WARHEADS := {
  "cannon":{"reach":CANNON_RANGE,"damage":CANNON_DAMAGE,"frag":true,"lift":0.35,"effect":0.35,"sound":"mine_blast","db":-4.0,"hearing":0.5,"sphere":1.5,"surfaces":3,"demolish":"cannon"},
  "heat":{"reach":HEAT_RANGE,"damage":HEAT_DAMAGE,"frag":true,"lift":0.0,"effect":0.6,"sound":"heat_blast","db":2.0,"hearing":1.2,"sphere":1.5,"surfaces":4,"demolish":"heat"},
  "fpv_frag":{"reach":15.0,"damage":230.0,"frag":true,"lift":0.15,"effect":0.7,"sound":"mine_blast","db":2.0,"hearing":1.4,"sphere":2.5,"surfaces":6,"demolish":"mine"},
+ # OG-7V: 40 mm steel body, about 210 g of A-IX-1, ≥850 fragments of 0.9 g
+ # (the maker's sheet); its "effective defeat radius" is given as 14 m.
+ "og7":{"reach":14.0,"damage":200.0,"frag":true,"lift":0.0,"effect":0.5,"sound":"mine_blast","db":0.0,"hearing":1.1,"sphere":1.5,"surfaces":4,"demolish":"cannon"},
  "cookoff":{"reach":34.0,"damage":460.0,"frag":true,"lift":1.0,"effect":-1.0,"sound":"mine_blast","db":8.0,"hearing":3.0,"sphere":6.0,"surfaces":16,"demolish":"cookoff"},
 }
 # Grenades fired from the shoulder. "rpo": the RPO-A capsule (its own
@@ -49,6 +52,11 @@ const ROCKETS := {
  "rpo":{"speed":0.0,"decay":0.018,"warhead":"rpo","round":"","life":9.0,"arm":0.0},
  "pg7vl":{"speed":112.0,"ignite":11.0,"burn":0.4,"thrust":440.0,"drag":0.00125,"warhead":"heat","round":"pg7vl","life":4.5,"arm":2.5},
  "rpg22":{"speed":133.0,"ignite":INF,"burn":0.0,"thrust":0.0,"drag":0.0008,"warhead":"heat","round":"rpg22","life":5.0,"arm":2.5},
+ # OG-7V from the RPG-7: 152 m/s from the PG-7P charge and no sustainer;
+ # k fitted to the maker's 170 m direct-fire range (2 m target, as for the
+ # RPG-22 above). Its self-destruct time is not in the sources at hand:
+ # 9 s is about 740 m of flight, near the 700 m maximum range given for it.
+ "og7v":{"speed":152.0,"ignite":INF,"burn":0.0,"thrust":0.0,"drag":0.0015,"warhead":"og7","round":"og7v","life":9.0,"arm":2.5},
 }
 var game: Node3D
 var rockets: Array[Dictionary]=[]
@@ -149,6 +157,9 @@ func grenade_node(kind: String) -> Node3D:
  return (grenade_models[kind] as Node3D).duplicate()
 
 func build_grenade(kind: String) -> Node3D:
+ if kind=="og7v":
+  var og:=Node3D.new();og.add_child(LauncherRig.og7v_model(false))
+  return og
  var art_path:="res://scripts/rpg7_art.gd" if kind=="pg7vl" else "res://scripts/rpg22_art.gd"
  var art: Node3D=null
  if kind in ["pg7vl","rpg22"] and ResourceLoader.exists(art_path):
@@ -269,14 +280,19 @@ func launch_grad(shot: Dictionary, launcher: Node3D) -> void:
   for area in game.player.find_children("Hit_*","Area3D",true,false):excluded.append(area.get_rid())
  shot.excluded=excluded
  shot.node=GradEffects.rocket_node(game)
+ if shot.get("quiet",false):shot.node.visible=false
  shot.origin=shot.position
  grads.append(shot)
 
 # 9M22U rockets: the same equations as the firing tables, a ray per step.
+# A rocket of the skipped start (`quiet`, GradBattery.rush) flies unseen and
+# bursts unheard: with the game's sounds off for the burst, or they would all
+# come at once, and the distant ones seconds later, in the village.
 func fly_grads(delta: float) -> void:
  var effects:=GradEffects.shared(game)
  for index in range(grads.size()-1,-1,-1):
   var shot: Dictionary=grads[index]
+  var unseen: bool=shot.get("quiet",false)
   var from: Vector3=shot.position
   var left:=delta
   while left>0.0:
@@ -295,16 +311,22 @@ func fly_grads(delta: float) -> void:
    shot.excluded.append(hit.rid);hit={}
   var crown:=tree_strike(from,to,shot)
   if hit.is_empty() and crown!=Vector3.INF:hit={"position":crown,"normal":Vector3.UP}
-  effects.trail(from,to,float(shot.age))
+  if not unseen:effects.trail(from,to,float(shot.age))
   var node: Node3D=shot.node
   if not hit.is_empty():
    grads.remove_at(index)
    if is_instance_valid(node):node.queue_free()
+   var loud: float=game.volume
+   if unseen:game.volume=0.0
    detonate(Vector3(hit.position)+Vector3(hit.normal)*0.1,"grad")
+   game.volume=loud
    continue
   if float(shot.age)>200.0 or to.y<-200.0:
    grads.remove_at(index)
    if is_instance_valid(node):node.queue_free()
+   continue
+  if unseen:
+   if is_instance_valid(node):node.visible=false
    continue
   if is_instance_valid(node):
    var velocity: Vector3=shot.velocity

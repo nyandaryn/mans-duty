@@ -684,6 +684,7 @@ func update_rock(delta: float) -> void:
  if shudder.length()<0.00001 and shudder_rate.length()<0.0001:shudder=Vector3.ZERO;shudder_rate=Vector3.ZERO
  if package_rock.length()<0.00001 and package_rate.length()<0.0001:package_rock=Vector2.ZERO;package_rate=Vector2.ZERO
  art.root.transform=Transform3D(Basis.from_euler(rock+shudder),Vector3(0,bounce,0))
+ VehicleMarkings.flutter(self,art)
 
 var road_check := 0.0
 var road_cached := true
@@ -721,10 +722,13 @@ func fire(delta: float) -> void:
  if fire_clock<=0:
   if launch_next():fire_clock=randf_range(0.45,0.55)
 
-func launch_next() -> bool:
+# `quiet`: the skipped start of the great assault — the rocket leaves the
+# same way, but without the launcher's kick, flame, sound or messages.
+func launch_next(quiet: bool=false) -> bool:
  var index:=next_tube()
  if index<0:
-  say("Пакет порожній",3);lever=false;return false
+  if not quiet:say("Пакет порожній",3)
+  lever=false;return false
  order_step=(order.find(index)+1)%order.size()
  loaded[index]=false;fired+=1
  last_launch={"sight":sight_setting,"deflection":deflection,"level":level_setting}
@@ -740,7 +744,11 @@ func launch_next() -> bool:
  var shot:=GradBallistics.state(rear,0,0,0,1.0+randfn(0,GradBallistics.IMPULSE_SPREAD))
  shot.launch=direction
  shot.velocity=Vector3.ZERO
+ shot.quiet=quiet
  game.blasts.launch_grad(shot,self)
+ if quiet:
+  if remaining()==0:lever=false
+  return true
  # The tubes are open behind, so the jet hardly pushes the launcher; the
  # rail friction, the spin-up in the helical groove and the blast on the
  # ground rock it.

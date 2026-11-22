@@ -112,18 +112,25 @@ fragment-by-fragment terminal mechanics or certified armor behavior.
 Додай «Розвіддрон / FPV» у наплічник (3×2 клітинки, комплект 1,2 кг).
 J — дістати дрон / надягти або зняти окуляри; також через інвентар Tab.
 WASD — горизонтальний рух, миша — курс і нахил камери.
-Space — зліт / набір висоти, Ctrl — зниження / посадка, Shift — швидше.
+Space — зліт / набір висоти, Ctrl — зниження / посадка, Shift — режим S (спорт).
 F після посадки — вимкнути мотори; J — повернутися до бійця.
 Підійди до дрона і натисни F: складання у наплічник займає 2,2 с.
 Потрібні вільні 3×2 клітинки. Батарея й пошкодження зберігаються.
 Пілот не рухається й не стріляє через окуляри, але може бути поранений.
-Режим польоту стабілізований: після відпускання керування дрон гальмує
-і зависає. Це не acro-симулятор. При втраті зв’язку / низькому заряді —
-автопосадка; на порожній батареї мотори зупиняються.
+Режим польоту стабілізований (GPS-утримання, як у Mavic 3): стік задає
+швидкість, рама нахиляється, тяга й опір повітря розганяють і гальмують
+дрон. Відпустиш — гальмує нахилом назад і зависає там, де спинився, проти
+вітру й поривів. Це не acro-симулятор. При втраті зв’язку / низькому
+заряді — автопосадка; на порожній батареї мотори зупиняються.
 
-Game parameters: 8 minutes nominal hovering, 6 m/s cruise / 12 m/s boost,
-3 m/s climb, 4 m/s² acceleration, 450 m nominal radio range with occlusion
-penalty, 100 m height limit. Pilot-side 0.4 kg controller/goggles remains
+Game parameters (from DJI Mavic 3 specs): 40 minutes of hover, a fifth
+less flat out; 15 m/s at up to 30° of pitch (N) / 21 m/s at 35° (S, Shift),
+0→14 m/s in ~3.6 s, ~17 m to stop from 15 m/s, ~28 m from 21 m/s; climb
+6 / 8 m/s, descent 6 m/s easing to ~1 m/s at touchdown; yaw up to 200°/s;
+holds within a metre in wind to 12 m/s; thrust to weight 2, sagging in the
+last quarter of the charge. Geofence at the edge of the map (the whole
+operation area in the great assault), 450 m nominal radio range with
+occlusion penalty, 100 m height limit. Pilot-side 0.4 kg controller/goggles remains
 counted after deploying the 0.8 kg aircraft. Radio obstruction, battery and
 flight controls are approximations; no weapons, automatic enemy markers,
 acro/rate flight, GPS return-to-home, repair or battery exchange yet.

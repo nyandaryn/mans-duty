@@ -90,7 +90,10 @@ var orbit := 0.0
 var main_menu: MainMenu
 var grad_training: GradTraining
 # Every «Навчання» course by class, in the order of the training screen.
-const COURSE_IDS := ["rifleman","sniper","mortarman","grad","bmp"]
+const COURSE_IDS := ["rifleman","machinegunner","grenadier","sniper","uav","mortarman","grad","bmp"]
+const MACHINEGUNNER_TRAINING := preload("res://scripts/machinegunner_training.gd")
+const GRENADIER_TRAINING := preload("res://scripts/grenadier_training.gd")
+const UAV_TRAINING := preload("res://scripts/uav_training.gd")
 # Firearms whose report is a gunshot to the ears (the hearing model).
 const GUNSHOTS := ["ak74","m16","svd","pm","m9","pkm"]
 var courses: Dictionary={}
@@ -531,7 +534,9 @@ func _process(delta: float) -> void:
 		objective.text="%s\nЗачистіть локацію й поверніться до старту.\nENTER біля старту — завершити операцію." % district.map_title
 		if battle.active:objective.text=battle.status()
 		elif training!="" and training!="grad":objective.text=course().objective_text()
-		hud_text.text="%s  /  %s\n%s\nR + 1 / 2 / 3 · ОБМІН МАГАЗИНА\nI · ПАТРОННИК   T · МАГАЗИН\nT + 1 / 2 / 3 · ПІДСУМОК" % [w.data.name,w.data.caliber,w.status()]
+		var slots:=" / ".join(PackedStringArray(range(1,w.pouches.size()+1).map(func(i):return str(i))))
+		if w.id=="pkm":hud_text.text="%s  /  %s\n%s\nR + %s · ЗАМІНА КОРОБКИ\nV · РУКОЯТКА   T · КОРОБКА\nT + %s · ПІДСУМОК" % [w.data.name,w.data.caliber,w.status(),slots,slots]
+		else:hud_text.text="%s  /  %s\n%s\nR + %s · ОБМІН МАГАЗИНА\nI · ПАТРОННИК   T · МАГАЗИН\nT + %s · ПІДСУМОК" % [w.data.name,w.data.caliber,w.status(),slots,slots]
 		health_label.text="СТАН  %03d" % ceili(player.health)
 		health_label.modulate=Color("d49a7b") if player.health<35 else CREAM
 	hud.queue_redraw()
@@ -707,7 +712,7 @@ func setup_audio() -> void:
 	# Recorded: the PKM and the launches of the RPG-7 and of a disposable
 	# launcher (an M72 standing in for the RPG-22), public-domain DVIDS
 	# footage; provenance in AUDIO-CREDITS.
-	for key in ["ak74","m16","pm","m9","pkm","rpg7_launch","rpg22_launch","mag_in","mag_out","bolt","bolt_pull","pain_1","pain_2","pain_3","pain_4","cover"]:
+	for key in ["ak74","m16","pm","m9","pkm","rpg7_launch","rpg22_launch","mag_in","mag_out","bolt","bolt_pull","pain_1","pain_2","pain_3","pain_4","cover","ak_bolt_back","ak_bolt_release","pkm_cover_open","pkm_cover_close","pkm_belt","pkm_bolt_back","pkm_handle_forward"]:
 		sounds[key]=load("res://assets/audio/"+key+".wav")
 	# Recorded rifle placeholder; its provenance is documented in AUDIO-CREDITS.
 	sounds["svd"]=sounds["ak74"]
@@ -927,7 +932,7 @@ func setup_ui() -> void:
 	# mortar sight; pause and results hide them.
 	grad_training=GradTraining.new()
 	grad_training.setup(self,root)
-	courses={"rifleman":RiflemanTraining.new(),"sniper":SniperTraining.new(),"mortarman":MortarTraining.new(),"bmp":BmpTraining.new()}
+	courses={"rifleman":RiflemanTraining.new(),"machinegunner":MACHINEGUNNER_TRAINING.new(),"grenadier":GRENADIER_TRAINING.new(),"sniper":SniperTraining.new(),"uav":UAV_TRAINING.new(),"mortarman":MortarTraining.new(),"bmp":BmpTraining.new()}
 	for id in courses:courses[id].setup(self,root)
 	courses["grad"]=grad_training
 	loading_panel=Control.new()
@@ -1294,16 +1299,22 @@ func close_panels() -> void:
 	if is_instance_valid(bmp):bmp.close_panels()
 	commands_open=false
 
+# The rifle's leaf sight is stepped by PgUp / PgDn (the PKM's has its own
+# line in the machine gunner's hints).
+func current_weapon_sighted() -> bool:
+	return is_instance_valid(player) and player.current().id in ["ak74","m16"]
+
 func control_hint() -> String:
 	var text := "SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    Q / E  НАХИЛ    C  ВИГЛЯНУТИ    ALT  ЛИШЕ ЗБРОЯ    H  АПТЕЧКА\nV  ЗАТВОР    M  КАРТА    K  ДАЛЕКОМІР    J  ДРОН    U  ЕКРАН ДРОНА"
-	if player_class=="rifleman":text+="    4  РПО-А / РПГ-22    5  НАСТУПНИЙ"
-	if player_class=="grenadier":text+="    4  РПГ-7 / РПГ-22    5  НАСТУПНИЙ    R  ЗАРЯДИТИ РПГ-7 / ВЗВЕСТИ РПГ-22"
-	if player_class=="machinegunner":text+="    X  СОШКИ    PGUP / PGDN  ПРИЦІЛ 1–15"
-	if player_class=="uav":text+="    Y  FPV-ДРОН"
+	if current_weapon_sighted():text+="    PGUP / PGDN  ПРИЦІЛ"
+	if player_class=="rifleman":text+="    4  ГРАНАТОМЕТ (УТРИМАТИ — ВИБІР)    5  НАСТУПНИЙ"
+	if player_class=="grenadier":text+="    4  ГРАНАТОМЕТ (УТРИМАТИ — ВИБІР)    5  НАСТУПНИЙ    R  ЗАРЯДИТИ / ВЗВЕСТИ"
+	if player_class=="machinegunner":text+="    X  СОШКИ    PGUP / PGDN  ПРИЦІЛ 1–15    V  РУКОЯТКУ НАЗАД І ВПЕРЕД"
+	if player_class=="uav":text+="    Y  FPV (УТРИМАТИ — ВИБІР)"
 
 	if player_class=="mortarman":text+="    G  РОЗРАХУНОК    N  МІНОМЕТ    F  ПРИЦІЛ / ЯЩИК"
 	if player_class=="bmp":text+="\nG  КОМАНДИ ВІДДІЛЕННЮ    F  БІЛЯ ЛЮКА — МІСЦЕ МЕХАНІКА-ВОДІЯ"
-	if player_class=="grad":text="SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    H  АПТЕЧКА    F  БІЛЯ МАШИНИ — ДІЯ / КАБІНА / ПРИЦІЛ    M  ПЛАНШЕТ    G  РАДІО"
+	if player_class=="grad":text="SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    H  АПТЕЧКА    F  БІЛЯ МАШИНИ — ДІЯ / КАБІНА / ПРИЦІЛ    M  ПЛАНШЕТ    G  РАДІО    J  ДРОН З НАПЛІЧНИКА"
 	return text
 
 func set_player_class(id: String) -> Array[String]:

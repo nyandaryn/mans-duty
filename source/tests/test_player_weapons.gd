@@ -31,6 +31,11 @@ func key(p: Operator, code: Key) -> void:
  var event:=InputEventKey.new()
  event.physical_keycode=code;event.pressed=true
  p._unhandled_input(event)
+ # A tap: the key comes up before the ring of choices would open (with more
+ # than one launcher in the pack 4 and 5 act on the release).
+ var up:=InputEventKey.new()
+ up.physical_keycode=code;up.pressed=false
+ p._unhandled_input(up)
 
 # Pitch climbed by a burst of the PKM.
 func climb(p: Operator, shots: int) -> float:
@@ -184,7 +189,7 @@ func run():
  p.velocity=Vector3.ZERO
  # The frame sight.
  var w: WeaponState=p.current()
- check(w.scope_zero==300,"The PKM's sight is on 3 (300 m)")
+ check(w.scope_zero==400,"The PKM's sight is on 4 (400 m), its direct-fire setting")
  var slider: Node3D=p.viewmodel.get_node("RearSightSlider")
  p.ads_weight=1.0;p.aim=true;p.update_pose(0.016)
  var low_slider: float=slider.position.y
@@ -192,9 +197,9 @@ func run():
  for i in range(5):
   p.scope_adjust_time=0.0
   key(p,KEY_PAGEUP)
- check(w.scope_zero==800,"PgUp five times: 8 (800 m)")
+ check(w.scope_zero==900,"PgUp five times: 9 (900 m)")
  p.ads_weight=1.0;p.aim=true;p.update_pose(0.016)
- var expected:=FlightModel.zero_angle("pkm",PkmArt.SIGHT_HEIGHT,800.0)
+ var expected:=FlightModel.zero_angle("pkm",PkmArt.SIGHT_HEIGHT,900.0)
  check(slider.position.y>low_slider+0.004 and absf(p.sight_tilt-expected)<0.0005 and p.sight_tilt>low_tilt,"The slider rises %.1f mm and the gun tilts %.4f rad (%.4f)" % [(slider.position.y-low_slider)*1000,p.sight_tilt,expected])
  for i in range(20):
   p.scope_adjust_time=0.0
@@ -207,7 +212,38 @@ func run():
  var cover: Node3D=p.viewmodel.get_node("FeedCover")
  check(cover.rotation.x<-1.0,"…the feed cover is up (%.2f)" % cover.rotation.x)
  w.update(20.0);p.viewmodel.animate(w,0.016)
- check(cover.rotation.x>-0.05 and w.rounds()==100,"…and shut on the new belt")
+ check(cover.rotation.x>-0.05 and w.rounds()==99 and w.chambered,"…and shut on the new belt; the carrier was still back, so it is ready at once")
+ # The order: cover up, belt off the tray, box off; box on, belt on, cover down.
+ w.magazine.rounds=10
+ var steps:=[]
+ w.reload(0)
+ while w.phase!="":
+  var status:=w.status()
+  if steps.is_empty() or steps[-1]!=status:steps.append(status)
+  w.update(0.05)
+ check(steps.slice(0,3)==["КРИШКА ВГОРУ","СТРІЧКА З ПРИЙМАЧА","КОРОБКА ГЕТЬ"] and steps.slice(-3)==["КОРОБКА НА МІСЦЕ","СТРІЧКА НА ПРИЙМАЧ","КРИШКУ ЗАКРИТИ"],"The PKM's reload goes cover, belt, box and back (%s)" % str(steps))
+ # The round on the tray goes back into the old belt, none is lost.
+ var total:=w.ammunition_total()
+ check(w.cocked and w.chambered,"Ready with the carrier back")
+ # The end of a belt: the carrier runs home and stays forward.
+ w.magazine.rounds=1
+ var spent:=0
+ while w.fire():spent+=1
+ check(spent==2 and not w.cocked and not w.chambered,"The last round fired, the carrier runs home on an empty chamber")
+ w.reload()
+ w.update(20.0)
+ check(w.rounds()==100 and not w.chambered and not w.fire(),"A new belt on a gun whose carrier is forward does not fire")
+ var ejected:=w.live_ejections
+ check(w.rack(),"V: the handle")
+ w.update(0.7);p.viewmodel.animate(w,0.016)
+ var handle: Node3D=p.viewmodel.get_node("CockingHandle")
+ check(handle.position.z>0.06 and w.status()=="ЗАТВОР: РУКОЯТКУ НАЗАД","…pulled back by hand (%.3f m)" % handle.position.z)
+ w.update(0.6);p.viewmodel.animate(w,0.016)
+ check(handle.position.z<0.03,"…and pushed forward again by hand (%.3f m)" % handle.position.z)
+ w.update(0.4);p.viewmodel.animate(w,0.016)
+ check(w.phase=="" and w.cocked and w.chambered and w.live_ejections==ejected,"Cocked: ready to fire, no round thrown out (open bolt)")
+ check(p.viewmodel.bolt.position.z>0.1 and handle.position.z==0.0,"The carrier waits at the rear, the handle forward")
+ check(total>0,"(ammunition counted)")
  game.queue_free();await process_frame;await process_frame
  print("player weapons: %d checks, %s" % [checks,"FAILED" if failed else "ok"])
  quit(1 if failed else 0)

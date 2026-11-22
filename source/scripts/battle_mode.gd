@@ -79,6 +79,19 @@ var held_said := false
 var drive_warned := false
 var battery: GradBattery
 var armour: EnemyArmour
+# The skipped start (F6 twice): the battery's fire, the boarding and the
+# column's ride fast-forwarded behind a black screen.
+const SKIP_WINDOW := 4.0
+# The salvo under the black screen goes this many times faster than in the
+# open: the launches, the rockets' flight, not the defenders.
+var skip_pace := 8
+const SKIP_STATES := ["field","board","mount","mounted","wait","march","approach"]
+var skip_armed := 0.0
+var skipping := false
+var skip_token := 0
+var skip_screen: CanvasLayer
+var skip_shade: Control
+var skip_note: Label
 # Marks over the player's squad and over his vehicle when it is boarded.
 var marks: Array[Sprite3D]=[]
 var vehicle_mark: Label3D
@@ -96,7 +109,10 @@ func reset() -> void:
  active=false;finished=false;corpses.clear();respawn_left=0
  halted=false;awaiting=false;column_go=false
  prep="";prep_time=0.0;fire_at=-1.0;done_at=-1.0;held_said=false
- if is_instance_valid(battery):battery.queue_free()
+ end_skip()
+ # Stopped at once: a new start frees the world with the launchers in it
+ # before the battery itself is gone.
+ if is_instance_valid(battery):battery.process_mode=Node.PROCESS_MODE_DISABLED;battery.queue_free()
  battery=null
  marks.clear();vehicle_mark=null
  for squad in mech:
@@ -199,10 +215,7 @@ func begin_mount() -> void:
  prep="mount";prep_time=0.0
  game.radio_voice.say("mount_up")
  for squad in mech:squad.mount_up()
- # The battery has done its work: it stands still from now on.
- for vehicle in battery.launchers:
-  if is_instance_valid(vehicle):vehicle.engine_sound.stop();vehicle.process_mode=Node.PROCESS_MODE_DISABLED
- battery.process_mode=Node.PROCESS_MODE_DISABLED
+ stand_battery()
  match game.player_class:
   "bmp":game.squad.tell("«По машинах!» · стій, поки твій десант сідає: двері відчинені")
   "mortarman":game.squad.tell("«По машинах!» · десант сідає в БМП")
@@ -371,6 +384,14 @@ func skip_field() -> void:
  if prep=="":return
  if is_instance_valid(battery):battery.queue_free()
  battery=null
+ board_now()
+ prep=""
+ column_go=not halted
+ if is_instance_valid(game.bmp.vehicle) and game.bmp.seat=="" and field_class(game.player_class):game.bmp.enter("troop")
+
+# Everybody aboard at once: the gunners in their turrets, the men in the
+# troop compartments, the doors shut.
+func board_now() -> void:
  for squad in mech:
   squad.gunner_in_now()
   for actor in squad.on_foot():
@@ -379,9 +400,211 @@ func skip_field() -> void:
    squad.vehicle.board(actor)
   squad.vehicle.open_doors(false)
   if squad.state in ["field","board","mount"]:squad.set_state("mounted" if squad.player_led else "wait")
- prep=""
- column_go=not halted
- if is_instance_valid(game.bmp.vehicle) and game.bmp.seat=="" and field_class(game.player_class):game.bmp.enter("troop")
+
+# --- The skipped start: F6 twice --------------------------------------------
+# The player may fast-forward what he only watches: the battery's fire, the
+# boarding and the column's ride to the dismount line. Behind a black screen
+# the launchers fire off their packages and the rockets fly and burst as in
+# the open (unseen and unheard), the men board at once, and each vehicle is
+# put where its ride would have ended: at its drop point in the village, the
+# doors opening. The mortarman's halted column boards and waits for his word;
+# once he gives it, the march can be skipped too.
+func can_skip() -> bool:
+ if not active or finished or skipping or respawn_left>0:return false
+ if prep!="":return true
+ if not column_go or halted:return false
+ # The driver himself: while his vehicle is still far from the village.
+ if game.player_class=="bmp":
+  var own: BmpVehicle=game.bmp.vehicle
+  if not is_instance_valid(own) or own.destroyed or own.immobile or game.bmp.seat!="driver":return false
+  if not is_instance_valid(game.bmp.squad) or not game.bmp.squad.state in SKIP_STATES:return false
+  var end: Vector2=BmpRoutes.CORRIDOR[-1]
+  var at:=Vector2(own.global_position.x,own.global_position.z)
+  return at.distance_to(end)>300.0 and maxf(absf(at.x),absf(at.y))>230.0
+ for squad in mech:
+  if squad.state in ["wait","march","approach"] and movable(squad):return true
+ return false
+
+func movable(squad: MechSquad) -> bool:
+ return is_instance_valid(squad.vehicle) and not squad.vehicle.destroyed and not squad.vehicle.immobile
+
+# What the skip leaves out, for the hints.
+func skip_text() -> String:
+ if prep!="":return "ОБСТРІЛ І ПОСАДКУ" if halted else "ОБСТРІЛ І МАРШ ДО ВИСАДКИ"
+ return "МАРШ ДО ВИСАДКИ"
+
+func _input(event: InputEvent) -> void:
+ if not (event is InputEventKey) or not event.pressed or event.echo or event.physical_keycode!=KEY_F6:return
+ if not game.running or game.paused or game.inventory_open:return
+ if is_instance_valid(game.topo_map) and game.topo_map.visible:return
+ if is_instance_valid(game.crew) and (game.crew.panel.visible or game.crew.sight.visible):return
+ if not can_skip():return
+ get_viewport().set_input_as_handled()
+ if skip_armed<=0.0:
+  skip_armed=SKIP_WINDOW
+  game.squad.tell("F6 ще раз — пропустити %s" % skip_text().to_lower())
+  return
+ skip_armed=0.0
+ skip_start()
+
+func skip_start() -> void:
+ if not can_skip():return
+ var barrage:=prep!=""
+ var title:="ПРИСКОРЕННЯ: ЗАЛП «ГРАДІВ» · ПОСАДКА" if barrage else "ПРИСКОРЕННЯ: МАРШ КОЛОНИ"
+ if barrage and not halted:title+=" · МАРШ КОЛОНИ"
+ skipping=true
+ skip_token+=1
+ var token:=skip_token
+ open_skip_screen(title)
+ game.radio_voice.hush()
+ if not await skip_fade(token,1.0,0.35):return
+ if barrage:
+  # The salvo, laid at once and fired at its own rhythm, only faster; the
+  # bursts as in the open.
+  if is_instance_valid(battery):battery.rush()
+  for i in range(60*60):
+   if not is_instance_valid(battery) or battery.finished():break
+   if not await skip_frame(token):return
+   if not is_instance_valid(battery):break
+   battery.hasten(skip_pace,get_physics_process_delta_time())
+   var total:=0
+   for vehicle in battery.launchers:
+    if is_instance_valid(vehicle):total+=vehicle.fired+vehicle.remaining()
+   if is_instance_valid(skip_note):skip_note.text="«ГРАДИ»: ПУСКІВ %d / %d · РАКЕТ У ПОВІТРІ %d" % [battery.fired(),total,battery.in_flight()]
+  stand_battery()
+  board_now()
+  prep="";prep_time=0.0
+  column_go=not halted
+ var own: MechSquad=game.bmp.squad
+ var own_out:=false
+ if halted:
+  game.squad.tell("Десант на броні · колона чекає твоєї команди · G — розрахунок")
+  if is_instance_valid(skip_note):skip_note.text="ДЕСАНТ НА БРОНІ · КОЛОНА ЧЕКАЄ КОМАНДИ"
+ else:
+  arrive_all()
+  if is_instance_valid(skip_note):skip_note.text="КОЛОНА НА РУБЕЖІ СПІШУВАННЯ"
+  own_out=is_instance_valid(own) and not own.player_led and own.state in ["dismount","file"]
+ # Black a moment longer while the vehicles settle where they were put.
+ if not await skip_fade(token,1.0,0.6):return
+ if not await skip_fade(token,0.0,0.6):return
+ end_skip()
+ # The squad's own order, heard as the picture comes back (MechSquad.voice
+ # keeps quiet during the skip).
+ if own_out:game.radio_voice.say("dismount")
+
+# The squads on their way, in column order, each put at its drop point.
+func arrive_all() -> void:
+ var own: MechSquad=game.bmp.squad
+ # The player with his squad, in its troop compartment (back in, if he got
+ # out on the way).
+ if field_class(game.player_class) and is_instance_valid(own) and own.state in SKIP_STATES and movable(own) and game.bmp.seat=="" and is_instance_valid(game.player) and game.player.health>0 and not game.player.get_meta("battle_out",false):
+  game.bmp.enter("troop")
+ for squad in mech:
+  if squad.state in SKIP_STATES and movable(squad):arrive(squad)
+ if is_instance_valid(game.district.operation_area):game.district.operation_area.stream(game.player.global_position,60)
+ match game.player_class:
+  "bmp":game.squad.tell("Колона на рубежі спішування · 1 — «Десант»")
+  "mortarman","grad":game.squad.tell("Колона на рубежі спішування · групи висаджуються")
+  _:if game.bmp.seat=="troop":game.squad.tell("Колона на рубежі спішування · десант виходить")
+
+# One vehicle to the end of the column's road and on to a drop point, as
+# MechSquad.enter_village picks it, and stopped there: the driver's route is
+# cut to the spot, so he does not drive on to where the old one led.
+func arrive(squad: MechSquad) -> void:
+ var vehicle:=squad.vehicle
+ var route:=PackedVector3Array()
+ if squad.state=="approach" and squad.drop!=Vector3.INF and squad.driver.route.size()>=2:
+  route=squad.driver.route
+ else:
+  var road:=BmpRoutes.approach(squad.index,game.district)
+  put_vehicle(squad,road[-1],road[-1]-road[-2])
+  if squad.player_led:
+   squad.goal_sector=sector
+   var taken: Array=[]
+   for other in mech:
+    if other!=squad and other.drop!=Vector3.INF:taken.append(other.drop)
+   squad.drop=squad.pick_drop(squad.objective(),taken)
+   route=squad.plan(squad.drop)
+  else:
+   squad.enter_village()
+   if squad.state=="approach":route=squad.driver.route
+ if squad.drop==Vector3.INF:squad.drop=vehicle.global_position
+ var heading:=route[-1]-route[-2] if route.size()>=2 else squad.objective()-squad.drop
+ put_vehicle(squad,squad.drop,heading)
+ if squad.player_led:return
+ squad.driver.set_route(PackedVector3Array([vehicle.global_position]),BmpRoutes.FIELD_SPEED,3.0)
+ if squad.state=="dismount":squad.driver.stop()
+ else:squad.begin_dismount("file")
+
+func put_vehicle(squad: MechSquad, at: Vector3, heading: Vector3) -> void:
+ var vehicle:=squad.vehicle
+ heading.y=0.0
+ if heading.length()<0.01:heading=-vehicle.global_basis.z;heading.y=0.0
+ if not squad.player_led:vehicle.parking=true
+ vehicle.freeze=false
+ place_vehicle(vehicle,Transform3D(Basis.looking_at(heading.normalized(),Vector3.UP),at))
+ vehicle.linear_velocity=Vector3.ZERO;vehicle.angular_velocity=Vector3.ZERO
+ for actor in vehicle.crew:actor.global_position=vehicle.global_position+vehicle.global_basis.y*0.9
+
+# The battery has done its work: it stands still from now on.
+func stand_battery() -> void:
+ if not is_instance_valid(battery):return
+ for vehicle in battery.launchers:
+  if is_instance_valid(vehicle):vehicle.engine_sound.stop();vehicle.process_mode=Node.PROCESS_MODE_DISABLED
+ battery.process_mode=Node.PROCESS_MODE_DISABLED
+
+func open_skip_screen(title: String) -> void:
+ end_screen()
+ skip_screen=CanvasLayer.new();skip_screen.name="SkipScreen";skip_screen.layer=2
+ add_child(skip_screen)
+ skip_shade=Control.new();skip_shade.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ skip_screen.add_child(skip_shade)
+ skip_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ skip_shade.modulate.a=0.0
+ var black:=ColorRect.new();black.color=Color(0.012,0.014,0.012);black.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ skip_shade.add_child(black);black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ var text:Label=game.label(title,24,UiKit.INK)
+ text.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;text.vertical_alignment=VERTICAL_ALIGNMENT_BOTTOM
+ skip_shade.add_child(text);text.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ text.anchor_bottom=0.5
+ skip_note=game.label("",17,UiKit.MUTED)
+ skip_note.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ skip_shade.add_child(skip_note);skip_note.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ skip_note.anchor_top=0.5;skip_note.offset_top=14.0
+
+# A frame of the skip; it waits out a pause with the screen out of the way of
+# the pause menu. False once the skip is called off (a new start, the menu,
+# the end of the battle).
+func skip_frame(token: int) -> bool:
+ await get_tree().physics_frame
+ while token==skip_token and game.paused:
+  if is_instance_valid(skip_screen):skip_screen.visible=false
+  await get_tree().physics_frame
+ if token!=skip_token:return false
+ if not active or finished or not game.running:
+  end_skip()
+  return false
+ if is_instance_valid(skip_screen):skip_screen.visible=true
+ return true
+
+# The screen to an opacity over a time of play.
+func skip_fade(token: int, to: float, seconds: float) -> bool:
+ var from:=skip_shade.modulate.a if is_instance_valid(skip_shade) else to
+ var time:=0.0
+ while time<seconds:
+  if not await skip_frame(token):return false
+  time+=get_physics_process_delta_time()
+  if is_instance_valid(skip_shade):skip_shade.modulate.a=lerpf(from,to,clampf(time/seconds,0.0,1.0))
+ return true
+
+func end_screen() -> void:
+ if is_instance_valid(skip_screen):skip_screen.queue_free()
+ skip_screen=null;skip_shade=null;skip_note=null
+
+func end_skip() -> void:
+ skip_token+=1
+ skipping=false;skip_armed=0.0
+ end_screen()
 
 # Column order: each squad follows the one before it.
 func register_squad(squad: MechSquad) -> void:
@@ -921,7 +1144,8 @@ func _physics_process(delta: float) -> void:
   respawn_left=maxf(0,respawn_left-delta)
   if respawn_left==0:respawn_player()
   if finished:return
- if prep!="":tick_prep(delta)
+ if skip_armed>0.0:skip_armed=maxf(0.0,skip_armed-delta)
+ if prep!="" and not skipping:tick_prep(delta)
  update_marks()
  command_left-=delta
  if command_left<=0:
@@ -939,7 +1163,7 @@ func status() -> String:
  if awaiting:return "ШТУРМ ОЧІКУЄ КОМАНДИ ГРАВЦЯ · G — %s\nГрупи на вихідних рубежах · СИЛИ %d : %d" % ["РАДІО" if game.player_class=="grad" else "РОЗРАХУНОК",living(true),living(false)]
  if halted:return "ШТУРМ ПРИЗУПИНЕНО · ГРУПИ ЗАКРІПЛЮЮТЬСЯ · G — ПРОДОВЖИТИ\n%s · СИЛИ %d : %d" % [objective_title(),living(true),living(false)]
  if sector<0:return "ЗАЧИСТКА СЕЛА · НАЙБЛИЖЧИЙ ПОСТ %d м / %03d°\nУСІ ОП ЗНИЩЕНО · ЗАЛИШИЛОСЬ ПРОТИВНИКІВ %d · СИЛИ %d : %d" % [offset.length(),bearing,living(false),living(true),living(false)]
- return "ШТУРМ · %s · %d м / %03d°\nОП ЗНИЩЕНО %d / 3 · СИЛИ %d : %d" % [objective_title(),offset.length(),bearing,cleared_count(),living(true),living(false)]
+ return "ШТУРМ · %s · %d м / %03d°\nОП ЗНИЩЕНО %d / 3 · СИЛИ %d : %d%s" % [objective_title(),offset.length(),bearing,cleared_count(),living(true),living(false)," · F6 — ДО ВИСАДКИ" if can_skip() else ""]
 
 func prep_status() -> String:
  var line:="ВИХІДНИЙ РУБІЖ · ВІДДІЛЕННЯ СПІШЕНЕ БІЛЯ БМП · ЧЕКАЙ КОМАНДИ"
@@ -954,7 +1178,9 @@ func prep_status() -> String:
   if not battery.ordered:line+="\n«ГРАДИ» НАВОДЯТЬСЯ: ГОТОВІ %d / 3" % battery.ready_count()
   elif not battery.finished():line+="\n«ГРАДИ» ВЕДУТЬ ВОГОНЬ ПО ОП-1…3 · РАКЕТ У ПОВІТРІ %d" % battery.in_flight()
   else:line+="\nЗАЛП ЗАВЕРШЕНО"
- return line+" · СИЛИ %d : %d" % [living(true),living(false)]
+ line+=" · СИЛИ %d : %d" % [living(true),living(false)]
+ if can_skip():line+="\nF6 — ПРОПУСТИТИ %s" % skip_text()
+ return line
 
 # Our strength in the menu: men and vehicles, not the enemy's.
 static func size_text(n: int) -> String:return "%d · %d БМП" % [n,squad_count(n)]

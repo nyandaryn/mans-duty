@@ -2,9 +2,42 @@ class_name ReconDrone
 extends CharacterBody3D
 
 # A full charge hovers for 40 minutes, as a Mavic 3 class recon quadcopter
-# (46 minutes rated); fast flight drains it up to a third quicker.
+# (46 minutes rated); flat out in sport it drains a quarter quicker.
 const FLIGHT_SECONDS := 2400.0
 const MAX_LINK_DISTANCE := 450.0
+# Flight of a Mavic 3 class quadcopter, by DJI's specs
+# (https://www.dji.com/mavic-3/specs): 895 g at take-off; 15 m/s level in
+# N mode and 21 m/s in S (sport) at most 30° / 35° of pitch; climbing at
+# 6 m/s (N) / 8 m/s (S), descending at 6 m/s; turning at up to 200°/s;
+# holding its place in wind up to 12 m/s.
+# The physics is the FPV's (fpv_drone.gd): the airframe leans, the thrust
+# along its axis, gravity and the drag of the air move it, and the lean takes
+# time. What differs is the flight controller, GPS and vision position hold:
+# the sticks ask for a speed, not a lean. Let go, it brakes by leaning back,
+# then holds the point and the height where it stopped against the wind and
+# its gusts. Shift is sport mode.
+const GRAVITY := 9.80665
+const NORMAL_SPEED := 15.0
+const SPORT_SPEED := 21.0
+const NORMAL_TILT := 0.5236
+const SPORT_TILT := 0.6109
+const NORMAL_CLIMB := 6.0
+const SPORT_CLIMB := 8.0
+const DESCENT := 6.0
+const YAW_RATE := 3.49
+# Thrust to weight of about 2 on a full pack.
+const MAX_LIFT := 2.0*GRAVITY
+# Drag per unit of airspeed: linear (the rotors' H-force) and quadratic (the
+# body). 15 m/s takes 21° of pitch, 21 m/s 33°.
+const ROTOR_DRAG := 0.12
+const BODY_DRAG := 0.00873
+# Flight controller: how fast the airframe takes the lean it is given, the
+# speed loop, the wind trim (integral), the position and height hold.
+const ATTITUDE_RATE := 7.0
+const SPEED_GAIN := 2.6
+const TRIM_GAIN := 0.6
+const HOLD_GAIN := 1.0
+const CLIMB_GAIN := 4.5
 var operator: Operator
 var model: Node3D
 var camera: Camera3D
@@ -26,8 +59,28 @@ var motor_sound: AudioStreamPlayer3D
 # measures its link from that point; the operator's own drone from him.
 var relay := Vector3.INF
 var link_range := MAX_LINK_DISTANCE
-var limit := 195.0
+# Half the side of the square the geofence keeps it in; 0 — the map's edge.
+var limit := 0.0
 var ceiling := 100.0
+# The airframe's lean under its heading, and the thrust along its axis (m/s²).
+var airframe := Basis()
+var lift := 0.0
+var sport := false
+# Where the position hold keeps it (INF: braking, or the sticks are moving it).
+var hold_point := Vector3.INF
+var hold_height := INF
+# The steady wind over the field (INF: the battlefield's); gusts come on top.
+var wind := Vector3.INF
+var wind_trim := Vector3.ZERO
+var climb_trim := 0.0
+var air_clock := 0.0
+# The yaw stick: the heading the airframe turns to.
+var yaw_target := 0.0
+# Where the last physics step left it: moved or turned from outside, it holds
+# the new place and heading.
+var flown_to := Vector3.INF
+var flown_yaw := INF
+var touching := false
 var zoomable := false
 var zoom := 1.0
 var base_fov := 95.0
@@ -93,7 +146,7 @@ func handle_input(event: InputEvent) -> void:
   elif event.button_index==MOUSE_BUTTON_WHEEL_DOWN:zoom=maxf(1.0,zoom/1.4)
   camera.fov=rad_to_deg(2.0*atan(tan(deg_to_rad(base_fov)*0.5)/zoom))
  if event is InputEventMouseMotion:
-  yaw-=event.relative.x*operator.sensitivity*0.7/zoom
+  yaw_target-=event.relative.x*operator.sensitivity*0.7/zoom
   camera_pitch=clampf(camera_pitch-event.relative.y*operator.sensitivity*0.7/zoom,-1.5,0.4)
  if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_F:
   if landed:armed=false;notice="МОТОРИ ВИМКНЕНО · J — ЗНЯТИ ОКУЛЯРИ"
@@ -130,27 +183,38 @@ func _physics_process(delta: float) -> void:
  lost_link_time=lost_link_time+delta if signal_strength<0.04 else 0.0
  var fail_safe := battery<=0.04 or lost_link_time>1.5 or health<=0
  if battery<=0 or health<=0:armed=false
- var desired := Vector3.ZERO
+ # Put somewhere from outside (deployed, the observation post's drone sent
+ # up, a test): it holds the new place, already hovering if it is armed.
+ if global_position.distance_to(flown_to)>0.5:
+  hold_point=Vector3.INF;hold_height=INF
+  if armed and not is_on_floor():lift=maxf(lift,GRAVITY)
+ if yaw!=flown_yaw:yaw_target=yaw
+ var stick := Vector3.ZERO
+ sport=false
  if piloting and not fail_safe:
   var input := Input.get_vector("left","right","forward","back")
-  var speed := 12.0 if Input.is_action_pressed("sprint") else 6.0
-  desired=Basis(Vector3.UP,yaw)*Vector3(input.x,0,input.y)*speed
-  desired.y=(float(Input.is_action_pressed("jump"))-float(Input.is_action_pressed("crouch")))*3.0
+  stick=Vector3(input.x,float(Input.is_action_pressed("jump"))-float(Input.is_action_pressed("crouch")),input.y)
+  sport=Input.is_action_pressed("sprint")
   if Input.is_action_pressed("jump") and battery>0 and health>0:armed=true
+ air_clock+=delta
  if armed:
-  battery=maxf(0,battery-delta/FLIGHT_SECONDS*(1.0+velocity.length()*0.025))
-  if fail_safe:
-   desired=Vector3(0,-1.0,0);notice="АВТОПОСАДКА · НИЗЬКА БАТАРЕЯ / ВТРАТА ЗВ’ЯЗКУ"
-  if global_position.y-operator.game.district.ground_height(global_position)>ceiling:desired.y=minf(desired.y,-0.5)
-  if absf(global_position.x)>limit:desired.x=-signf(global_position.x)*2
-  if absf(global_position.z)>limit:desired.z=-signf(global_position.z)*2
-  velocity=velocity.move_toward(desired,delta*4.0)
+  battery=maxf(0,battery-delta/FLIGHT_SECONDS*(0.1+0.9*pow(lift/GRAVITY,1.5)))
+  if fail_safe:notice="АВТОПОСАДКА · НИЗЬКА БАТАРЕЯ / ВТРАТА ЗВ’ЯЗКУ"
+  fly_controlled(stick,fail_safe,delta)
  else:
-  velocity.x=move_toward(velocity.x,0,delta*8)
-  velocity.z=move_toward(velocity.z,0,delta*8)
-  velocity.y-=9.80665*delta
+  # Motors stopped: it falls through the air, or lies where it is.
+  lift=0.0;wind_trim=Vector3.ZERO;climb_trim=0.0
+  hold_point=Vector3.INF;hold_height=INF;yaw_target=yaw
+  airframe=airframe.slerp(Basis(),1-exp(-delta*8)).orthonormalized()
+  if is_on_floor():
+   velocity.x=move_toward(velocity.x,0,delta*8)
+   velocity.z=move_toward(velocity.z,0,delta*8)
+   velocity.y-=GRAVITY*delta
+  else:velocity+=(Vector3.DOWN*GRAVITY+drag(velocity-air()))*delta
  var before := velocity
  move_and_slide()
+ flown_to=global_position;flown_yaw=yaw
+ touching=get_slide_collision_count()>0
  # Descending into a slope produces a tangential slide velocity. Waiting for
  # that slide to stop before disarming would keep the motors pushing forever.
  if is_on_floor() and before.y<=0 and (fail_safe or (piloting and Input.is_action_pressed("crouch"))):
@@ -163,7 +227,6 @@ func _physics_process(delta: float) -> void:
   if impact>5.5:health=maxf(0,health-(impact-5.5)*0.12)
  if health<=0 and downed<=0.0:armed=false;notice="ДРОН ПОШКОДЖЕНО"
  fired_on=maxf(0.0,fired_on-delta)
- var local_velocity := Basis(Vector3.UP,yaw).inverse()*velocity
  # Rest on the supporting slope; level the airframe as the motors lift it.
  var target_basis := Basis(Vector3.UP,yaw)
  if landed and not armed:
@@ -174,18 +237,118 @@ func _physics_process(delta: float) -> void:
   # Falling with a motor or a prop shot away: it turns over.
   rotate(spin_axis,delta*7.0)
  else:quaternion=quaternion.slerp(target_basis.get_rotation_quaternion(),1-exp(-delta*8))
- model.rotation.x=lerpf(model.rotation.x,-local_velocity.z*0.035,1-exp(-delta*6))
- model.rotation.z=lerpf(model.rotation.z,-local_velocity.x*0.035,1-exp(-delta*6))
- camera.rotation=Vector3(camera_pitch+model.rotation.x*0.3,0,model.rotation.z*0.25)
+ # The airframe leans; the camera on its three-axis gimbal keeps level.
+ model.basis=airframe
+ camera.rotation=Vector3(camera_pitch,0,0)
  for i in range(rotors.size()):rotors[i].rotation.y+=delta*(130 if armed else 0)*(1 if i%2==0 else -1)
  if armed and not motor_sound.playing:motor_sound.play()
  elif not armed and motor_sound.playing:motor_sound.stop()
- motor_sound.pitch_scale=1.0+velocity.length()*0.025
+ motor_sound.pitch_scale=0.85+0.15*lift/GRAVITY+velocity.length()*0.012
  motor_sound.volume_db=-9+linear_to_db(maxf(operator.game.volume,0.0001))
  if downed>0.0:downed+=delta
  if piloting and ((health<=0 and (downed<=0.0 or downed>FALL_SHOWN or landed)) or (battery<=0 and landed)):
   if on_lost.is_valid():on_lost.call()
   else:operator.field_rig.cancel()
+
+# One step of the flight controller and the airframe under it. The sticks:
+# x right, y up, z back.
+func fly_controlled(stick: Vector3, fail_safe: bool, delta: float) -> void:
+ floor_height=ground_clearance()
+ # On its legs with the motors idling: it stays where it stands until the
+ # throttle lifts it.
+ var on_legs := is_on_floor() and stick.y<=0.05
+ if on_legs:yaw_target=yaw
+ else:yaw+=clampf(wrapf(yaw_target-yaw,-PI,PI)*8.0,-YAW_RATE,YAW_RATE)*delta
+ var heading := Basis(Vector3.UP,yaw)
+ var planar := Vector3(velocity.x,0,velocity.z)
+ var box := fence()
+ # Level flight: the sticks ask for a speed; centred, it brakes and holds.
+ var target := Vector3.ZERO
+ var asked := heading*Vector3(stick.x,0,stick.z)
+ if asked.length()>0.05:
+  target=asked.limit_length(1.0)*(SPORT_SPEED if sport else NORMAL_SPEED);hold_point=Vector3.INF
+ elif hold_point==Vector3.INF:
+  if planar.length()<0.4:hold_point=Vector3(clampf(global_position.x,box.position.x,box.end.x),0,clampf(global_position.z,box.position.y,box.end.y))
+ else:target=(Vector3(hold_point.x-global_position.x,0,hold_point.z-global_position.z)*HOLD_GAIN).limit_length(3.0)
+ # The geofence: it slows to a stop at the edge of the map, back if past it.
+ target.x=clampf(target.x,minf((box.position.x-global_position.x)*0.8,2.0),maxf((box.end.x-global_position.x)*0.8,-2.0))
+ target.z=clampf(target.z,minf((box.position.y-global_position.z)*0.8,2.0),maxf((box.end.y-global_position.z)*0.8,-2.0))
+ # Height: the throttle asks for a climb or a descent; centred, it holds.
+ var climb := 0.0
+ if fail_safe:climb=-1.5;hold_height=INF
+ elif absf(stick.y)>0.05:
+  climb=stick.y*((SPORT_CLIMB if sport else NORMAL_CLIMB) if stick.y>0 else DESCENT);hold_height=INF
+ elif hold_height==INF:
+  if absf(velocity.y)<0.3:hold_height=global_position.y
+ else:climb=clampf((hold_height-global_position.y)*1.2,-2.0,2.0)
+ # Close over the ground the descent eases off: it sets down at ~1 m/s.
+ climb=maxf(climb,-(0.8+1.2*floor_height))
+ var height: float=global_position.y-operator.game.district.ground_height(global_position)
+ if height>ceiling:climb=minf(climb,maxf((ceiling-height)*0.8,-2.0))
+ # The lean that gives the acceleration wanted, against its own drag.
+ var resist := -drag(velocity)
+ var error := target-planar
+ var wanted := error*SPEED_GAIN+wind_trim+Vector3(resist.x,0,resist.z)
+ var support := maxf(GRAVITY+(climb-velocity.y)*CLIMB_GAIN+climb_trim+resist.y,2.0)
+ var lean := heading.inverse()*wanted
+ var tilt := Vector2(atan(-lean.z/support),atan(lean.x/support))
+ var most := SPORT_TILT if sport else NORMAL_TILT
+ var saturated := tilt.length()>most
+ if saturated:tilt=tilt.normalized()*most
+ if on_legs:
+  tilt=Vector2.ZERO;hold_point=Vector3.INF;hold_height=INF;wind_trim=Vector3.ZERO;climb_trim=0.0
+ elif not touching:
+  # The wind trim: what holds it against a steady wind (not while it
+  # leans all it may, nor pressed against something).
+  if not saturated:wind_trim=(wind_trim+error*TRIM_GAIN*delta).limit_length(GRAVITY*tan(most)*0.8)
+  if absf(climb-velocity.y)<1.0:climb_trim=clampf(climb_trim+(climb-velocity.y)*TRIM_GAIN*delta,-3.0,3.0)
+ airframe=airframe.slerp(Basis(Vector3.RIGHT,-tilt.x)*Basis(Vector3.BACK,-tilt.y),1-exp(-delta*ATTITUDE_RATE)).orthonormalized()
+ var up := heading*airframe.y
+ var wanted_lift := 0.25*GRAVITY if on_legs else clampf(support/maxf(up.y,0.5),0.25*GRAVITY,max_lift())
+ lift=lerpf(lift,wanted_lift,1-exp(-delta*16))
+ if on_legs:
+  velocity.x=move_toward(velocity.x,0,delta*8)
+  velocity.z=move_toward(velocity.z,0,delta*8)
+  velocity+=(up*lift+Vector3.DOWN*GRAVITY)*delta
+ else:velocity+=(up*lift+Vector3.DOWN*GRAVITY+drag(velocity-air()))*delta
+
+# Drag of the air moving past at this velocity (m/s²).
+func drag(air_velocity: Vector3) -> Vector3:
+ return -air_velocity*(ROTOR_DRAG+BODY_DRAG*air_velocity.length())
+
+# The air it flies in: the steady wind and its gusts, a field drifting with
+# the wind and changing as it goes (no random numbers: the same for every run).
+func air() -> Vector3:
+ if wind==Vector3.INF:
+  var ballistics: Variant=operator.game.get("ballistics")
+  wind=ballistics.wind if ballistics!=null else Vector3.ZERO
+ var t := air_clock
+ var p := global_position-wind*t
+ var gust := Vector3(sin(t*0.37+p.x*0.031)*0.6+sin(t*1.13+p.z*0.047+1.0)*0.4,(sin(t*0.71+p.z*0.05)*0.6+sin(t*1.7+p.x*0.04)*0.4)*0.25,sin(t*0.43+p.z*0.029+2.0)*0.6+sin(t*1.31+p.x*0.043+0.5)*0.4)
+ return wind+gust*(1.0+wind.length()*0.25)
+
+# Thrust the pack can give: the voltage sags in the last quarter of the charge.
+func max_lift() -> float:return MAX_LIFT*(0.8+0.2*clampf(battery/0.25,0.0,1.0))
+
+# The geofence, x and z: the battlefield, or the whole operation area round
+# the great assault (the 400 m square of the old maps held the drone back
+# from far out there).
+func fence() -> Rect2:
+ if limit>0.0:return Rect2(-limit,-limit,limit*2,limit*2)
+ var district: Node3D=operator.game.district
+ if is_instance_valid(district.operation_area):
+  var half: float=district.operation_area.data.half-60.0
+  return Rect2(-half,-half,half*2,half*2)
+ if district.map_id==TrainingRange.ID:return Rect2(-200,-415,400,670)
+ return Rect2(-195,-195,390,390)
+
+# The flight mode for the goggles.
+func mode_text() -> String:
+ if not armed:return "МОТОРИ ВИМКНЕНО"
+ if landed:return "НА ЗЕМЛІ"
+ var text := "S · СПОРТ" if sport else "N"
+ if hold_point!=Vector3.INF and hold_height!=INF:text+=" · ЗАВИСАННЯ"
+ return text
 
 # A rifle round through it, or fragments of a burst nearby: a quadcopter of
 # this class does not fly on with a motor, a prop arm or the battery hit.

@@ -78,10 +78,10 @@
  },
  {
   "output": "pkm",
-  "source": "dvids_506875_pk",
-  "start": 18.735,
-  "duration": 1.1,
-  "note": "last shot of a 4-round PK burst; mono, high-pass 55 Hz, 44.1 kHz, fade-out 120 ms, peak -2 dBFS; sha256 c37ede2ce108b246734aa34aafa712971efd37a703acdbb3e25d0acb7109dd5b"
+  "source": "dvids_706007_pkm",
+  "start": 66.1885,
+  "duration": 0.62,
+  "note": "last shot of a 3-round PKM burst, camera over the gunner's shoulder; mono, high-pass 55 Hz, 44.1 kHz, fade-out 120 ms (cut before a 150 Hz camera hum in the tail), peak -2 dBFS; sha256 f0cd0213186b9164469a5eb80f6edbec474239d96765118b9013297097a40686"
  },
  {
   "output": "rpg7_launch",
@@ -96,5 +96,54 @@
   "start": 276.152,
   "duration": 0.295,
   "note": "M72 LAW report standing in for the RPG-22 (motor burns in the tube in both); cut before the thump at 0.30 s, fade-out 80 ms; sha256 17a1646d263a91eefeb25e2c5d89ac153856c9d19bd23bae9485902aac2eb385"
+ },
+ {
+  "output": "ak_bolt_back",
+  "source": "freesound_171632_wasr_rpk_back",
+  "start": 0.16,
+  "duration": 0.55,
+  "note": "WASR RPK charging handle pulled back; mono, -6 dB headroom, high-pass 55 Hz, 44.1 kHz 16-bit, fade-in 3 ms, fade-out 150 ms, peak -2 dBFS; sha256 e1589f88e6b7263c60a46a5f9537078783cefe7b065f205affb5e288ca09c675"
+ },
+ {
+  "output": "ak_bolt_release",
+  "source": "freesound_171631_wasr_rpk_forward",
+  "start": 0.035,
+  "duration": 0.6,
+  "note": "WASR RPK charging handle let go, carrier slams home; mono, -6 dB headroom, high-pass 55 Hz, 44.1 kHz 16-bit, fade-in 3 ms, fade-out 250 ms, peak -2 dBFS; sha256 0b3880c267cd786101cf37ad8aeaa021de46ca9b24e03ce60bcbcdf663a63abb"
+ },
+ {
+  "output": "pkm_cover_open",
+  "source": "dvids_706007_pkm",
+  "start": 16.836,
+  "duration": 0.4,
+  "note": "PKM feed cover unlatched and swung up; decoded 48 kHz stereo, mono 44.1 kHz, high-pass 250 Hz twice, sox noisered 0.25 with a profile from 17.32-17.77 s, then mono, -6 dB headroom, high-pass 55 Hz, 44.1 kHz 16-bit, fade-in 3 ms, fade-out 120 ms, peak -2 dBFS; sha256 13bf03438ccfa2b879660cc815c30b21a800eb8778613a50d6e4ff73aff080e0"
+ },
+ {
+  "output": "pkm_belt",
+  "source": "dvids_706007_pkm",
+  "start": 23.4,
+  "duration": 0.7,
+  "note": "PKM belt worked on the open feed tray (three clicks); decoded 48 kHz stereo, mono 44.1 kHz, high-pass 250 Hz twice, sox noisered 0.25 with a profile from 22.80-23.30 s, then mono, -6 dB headroom, high-pass 55 Hz, 44.1 kHz 16-bit, fade-in 3 ms, fade-out 120 ms, peak -2 dBFS; sha256 27b2f1d48b92b6c6f824d78a2905fe13d6583e5a8c61e3bcafbc0bf7a2862f7d"
+ },
+ {
+  "output": "pkm_cover_close",
+  "source": "freesound_142892_ak47_chambering",
+  "start": 6.36,
+  "duration": 0.45,
+  "note": "stand-in: AK carrier slamming home for the PKM feed cover snapping shut; mono, -6 dB headroom, high-pass 55 Hz, 44.1 kHz 16-bit, fade-in 3 ms, fade-out 200 ms, peak -2 dBFS; sha256 1caeb181b919c534804c7d1c67c20264ec48348a0294454c6f2da068306bda3a"
+ },
+ {
+  "output": "pkm_bolt_back",
+  "source": "freesound_855599_m82a1_charging",
+  "start": 0.01,
+  "duration": 0.42,
+  "note": "stand-in: Barrett M82A1 charging handle pulled back (release left out) for the PKM bolt; 48 kHz source; mono, -6 dB headroom, high-pass 55 Hz, 44.1 kHz 16-bit, fade-in 3 ms, fade-out 60 ms, peak -2 dBFS; sha256 c241207fe5a7ca065f729355c74e12785e44fbecc8aa5e7469ac05a4fdd06318"
+ },
+ {
+  "output": "pkm_handle_forward",
+  "source": "freesound_174059_m4_charging_handle",
+  "start": 0.42,
+  "duration": 0.5,
+  "note": "stand-in: AR-15 charging handle pushed forward alone, bolt held back, for the PKM handle; mono, -6 dB headroom, high-pass 55 Hz, 44.1 kHz 16-bit, fade-in 3 ms, fade-out 200 ms, peak -2 dBFS; sha256 2495f78e91667bf0997a9df10060e787472e647fec789a54f79917af4cc353f8"
  }
 ]

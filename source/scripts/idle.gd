@@ -23,7 +23,7 @@ static func stop(actor: Hostile) -> void:
  if not is_instance_valid(actor) or actor.idle.is_empty():return
  var partner: Variant=actor.idle.get("partner")
  actor.idle={}
- if partner is Hostile and is_instance_valid(partner) and not partner.idle.is_empty() and partner.idle.get("partner")==actor:
+ if is_instance_valid(partner) and partner is Hostile and not partner.idle.is_empty() and partner.idle.get("partner")==actor:
   partner.idle.partner=null;partner.idle.left=0.0
  if is_instance_valid(actor.n_rifle):actor.n_rifle.visible=true
 
@@ -85,11 +85,16 @@ static func near(actor: Hostile, anchor: Vector3, radius: float) -> Vector3:
  var p:=anchor+Vector3(randf_range(-radius,radius),0,randf_range(-radius,radius))
  return snap(actor,p)
 
+# A spot on the walking grid near the point. Off the grid (the column's field
+# two kilometres south of the village) the point stays where it is, on the
+# ground: the nearest cell would be on the edge of the village, and the men
+# would walk off to it.
 static func snap(actor: Hostile, point: Vector3) -> Vector3:
  var district: Node3D=actor.game.district
- if district.grid==null:return point
- var cell: Vector2i=district.nearest_cell(district.navigation_cell(point))
- return district.navigation_position(cell)+Vector3.UP*0.05
+ var cell: Vector2i=district.navigation_cell(point) if district.grid!=null else Vector2i.ZERO
+ if district.grid==null or not district.grid.is_in_boundsv(cell):
+  return Vector3(point.x,district.ground_height(point)+0.05,point.z)
+ return district.navigation_position(district.nearest_cell(cell))+Vector3.UP*0.05
 
 # Where he goes now (Hostile asks every tick).
 static func destination(actor: Hostile, delta: float) -> Vector3:
@@ -117,7 +122,7 @@ static func look(actor: Hostile, walking: Vector3) -> Vector3:
  var idle: Dictionary=actor.idle
  if walking.length()>0.1:return walking
  var partner: Variant=idle.partner
- if idle.activity=="talk" and partner is Hostile and is_instance_valid(partner):return partner.global_position-actor.global_position
+ if idle.activity=="talk" and is_instance_valid(partner) and partner is Hostile:return partner.global_position-actor.global_position
  var far: Vector3=idle.look
  var away:=far-actor.global_position
  away.y=0

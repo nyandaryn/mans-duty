@@ -811,6 +811,22 @@ func animate_pose(delta: float, moving: bool) -> void:
 func pose_arm(side: String, wrist: Vector3) -> void:
 	CharacterArt.pose_arm(model,side,wrist)
 
+# The line of the bore for a point: turned up by the sight set for the
+# range, so the round comes down on the point. Inside the direct-fire range
+# a soldier keeps his direct-fire setting and aims at the lower edge, which
+# comes to the same; beyond it he judges the range by eye (the sniper on the
+# PSO-1's rangefinder scale) and sets the sight, and his error is the
+# round's. The error is his own for a band of 50 m, not drawn from the
+# global RNG (seeded scenarios keep their course).
+func sighted(origin: Vector3, point: Vector3, role: String) -> Vector3:
+	var line := origin.direction_to(point)
+	if absf(line.y)>0.98:return line
+	var distance := origin.distance_to(point)
+	if distance>FlightModel.direct_fire(weapon.id):
+		var judged := float(absi(hash([get_instance_id(),int(distance/50.0)]))%2001)/1000.0-1.0
+		distance*=1.0+judged*(0.06 if role=="sniper" else 0.12)
+	return line.rotated(line.cross(Vector3.UP).normalized(),FlightModel.aim_angle(weapon.id,distance))
+
 func shoot(player: Node3D, distance: float) -> bool:
 	if not concussion.can_fire():return false
 	if dead or (friendly and not fire_at_will) or reaction_left>0 or sprinting or wound_timer>0 or treatment_time>0 or collapse>0.01 or arm_wound>=0.5:return false
@@ -849,7 +865,7 @@ func shoot(player: Node3D, distance: float) -> bool:
 	spread+=concussion.severity*0.05
 	if aim_weight<0.7 or panic_time>0:spread+=0.055
 	if suppressive_fire:spread=maxf(spread,0.045 if role!="mg" else 0.022)
-	var direction := origin.direction_to(end)+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randf_range(-spread,spread),randf_range(-spread,spread),randf_range(-spread,spread))
+	var direction := sighted(origin,end,role)+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randf_range(-spread,spread),randf_range(-spread,spread),randf_range(-spread,spread))
 	game.ballistics.launch(origin,direction.normalized(),weapon.id,68,self)
 	game.spatial_shot(weapon.id,origin)
 	game.alert_opponents(self,origin)
@@ -943,7 +959,7 @@ func shoot_drone() -> bool:
 	# A small target moving across the sky: wider than at a man, wider the
 	# further it is, and wider still until the rifle has followed it a while.
 	var spread := 0.011+0.006*minf(2.0,origin.distance_to(drone_aim)/60.0)+suppression*0.006+concussion.severity*0.05+(0.012 if drone_aim_time<1.4 else 0.0)
-	var direction := origin.direction_to(drone_aim)+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randf_range(-spread,spread),randf_range(-spread,spread),randf_range(-spread,spread))
+	var direction := sighted(origin,drone_aim,kit_id())+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randf_range(-spread,spread),randf_range(-spread,spread),randf_range(-spread,spread))
 	game.ballistics.launch(origin,direction.normalized(),weapon.id,68,self)
 	game.spatial_shot(weapon.id,origin)
 	game.alert_opponents(self,origin)

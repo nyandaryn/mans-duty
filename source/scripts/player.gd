@@ -1,11 +1,23 @@
 class_name Operator
 extends CharacterBody3D
 
+const RADIAL := preload("res://scripts/radial_menu.gd")
+# The universal cancel: the key left of 1 (~) or the mouse's back button.
+const CANCEL_KEY := KEY_QUOTELEFT
+const CANCEL_LABEL := "~"
+const HANDLING_FALLBACK := {"ak_bolt_back":"bolt_pull","ak_bolt_release":"bolt","pkm_cover_open":"mag_out","pkm_cover_close":"mag_in","pkm_belt":"mag_out","pkm_bolt_back":"bolt_pull","pkm_handle_forward":"bolt"}
+
 var backpack := BackpackState.new()
 var field_rig: FieldRig
 var launcher: LauncherRig
 var concussion := ConcussionState.new()
 var medical_uid := -1
+# The ring of choices for 4 / 5, R with the RPG-7, J / Y (RADIAL), and what
+# was taken from it last, by group: a tap takes that again.
+var radial: RADIAL
+var radial_choice := {}
+var cancel_notice := ""
+var cancel_notice_left := 0.0
 
 var inspection_combo := false
 var outfit_id := "ua_pixel"
@@ -156,6 +168,13 @@ func setup(owner_game: Node3D, primary: String, secondary: String) -> void:
 	world_body=OperatorBody.new()
 	add_child(world_body)
 	world_body.setup(self)
+	var overlay := CanvasLayer.new()
+	overlay.name="RadialLayer"
+	overlay.layer=2
+	add_child(overlay)
+	radial=RADIAL.new()
+	overlay.add_child(radial)
+	radial.setup(self)
 
 func current() -> WeaponState:
 	return weapons[slot]
@@ -191,7 +210,9 @@ func update_pose(delta: float) -> void:
 	gun_kick=move_toward(gun_kick,0,delta*0.17)
 	sway=sway.lerp(Vector2.ZERO,minf(delta*8,1))
 	viewmodel.animate(current(),delta)
-	for sound_name in viewmodel.sound_events:game.sound(sound_name,-10)
+	# Handling sounds of a weapon's own: until a recording exists, the nearest
+	# generic one.
+	for sound_name in viewmodel.sound_events:game.sound(sound_name if game.sounds.has(sound_name) else HANDLING_FALLBACK.get(sound_name,"bolt"),-10)
 	viewmodel.sound_events.clear()
 	var movement := minf(Vector2(velocity.x,velocity.z).length(),1)
 	var bob := Vector3(sin(step_time/2)*0.003,sin(step_time)*0.003,0)*movement*(1-ads_weight*0.85)
@@ -251,7 +272,12 @@ func switch_weapon(index: int) -> void:
 	game.sound("click",-15)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not game.running or game.paused or (game.commands_open or game.inventory_open): return
+	if not game.running or game.paused: return
+	# The universal cancel works with the inventory open as well.
+	if is_cancel_event(event) and not game.commands_open:
+		cancel_action()
+		return
+	if game.commands_open or game.inventory_open: return
 	if is_vaulting():return
 	if concussion.blackout_left>0 or concussion.incapacitated():return
 	# In the drone Ctrl descends; it never changes the operator's stance there.
@@ -263,6 +289,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				crouch_requested=true
 			else:crouch_requested=not crouch_requested
 		elif event.is_action_pressed("sprint") and crouch_requested and not prone_requested:crouch_requested=false
+	if radial_input(event):return
 	if launcher.active():launcher.handle_input(event);return
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode in [KEY_4,KEY_5]:
 		if event.physical_keycode==KEY_4:launcher.toggle()
@@ -282,7 +309,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		field_rig.drone.handle_input(event)
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_F:
-		if not field_rig.recover_drone() and not game.grad.interact():game.crew.interact()
+		# F again while folding the drone: it stays out.
+		if field_rig.mode=="recover_drone":cancel_action()
+		elif not field_rig.recover_drone() and not game.grad.interact():game.crew.interact()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_N:
 		game.crew.toggle_deploy()
@@ -301,19 +330,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			scope_adjust_time=0.35
 			game.sound("click",-18)
 			return
-	if event is InputEventKey and event.pressed and not event.echo and current().id=="pkm":
-		match event.physical_keycode:
-			KEY_X:
-				toggle_bipod()
-				return
-			KEY_PAGEUP,KEY_PAGEDOWN:
-				# The slider of the frame sight, a hundred metres a notch.
-				if current().phase=="" and scope_adjust_time<=0:
-					var w: WeaponState=current()
-					w.scope_zero=clampi(w.scope_zero+(100 if event.physical_keycode==KEY_PAGEUP else -100),100,1500)
-					scope_adjust_time=0.35
-					game.sound("click",-18)
-				return
+	if event is InputEventKey and event.pressed and not event.echo and current().id=="pkm" and event.physical_keycode==KEY_X:
+		toggle_bipod()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and current().id in WeaponState.SIGHT_RANGES and event.physical_keycode in [KEY_PAGEUP,KEY_PAGEDOWN]:
+		# The slider of the iron sight (the PKM's frame, the AK-74's tangent
+		# leaf, the M16A2's knob), a hundred metres a notch.
+		if current().phase=="" and scope_adjust_time<=0 and current().step_sight(event.physical_keycode==KEY_PAGEUP):
+			scope_adjust_time=0.35
+			game.sound("click",-18)
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
 		var aim_scale := 1.0/field_rig.zoom if field_rig.mode=="rangefinder" else 0.22 if aim and current().id=="svd" else (0.65 if aim else 1.0)
 		var yaw_delta: float= -event.relative.x*sensitivity*aim_scale
@@ -329,6 +355,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("fire") and field_rig.mode=="rangefinder":field_rig.measure()
 		elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
 			field_rig.step_zoom(1 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -1)
+		return
+	# H again while treating: the kit back in its pouch.
+	if event.is_action_pressed("bandage") and not event.is_echo() and bandage_time>0:
+		cancel_action()
 		return
 	if event.is_action_pressed("bandage"):begin_bandage()
 	if bandage_time>0:return
@@ -381,6 +411,8 @@ func _physics_process(delta: float) -> void:
 	field_rig.tick(delta)
 	launcher.tick(delta)
 	update_bipod(delta)
+	cancel_notice_left=maxf(0,cancel_notice_left-delta)
+	if cancel_notice_left==0:cancel_notice=""
 	if bandage_time>0:
 		bandage_time=maxf(0,bandage_time-delta)
 		if bandage_time==0:
@@ -404,14 +436,14 @@ func _physics_process(delta: float) -> void:
 		vault.tick(delta)
 		update_pose(delta)
 		return
-	var sustained: bool=not (game.commands_open or game.inventory_open) and ((current().mode()=="АВТО" and Input.is_action_pressed("fire")) or burst>0)
+	var sustained: bool=not (game.commands_open or game.inventory_open) and ((current().mode()=="АВТО" and Input.is_action_pressed("fire") and not hands_held()) or burst>0)
 	cooldown=cooldown-delta if sustained and firing_sequence_active else maxf(0,cooldown-delta)
 	if not sustained:firing_sequence_active=false
 	switch_delay=maxf(0,switch_delay-delta)
-	aim=not (game.commands_open or game.inventory_open) and Input.is_action_pressed("aim") and current().phase=="" and switch_delay<=0 and blind_mode==0 and bandage_time<=0 and arm_injury<0.5 and injury_time<=0 and not field_rig.active()
+	aim=not (game.commands_open or game.inventory_open) and Input.is_action_pressed("aim") and not hands_held() and current().phase=="" and switch_delay<=0 and blind_mode==0 and bandage_time<=0 and arm_injury<0.5 and injury_time<=0 and not field_rig.active()
 	var crouch := crouched
 	if not concussion.can_aim():aim=false
-	var aiming_weapon := aim or (launcher.mode=="ready" and Input.is_action_pressed("aim") and concussion.can_aim())
+	var aiming_weapon := aim or (launcher.mode=="ready" and Input.is_action_pressed("aim") and not hands_held() and concussion.can_aim())
 	var sprint := Input.is_action_pressed("sprint") and not aiming_weapon and not crouch and arm_injury<0.5 and leg_injury<0.5 and pain<0.5
 	if concussion.active():sprint=false
 	var input := Vector2.ZERO if (game.commands_open or game.inventory_open or anchor.is_valid()) else Input.get_vector("left","right","forward","back")
@@ -462,7 +494,7 @@ func _physics_process(delta: float) -> void:
 	update_trigger()
 
 func update_trigger() -> void:
-	var automatic := current().mode()=="АВТО" and Input.is_action_pressed("fire")
+	var automatic := current().mode()=="АВТО" and Input.is_action_pressed("fire") and not hands_held()
 	var emitted := 0
 	while (automatic or burst>0) and cooldown<=0.000001 and emitted<8:
 		if not shoot(true):
@@ -503,9 +535,11 @@ func shoot(preserve_remainder: bool=false) -> bool:
 	game.alert_bots(global_position)
 	var profile: Dictionary=Ballistics.PROFILES[current().id]
 	var zero := float(profile.zero)
-	if current().id=="pkm":zero=float(current().scope_zero)
+	if current().id in WeaponState.SIGHT_RANGES:zero=float(current().scope_zero)
 	var sight_height := float(viewmodel.get_meta("sight_height"))
-	# Physical bore is below the iron-sight line. Fixed zero, no target snapping.
+	# Physical bore is below the iron-sight line: the round crosses it at the
+	# sight's setting, no target snapping. On «П» (AK-74) the round rises up to
+	# about 0.4 m over the line by 220 m: aim at the lower edge of a target.
 	var elevation := FlightModel.zero_angle(current().id,sight_height,zero)
 	# SVD's bore is physical; its optical reticle moves for elevation/windage.
 	if current().id=="svd":elevation=0
@@ -795,6 +829,192 @@ func begin_bandage() -> bool:
 	if bandages<=0:return field_rig.request(backpack.first("medkit"))
 	start_medical()
 	return true
+
+# --- The ring of choices --------------------------------------------------------
+# The fire and aim buttons wait while the ring is up and on the press that
+# closed it.
+func hands_held() -> bool:return radial!=null and radial.blocks_weapon()
+
+# A key that takes something out of the pack with more than one kind of it
+# there: a tap acts at once with the kind taken last, held it opens the ring.
+# One kind only, or something already in hand: the key works as before.
+func radial_input(event: InputEvent) -> bool:
+	if radial==null or not (event is InputEventKey):return false
+	if not event.pressed:return radial.release(event.physical_keycode)
+	if radial.engaged():return event.physical_keycode==radial.key
+	if event.echo:return false
+	match event.physical_keycode:
+		KEY_4,KEY_5:return launcher_key(event.physical_keycode)
+		KEY_R:return round_key(KEY_R)
+		KEY_J,KEY_Y:return drone_key(event.physical_keycode)
+	return false
+
+func launcher_key(code: int) -> bool:
+	var choices := launcher_choices()
+	if choices.size()<2:return false
+	if launcher.active():
+		# In the hands 4 puts it back at once; 5 held — the one to change to.
+		if code==KEY_4 or launcher.mode not in ["draw","ready"]:return false
+		radial.arm(code,"launcher","ГРАНАТОМЕТ",choices,launcher.kind,radial_pick,func():launcher.cycle())
+		return true
+	if launcher.busy_reason()!="":return false
+	var tap := func():
+		if code==KEY_4:launcher.equip(-1,preferred("launcher"))
+		else:launcher.cycle()
+	radial.arm(code,"launcher","ГРАНАТОМЕТ",choices,preferred("launcher"),radial_pick,tap)
+	return true
+
+func round_key(code: int) -> bool:
+	if not (launcher.active() and launcher.kind=="rpg7" and launcher.mode=="ready" and not launcher.loaded()):return false
+	var choices := round_choices()
+	if choices.size()<2:return false
+	radial.arm(code,"round","ПОСТРІЛ ДО РПГ-7",choices,preferred("round"),radial_pick,func():launcher.load_round(preferred("round")))
+	return true
+
+func drone_key(code: int) -> bool:
+	if field_rig.mode!="" or field_rig.active() or launcher.active():return false
+	var choices := drone_choices()
+	if choices.size()<2:return false
+	var tap := func():
+		if code==KEY_J:field_rig.toggle_drone()
+		else:field_rig.toggle_fpv(preferred("fpv"))
+	radial.arm(code,"drone","ДРОН",choices,"recon_drone" if code==KEY_J else preferred("fpv"),radial_pick,tap)
+	return true
+
+func launcher_choices() -> Array:
+	var list := []
+	for which in ["rpg7","rpo_a","rpg22"]:
+		var count := backpack.count(which)
+		if count<=0:continue
+		var entry := backpack.item(backpack.first(which))
+		var detail := "ОДНОРАЗОВИЙ"
+		if which=="rpg7":detail=(str(LauncherRig.ROUND_TITLE.get(str(entry.get("round","pg7vl")),"ПГ-7ВЛ"))+" У ТРУБІ") if entry.get("loaded",false)==true else "НЕ ЗАРЯДЖЕНО"
+		elif which=="rpg22":detail="РОЗКЛАДЕНИЙ" if entry.get("extended",false)==true else "СКЛАДЕНИЙ"
+		var in_hands: bool=launcher.active() and launcher.kind==which
+		list.append({"id":which,"title":LauncherRig.SHORT[which],"count":count,"detail":"У РУКАХ" if in_hands else detail,"enabled":not in_hands})
+	return list
+
+func round_choices() -> Array:
+	var list := []
+	for which in launcher.rpg7_rounds():
+		list.append({"id":which,"title":LauncherRig.ROUND_TITLE[which],"count":backpack.count(which),"detail":{"pg7vl":"КУМУЛЯТИВНИЙ","og7v":"ОСКОЛКОВИЙ"}.get(which,""),"enabled":true})
+	return list
+
+func drone_choices() -> Array:
+	var list := []
+	var recon := backpack.count("recon_drone")
+	var parked := field_rig.recon_parked()
+	if recon>0 or parked:
+		list.append({"id":"recon_drone","title":"РОЗВІДДРОН","count":recon,"detail":"РОЗКЛАДЕНИЙ · ОКУЛЯРИ" if parked else "РОЗКЛАСТИ","enabled":true})
+	for which in Equipment.FPV:
+		var count := backpack.count(which)
+		if count>0:list.append({"id":which,"title":Equipment.ITEMS[which].short,"count":count,"detail":"КУМУЛЯТИВНИЙ" if which=="fpv_heat" else "ОСКОЛКОВИЙ","enabled":true})
+	return list
+
+# The kind a tap takes: the one picked from the ring last, while the pack
+# still holds it; otherwise the first in the usual order.
+func preferred(group: String) -> String:
+	var chosen := str(radial_choice.get(group,""))
+	match group:
+		"launcher":
+			return chosen if chosen!="" and launcher.carried(chosen) else launcher.next_kind()
+		"round":
+			if chosen!="" and backpack.first(chosen)>=0:return chosen
+			var rounds := launcher.rpg7_rounds()
+			return str(rounds[0]) if not rounds.is_empty() else ""
+		"fpv":
+			if chosen!="" and backpack.first(chosen)>=0:return chosen
+			var uid := field_rig.first_fpv()
+			return str(backpack.item(uid).kind) if uid>=0 else ""
+	return chosen
+
+func radial_pick(group: String, id: String) -> void:
+	match group:
+		"launcher":
+			radial_choice["launcher"]=id
+			if launcher.active():
+				if id!=launcher.kind and launcher.mode in ["draw","ready"]:
+					launcher.queued=id
+					launcher.stow()
+			else:launcher.equip(-1,id)
+		"round":
+			radial_choice["round"]=id
+			launcher.load_round(id)
+		"drone":
+			if id=="recon_drone":field_rig.toggle_drone()
+			else:
+				radial_choice["fpv"]=id
+				field_rig.toggle_fpv(id)
+
+# --- The universal cancel ---------------------------------------------------------
+func is_cancel_event(event: InputEvent) -> bool:
+	if event is InputEventKey:return event.pressed and not event.echo and event.physical_keycode==CANCEL_KEY
+	if event is InputEventMouseButton:return event.pressed and event.button_index==MOUSE_BUTTON_XBUTTON1
+	return false
+
+# What the soldier is doing now that takes time and can be called off ("" —
+# nothing).
+func timed_action() -> String:
+	if launcher.active():
+		var short: String=LauncherRig.SHORT[launcher.kind]
+		match launcher.mode:
+			"draw":return "ЗНЯТТЯ %s З КРІПЛЕННЯ" % short
+			"stow":return "ПОВЕРНЕННЯ %s НА КРІПЛЕННЯ" % short
+			"load":return "ЗАРЯДЖАННЯ РПГ-7"
+			"arm":return "ПЕРЕВЕДЕННЯ РПГ-22 В БОЙОВЕ ПОЛОЖЕННЯ"
+			"spent":return "ВІДКИДАННЯ ТРУБИ"
+		return ""
+	if field_rig.mode!="" or field_rig.transfer().active:
+		match field_rig.mode:
+			"access":return "ДІСТАВАННЯ З НАПЛІЧНИКА"
+			"fpv_place":return "FPV-ДРОН НА ЗЕМЛЮ"
+			"goggles":return "НАДЯГАННЯ ОКУЛЯРІВ"
+			"recover_drone":return "СКЛАДАННЯ ДРОНА"
+			"stow":return "ПОВЕРНЕННЯ В НАПЛІЧНИК"
+			"belt":return "АПТЕЧКА В ПІДСУМОК НА ПОЯСІ"
+			"pouch":return "ДАЛЕКОМІР З ПІДСУМКА"
+			"pouch_stow":return "ДАЛЕКОМІР У ПІДСУМОК"
+			"work":return field_rig.work_title
+			"":return "ЗАМІНА СТРІЧКИ" if field_rig.transfer().belt else "СПОРЯДЖЕННЯ МАГАЗИНА"
+		return ""
+	if bandage_time>0:return "АПТЕЧКА"
+	if current().phase not in ["","repack"]:return current().status()
+	if mortar_relaying():return "ПЕРЕНЕСЕННЯ ДВОНОГИ МІНОМЕТА"
+	return ""
+
+func mortar_relaying() -> bool:
+	return game.crew!=null and is_instance_valid(game.crew.mortar) and game.crew.mortar.relay_left>0
+
+# The line the HUD shows under a timed action.
+func cancel_hint() -> String:
+	var what := timed_action()
+	if what=="":return ""
+	var hands := launcher.active() or field_rig.mode!="" or field_rig.transfer().active
+	return CANCEL_LABEL+(" АБО КРОК" if field_rig.mode=="work" else "")+" — СКАСУВАТИ"+("" if hands else " · "+what)
+
+# ~ (or the mouse's back button): whatever takes time stops; nothing is lost
+# (see interrupt() in LauncherRig, FieldRig, WeaponState, Mortar).
+func cancel_action() -> bool:
+	if radial!=null and radial.engaged():
+		radial.close()
+		return true
+	var what := timed_action()
+	if what=="":return false
+	var done := false
+	if launcher.active():done=launcher.interrupt()
+	elif field_rig.mode!="" or field_rig.transfer().active:done=field_rig.interrupt()
+	elif bandage_time>0:
+		# The kit goes back unused: it is spent only when the treatment ends.
+		bandage_time=0
+		medical_uid=-1
+		done=true
+	elif current().phase!="":done=current().interrupt()
+	elif mortar_relaying():done=game.crew.mortar.cancel_relay()
+	if done:
+		cancel_notice="СКАСОВАНО: "+what
+		cancel_notice_left=2.0
+		game.sound("click",-18)
+	return done
 
 # Fragments of a burst: what the vest keeps off (BlastSystem.detonate).
 func blast_protection(_where: Vector3) -> float:return VestKind.blast_factor(vest)

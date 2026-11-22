@@ -2,15 +2,24 @@ class_name Ballistics
 extends Node
 
 # Invisible projectiles; every physics step sweeps a segment to prevent tunnelling.
-# Speeds are representative game values, not ammunition-specific firing tables.
+# Speeds are the published muzzle velocities of the issue rounds; with the
+# G1 coefficients of FlightModel they give the direct-fire ranges of the
+# manuals (FlightModel.DIRECT_FIRE, tests/test_direct_fire.gd).
+# `zero` is the sight a weapon is carried on: the AK-74's «П» (the 400 m
+# setting of its tangent sight), the M16A2's 300 m battlesight (8/3), the
+# PKM's 4, on which a chest figure is hit up to 420 m aiming at its lower
+# edge. The SVD's PSO-1 starts on 1; pistols are zeroed at 25 m.
 const PROFILES = {
+	# 7N1 sniper round from the SVD: 830 m/s.
 	"svd": {"speed": 830.0, "zero": 100.0},
-	"ak74": {"speed": 880.0, "zero": 100.0},
-	"m16": {"speed": 940.0, "zero": 100.0},
+	# 7N6 from the AK-74: 900 m/s.
+	"ak74": {"speed": 900.0, "zero": 400.0},
+	# M855 from the M16A2's 20-inch barrel: 3100 ft/s.
+	"m16": {"speed": 945.0, "zero": 300.0},
 	"pm": {"speed": 315.0, "zero": 25.0},
 	"m9": {"speed": 365.0, "zero": 25.0},
 	# 57-N-323S LPS from the PKM: 825 m/s.
-	"pkm": {"speed": 825.0, "zero": 300.0}
+	"pkm": {"speed": 825.0, "zero": 400.0}
 }
 var game: Node3D
 var projectiles: Array[Dictionary] = []
@@ -41,6 +50,11 @@ func launch(origin: Vector3, direction: Vector3, weapon: String, damage: float, 
 	var areas: Array=shooter.hitboxes if shooter is Hostile else shooter.find_children("Hit_*","Area3D",true,false)
 	for area in areas:
 		if area.get_meta("actor",null)==shooter:projectiles[-1].exclude.append(area.get_rid())
+
+# The sight tables the bots lay their rifles by (about 50 ms, once a run,
+# rather than a stall at the first shot of the battle).
+func _ready() -> void:
+	for id in PROFILES:FlightModel.drop_table(id)
 
 func clear() -> void:
 	projectiles.clear()

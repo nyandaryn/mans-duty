@@ -196,6 +196,52 @@ func all_ready() -> bool:return ready_count()==crews.size()
 
 func fire() -> void:ordered=true
 
+# The skipped start of the great assault (BattleMode.skip_start): each crew's
+# work done at once — the launcher brought into action and laid on its
+# strongpoint, the crew in the cab — and the salvo fired at its own pace of a
+# rocket every half second, only faster (hasten): the defenders under it then
+# have, burst by burst, about the same time to get down as under a real one.
+# The launches and the rockets are unseen and unheard.
+func rush() -> void:
+	ordered=true
+	# The rockets already on their way too.
+	for shot in game.blasts.grads:
+		shot.quiet=true
+		var node=shot.get("node")
+		if is_instance_valid(node):(node as Node3D).visible=false
+	for crew in crews:
+		var vehicle: GradVehicle=crew.vehicle
+		if not is_instance_valid(vehicle):continue
+		for role in CREW:
+			var body: Node3D=crew.men[role]
+			if is_instance_valid(body):body.hide()
+		vehicle.set_lever(false)
+		if crew.state=="done":continue
+		vehicle.travel_lock=false;vehicle.springs_locked=true
+		if not vehicle.bracket_up:vehicle.set_bracket(true)
+		if vehicle.cover_on:vehicle.set_cover(false)
+		vehicle.power_takeoff=true;vehicle.shields_down=true
+		vehicle.battery_on=true;vehicle.fire_mode=1;vehicle.program_wound=true
+		for i in range(4000):
+			if lay(crew,0.05):break
+		crew.laid=true
+		crew.state="rush";crew.next=0.0
+
+# `steps` steps of the rushed salvo, each of `step` seconds: a launcher fires
+# its next rocket every half second, and the rockets fly on (the first step's
+# flight is BlastSystem's own of this frame).
+func hasten(steps: int, step: float) -> void:
+	for i in range(steps):
+		for crew in crews:
+			if crew.state!="rush":continue
+			var vehicle: GradVehicle=crew.vehicle
+			if not is_instance_valid(vehicle) or vehicle.remaining()==0:crew.state="done";continue
+			crew.next=float(crew.get("next",0.0))-step
+			if float(crew.next)<=0.0:
+				vehicle.launch_next(true)
+				crew.next=randf_range(0.45,0.55)
+		if i>0:game.blasts.fly_grads(step)
+
 func fired() -> int:
 	var count:=0
 	for vehicle in launchers:count+=vehicle.fired

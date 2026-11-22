@@ -34,6 +34,9 @@ func run():
  var body_position := player.global_position
  Input.action_press("jump");await frames(90);Input.action_release("jump")
  check(drone.global_position.y>2 and drone.armed,"Throttle lifts physical drone")
+ # Throttle centred: it stops the 6 m/s climb and holds the height.
+ await frames(60)
+ check(absf(drone.velocity.y)<0.5,"Centred throttle holds the height")
  check(player.global_position==body_position,"Pilot stays behind while drone flies")
  check(drone.battery<1 and drone.battery>0.9,"Motors consume persistent battery")
  Input.action_press("forward");await frames(50);Input.action_release("forward")
@@ -49,7 +52,8 @@ func run():
  check(not feed.visible,"No wrist picture while flying in goggles")
  rig.toggle_drone();await process_frame;await process_frame
  check(rig.mode=="" and drone.armed and not drone.piloting and feed.visible,"Goggles off: drone hovers, wrist display shows its camera")
- check(feed.eye.global_transform.is_equal_approx(drone.camera.global_transform) and feed.feed.render_target_update_mode!=SubViewport.UPDATE_DISABLED,"Wrist display renders from the drone camera")
+ # (The hovering drone rides the gusts: the picture is a frame behind it.)
+ check(feed.eye.global_position.distance_to(drone.camera.global_position)<0.05 and feed.eye.global_basis.z.dot(drone.camera.global_basis.z)>0.999 and feed.feed.render_target_update_mode!=SubViewport.UPDATE_DISABLED,"Wrist display renders from the drone camera")
  check(feed.telemetry.text.contains("АКБ") and feed.telemetry.text.contains("хв") and feed.telemetry.text.contains("АЗ"),"Wrist display shows battery time, bearing and range")
  check(player.current().id=="svd" and not rig.active(),"Rifle stays in hand with the wrist display")
  feed.toggle();await process_frame

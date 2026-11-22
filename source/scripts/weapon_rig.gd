@@ -9,6 +9,13 @@ var magazine: Node3D
 var bolt: Node3D
 var left_hand: Node3D
 var charging_handle: Node3D
+# The PKM's handle, apart from the carrier (pushed forward again by hand).
+var cocking_handle: Node3D
+var right_hand: Node3D
+var belt: Node3D
+const PKM_TRAVEL := 0.12
+const PKM_WORK_OFFSET := Vector3(-0.04,-0.04,-0.16)
+const PKM_WORK_ANGLES := Vector3(-0.10,0.04,0.28)
 var flash_node: MeshInstance3D
 var phase_offset := Vector3.ZERO
 var phase_rotation := Vector3.ZERO
@@ -35,6 +42,10 @@ func configure(id: String) -> void:
 	bolt=get_node("Bolt")
 	left_hand=get_node("LeftHand")
 	charging_handle=get_node_or_null("ChargingHandle")
+	cocking_handle=get_node_or_null("CockingHandle")
+	right_hand=get_node("RightHand")
+	set_meta("right_rest",right_hand.position)
+	belt=magazine.get_node_or_null("Belt")
 	# Brief gas flash at the muzzle, never a visible projectile or a beam.
 	var mesh := SphereMesh.new()
 	mesh.radius=0.012
@@ -83,7 +94,77 @@ func animate(state: WeaponState, delta: float) -> void:
 	if phase=="stow":evidence_rounds=int(state.held_old.get("rounds",0))
 	elif phase in ["draw","insert"]:evidence_rounds=int(state.held_new.get("rounds",0))
 	MagazineView.update(magazine,evidence_rounds)
-	if phase=="remove":
+	# The PKM's cover and belt: how far the cover is up, how far the belt's
+	# end is off the feed tray (hanging out of the box's mouth).
+	var cover_open := 1.0 if phase in ["stow","draw","ready_stow"] else 0.0
+	var belt_out := 1.0 if phase in ["stow","draw","ready_stow"] else 0.0
+	var right_target: Vector3=get_meta("right_rest")
+	var cover := get_node_or_null("FeedCover") as Node3D
+	var tray := Vector3(0.012,0.028,-0.095)
+	# With a box already in hand (after a look into it) the same steps.
+	if weapon_id=="pkm" and phase=="ready_remove":
+		cover_open=smoothstep(0.08,0.26,p)
+		belt_out=smoothstep(0.32,0.52,p)
+	elif weapon_id=="pkm" and phase=="ready_insert":
+		cover_open=1.0-smoothstep(0.74,0.92,p)
+		belt_out=1.0-smoothstep(0.46,0.66,p)
+	if weapon_id=="pkm" and phase=="remove":
+		# Cover up by its rear latch, the belt lifted off the tray, the box
+		# unlatched and down. The gun tipped a little to its left, the top and
+		# the right side toward the eyes, the butt out of the way.
+		offset=PKM_WORK_OFFSET
+		angles=PKM_WORK_ANGLES
+		cover_open=smoothstep(0.08,0.26,p)
+		belt_out=smoothstep(0.32,0.52,p)
+		var grasp := smoothstep(0.52,0.66,p)
+		var pull := smoothstep(0.64,1.0,p)
+		mag_offset=Vector3(0,-0.34*pull,0.07*pull)
+		mag_rotation.x=0.06*pull
+		var latch: Vector3=tray
+		if cover!=null:latch=cover.position+Basis(Vector3.RIGHT,-1.35*cover_open)*Vector3(-0.02,0.028,0.14)
+		var box_grip: Vector3=well+Vector3(-0.035,-0.025,0.015)+mag_offset
+		hand_target=hand_target.lerp(latch,smoothstep(0.0,0.08,p))
+		hand_target=hand_target.lerp(tray+Vector3(0.03,0.02,0)*belt_out,smoothstep(0.26,0.34,p))
+		hand_target=hand_target.lerp(box_grip,grasp)
+		hand_rotation=Vector3(0.15,0,-0.25)
+		phase_sound(0.12,p,"pkm_cover_open")
+		phase_sound(0.40,p,"pkm_belt")
+		phase_sound(0.68,p,"mag_out")
+	elif weapon_id=="pkm" and phase=="insert":
+		# The box up and latched, the belt's end laid on the tray, the cover
+		# pressed down until it snaps.
+		offset=PKM_WORK_OFFSET
+		angles=PKM_WORK_ANGLES
+		var lift := smoothstep(0.04,0.36,p)
+		mag_offset=Vector3(-0.018*(1-lift),-0.35*(1-lift),0.075*(1-lift))
+		mag_rotation.x=0.06*(1-lift)
+		belt_out=1.0-smoothstep(0.46,0.66,p)
+		cover_open=1.0-smoothstep(0.74,0.92,p)
+		var latch: Vector3=tray
+		if cover!=null:latch=cover.position+Basis(Vector3.RIGHT,-1.35*cover_open)*Vector3(-0.02,0.028,0.14)
+		hand_target=well+Vector3(-0.035,-0.025,0.015)+mag_offset
+		hand_target=hand_target.lerp(tray+Vector3(0.03,0.02,0)*belt_out,smoothstep(0.36,0.46,p))
+		hand_target=hand_target.lerp(latch,smoothstep(0.66,0.74,p))
+		hand_target=hand_target.lerp(get_meta("left_rest"),smoothstep(0.92,1.0,p))
+		hand_rotation=Vector3(0.15,0,-0.25)
+		phase_sound(0.36,p,"mag_in")
+		phase_sound(0.62,p,"pkm_belt")
+		phase_sound(0.91,p,"pkm_cover_close")
+	elif weapon_id=="pkm" and phase=="rack":
+		# The right hand off the grip to the handle: back (the carrier with
+		# it onto the sear), then forward again by hand; the carrier stays.
+		offset=Vector3(-0.07,0.05,-0.04)
+		angles=Vector3(0.04,-0.10,0.55)
+		var back := smoothstep(0.20,0.44,p)
+		var forward := smoothstep(0.56,0.78,p)
+		var handle_z := PKM_TRAVEL*back*(1.0-forward)
+		if is_instance_valid(cocking_handle):cocking_handle.position.z=handle_z
+		bolt.position.z=PKM_TRAVEL if state.cocked else PKM_TRAVEL*back
+		var knob := Vector3(0.041,-0.047,-0.033)+Vector3(0.012,-0.012,0.004)
+		right_target=right_target.lerp(knob+Vector3(0,0,handle_z),smoothstep(0.0,0.18,p)*(1.0-smoothstep(0.82,1.0,p)))
+		phase_sound(0.42,p,"pkm_bolt_back")
+		phase_sound(0.77,p,"pkm_handle_forward")
+	elif phase=="remove":
 		offset=Vector3(-0.05,0.08,-0.06) if not pistol else Vector3(-0.06,0.045,0.015)
 		angles=Vector3(-0.12,0.22,-0.65) if not pistol else Vector3(0.12,0.10,-0.48)
 		var grasp := smoothstep(0.0,0.32,p)
@@ -94,8 +175,8 @@ func animate(state: WeaponState, delta: float) -> void:
 		hand_rotation=Vector3(0.15,0,-0.25)
 		phase_sound(0.30,p,"mag_out")
 	elif phase in ["stow","draw"]:
-		offset=Vector3(-0.05,0.08,-0.06)
-		angles=Vector3(-0.12,0.22,-0.65)
+		offset=PKM_WORK_OFFSET if weapon_id=="pkm" else Vector3(-0.05,0.08,-0.06)
+		angles=PKM_WORK_ANGLES if weapon_id=="pkm" else Vector3(-0.12,0.22,-0.65)
 		var pouch := pouch_position(state.pending_slot)
 		var removed := Vector3(0,-0.34,0.07)
 		if phase=="stow" and state.inspected_loaded_reload:
@@ -132,9 +213,13 @@ func animate(state: WeaponState, delta: float) -> void:
 		var pair := Transform3D(Basis.from_euler(Vector3(0.15,0,0.1)),Vector3(-0.065,-0.21,0.07))
 		if phase=="ready_remove":
 			inspection_mag.transform=start.interpolate_with(pair,smoothstep(0,1,p))
-			mag_offset=Vector3(0,-0.21,0.07)*smoothstep(0.2,1,p)
+			mag_offset=Vector3(0,-0.21,0.07)*smoothstep(0.6 if weapon_id=="pkm" else 0.2,1,p)
 			magazine.visible=true
-			phase_sound(0.25,p,"mag_out")
+			if weapon_id=="pkm":
+				phase_sound(0.12,p,"pkm_cover_open")
+				phase_sound(0.40,p,"pkm_belt")
+				phase_sound(0.68,p,"mag_out")
+			else:phase_sound(0.25,p,"mag_out")
 		elif phase=="ready_stow":
 			mag_offset=Vector3(0,-0.21,0.07).lerp(pouch,smoothstep(0,1,p))
 			magazine.visible=p<0.92
@@ -143,8 +228,11 @@ func animate(state: WeaponState, delta: float) -> void:
 			inspection_mag.position=mag_offset+Vector3(-0.065,0,0)
 		else:
 			magazine.visible=false
-			inspection_mag.transform=Transform3D(pair.basis,pouch+Vector3(-0.065,0,0)).interpolate_with(Transform3D.IDENTITY,smoothstep(0,1,p))
-			phase_sound(0.94,p,"mag_in")
+			inspection_mag.transform=Transform3D(pair.basis,pouch+Vector3(-0.065,0,0)).interpolate_with(Transform3D.IDENTITY,smoothstep(0,0.4 if weapon_id=="pkm" else 1.0,p))
+			phase_sound(0.36 if weapon_id=="pkm" else 0.94,p,"mag_in")
+			if weapon_id=="pkm":
+				phase_sound(0.62,p,"pkm_belt")
+				phase_sound(0.91,p,"pkm_cover_close")
 		hand_target=inspection_mag.position+inspection_mag.basis*well+Vector3(-0.025,-0.025,0)
 		hand_rotation=Vector3(0.15,0,-0.25)
 	elif phase=="inspect_chamber":
@@ -178,20 +266,47 @@ func animate(state: WeaponState, delta: float) -> void:
 		hand_target=well.lerp(handle_pos,smoothstep(0,0.35,p))
 		hand_rotation=Vector3(0,0.4,-1.0) if pistol else Vector3(0,0,-0.6)
 		var pull := smoothstep(0.35,0.63,p)*(1-smoothstep(0.72,0.83,p))
+		# A Kalashnikov's handle is let go at the rear: the carrier slams home
+		# on its spring, the hand stays back and only then returns.
+		var released := weapon_id in ["ak74","svd"]
+		if released:pull=smoothstep(0.35,0.60,p)*(1-smoothstep(0.66,0.69,p))
 		if not state.bolt_open:
 			bolt.position.z=pull*(0.04 if pistol else 0.075)
-			hand_target.z+=bolt.position.z
+			if released:
+				# Let go: the fingers spring open off the handle, up and out.
+				var open := smoothstep(0.66,0.71,p)*(1-smoothstep(0.80,1.0,p))
+				hand_target.z+=0.075*smoothstep(0.35,0.60,p)*(1-smoothstep(0.76,1.0,p))
+				hand_target+=Vector3(0.035,0.03,0.01)*open
+			else:hand_target.z+=bolt.position.z
 			if is_instance_valid(charging_handle):charging_handle.position.z=0.113+pull*0.075
 		else:
 			bolt.position.z=(0.035 if pistol else 0.06)*(1-smoothstep(0.72,0.80,p))
 		if weapon_id=="svd" and state.bolt_open:
 			bolt.position.z+=0.006*sin(p*PI)
 			hand_target.z+=bolt.position.z
-		phase_sound(0.38,p,"bolt_pull")
-		phase_sound(0.76,p,"bolt")
+		if weapon_id in ["ak74","svd"]:
+			phase_sound(0.40,p,"ak_bolt_back")
+			phase_sound(0.67,p,"ak_bolt_release")
+		else:
+			phase_sound(0.38,p,"bolt_pull")
+			phase_sound(0.76,p,"bolt")
 	if phase not in ["rack","inspect_chamber"]:
 		bolt.position.z=(0.035 if pistol else 0.065) if state.bolt_open else slide_kick*(0.035 if pistol else 0.065)
 		if is_instance_valid(charging_handle):charging_handle.position.z=0.113
+	if weapon_id=="pkm" and phase!="rack":
+		# Cocked, the carrier waits at the rear and flicks forward with each
+		# shot; the handle stays forward.
+		bolt.position.z=PKM_TRAVEL*(1.0-slide_kick) if state.cocked else 0.0
+		if is_instance_valid(cocking_handle):cocking_handle.position.z=0.0
+	if is_instance_valid(belt):
+		belt.position=Vector3(0.030,-0.022,0.0)*belt_out
+		belt.rotation.z=-0.55*belt_out
+		# A box out of the pouch: its belt's end hangs from the mouth.
+		var spare := inspection_mag.get_node_or_null("Belt") as Node3D
+		if spare!=null:
+			var hanging := belt_out if phase=="ready_insert" else (1.0 if phase in ["ready_remove","ready_stow","inspect_pouch"] else 0.0)
+			spare.position=Vector3(0.030,-0.022,0.0)*hanging
+			spare.rotation.z=-0.55*hanging
 	var trigger := get_node_or_null("RightHand/TriggerFinger")
 	if trigger:trigger.position.x=lerpf(0.023,0.007,slide_kick)
 	slide_kick=maxf(0,slide_kick-delta*18)
@@ -201,13 +316,8 @@ func animate(state: WeaponState, delta: float) -> void:
 	magazine.rotation=mag_rotation
 	# The PKM's feed cover: lifted at the start of a reload, open while the
 	# box is changed, shut once the new belt lies on the tray.
-	var cover := get_node_or_null("FeedCover") as Node3D
-	if cover!=null:
-		var open := 0.0
-		if phase=="remove":open=smoothstep(0.0,0.35,p)
-		elif phase in ["stow","draw","ready_remove","ready_stow"]:open=1.0
-		elif phase in ["insert","ready_insert"]:open=1.0-smoothstep(0.70,0.95,p)
-		cover.rotation.x=-1.35*open
+	if cover!=null:cover.rotation.x=-1.35*cover_open
+	right_hand.position=right_hand.position.lerp(right_target,minf(delta*24,1))
 	left_hand.position=left_hand.position.lerp(hand_target,minf(delta*24,1))
 	left_hand.rotation=left_hand.rotation.lerp(hand_rotation,minf(delta*20,1))
 	phase_offset=phase_offset.lerp(offset,minf(delta*12,1))

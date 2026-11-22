@@ -22,6 +22,9 @@ const LARGE_RIGHT := [0.655,0.30,0.988,0.865]
 const BARRAGE_WIDTH := 560
 var game: Node3D
 var enabled := true
+# The battery whose fire the tablet last opened for: a new battle's barrage
+# opens it again even if it was switched off (U) in an earlier match.
+var announced: GradBattery
 var feed: SubViewport
 var eye: Camera3D
 var screen: TextureRect
@@ -145,6 +148,10 @@ func toggle() -> void:
 # What the display shows now: the battery's fire before the assault, or the
 # drone's picture while it is out and the operator sees with his own eyes.
 func wanted_mode() -> String:
+ var unit_battery := battery()
+ if unit_battery!=null and unit_battery!=announced:
+  announced=unit_battery
+  enabled=true
  if not enabled or not game.running or game.paused or not is_instance_valid(game.player):return ""
  var goggles: bool=game.player.field_rig.mode=="goggles"
  # The driver sees it in his seat too; a passenger is not in the vehicle yet.

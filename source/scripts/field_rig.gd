@@ -28,6 +28,10 @@ var item_prop: Node3D
 var source_mag: Node3D
 var target_mag: Node3D
 var cartridge: Node3D
+# The PKM's belt between its box and the can, a run of linked rounds.
+var belt_train: Node3D
+const BELT_ROUNDS := 28
+const BELT_PITCH := 0.0145
 var left: Node3D
 var right: Node3D
 var forearms: Array[Node3D]=[]
@@ -151,6 +155,26 @@ func cancel() -> void:
  transfer().cancel()
  if stow and operator.game.running and operator.arm_injury<0.5 and operator.injury_time<=0:mode="stow";timer=0
 
+# The universal cancel (Operator.cancel_action): whatever the hands are
+# doing with the pack, the pouch or the drone stops, and nothing is lost. An
+# item reached for stays in the pack (it leaves it only once out); an FPV set
+# on the ground goes back in; the goggles come off a drone that has not yet
+# been flown, which stays where it stands; a drone being folded stays
+# unfolded; the rangefinder coming out goes back into its pouch; a magazine or belt
+# keeps the rounds already moved; hands-on work (the mortar, the Grad's
+# mounts) stops undone. (Looking through it, K puts the rangefinder away.)
+func interrupt() -> bool:
+ match mode:
+  "":
+   if not transfer().active:return false
+   transfer().cancel()
+  "access","goggles","recover_drone","fpv_place":cancel()
+  "stow","belt","pouch_stow":mode="";timer=0;visible=false
+  "pouch":mode="pouch_stow";timer=POUCH_STOW*(1.0-clampf(timer/POUCH_TIME,0,1))
+  "work":interrupt_work("СКАСОВАНО")
+  _:return false
+ return true
+
 # Hands-on work stops as soon as the soldier moves or calls it off.
 func interrupt_work(reason: String) -> void:
  if mode!="work":return
@@ -256,23 +280,50 @@ func measure_scene() -> String:
 func rebuild(key: String, weapon_id: String) -> void:
  if visual_key==key:return
  visual_key=key
- for node in [item_prop,source_mag,target_mag,cartridge]:
+ for node in [item_prop,source_mag,target_mag,cartridge,belt_train]:
   if is_instance_valid(node):node.free()
- item_prop=null;source_mag=null;target_mag=null;cartridge=null
+ item_prop=null;source_mag=null;target_mag=null;cartridge=null;belt_train=null
  if key.begins_with("transfer"):
   target_mag=make_magazine(weapon_id);add_child(target_mag)
   if transfer().box_bag!=null:
    item_prop=PackArt.item_model(transfer().source.kind);add_child(item_prop)
   else:source_mag=make_magazine(weapon_id);add_child(source_mag)
-  cartridge=Models.group(self,"LooseCartridge")
-  var debris := CartridgeDebris.new()
-  var round_mesh := MeshInstance3D.new()
-  round_mesh.mesh=debris.cartridge_mesh(weapon_id in ["pm","m9"],true,weapon_id=="svd")
-  cartridge.add_child(round_mesh)
-  debris.free()
+  if weapon_id=="pkm":belt_train=make_belt()
+  else:
+   cartridge=Models.group(self,"LooseCartridge")
+   var debris := CartridgeDebris.new()
+   var round_mesh := MeshInstance3D.new()
+   round_mesh.mesh=debris.cartridge_mesh(weapon_id in ["pm","m9"],true,weapon_id=="svd")
+   cartridge.add_child(round_mesh)
+   debris.free()
  elif FPV_DRONE.is_fpv_kind(kind):item_prop=DroneArt.build_fpv(fpv_warhead);add_child(item_prop)
  else:item_prop=PackArt.item_model(kind);add_child(item_prop)
  paint(self)
+
+# Rounds of 7.62 × 54R in their steel links, placed along the belt's way
+# every frame (animate_belt).
+func make_belt() -> Node3D:
+ var strip := Models.group(self,"LooseBelt")
+ var debris := CartridgeDebris.new()
+ var round_mesh: Mesh=debris.cartridge_mesh(false,true,true)
+ debris.free()
+ var link := BoxMesh.new()
+ link.size=Vector3(0.0136,0.004,0.0135)
+ var steel := StandardMaterial3D.new()
+ steel.albedo_color=Color("3b3f38");steel.metallic=0.6;steel.roughness=0.55
+ link.material=steel
+ for k in range(BELT_ROUNDS):
+  var holder := Node3D.new()
+  strip.add_child(holder)
+  var mesh := MeshInstance3D.new()
+  mesh.mesh=round_mesh
+  holder.add_child(mesh)
+  # Two link loops round the case, the joint between them.
+  for z in [0.012,-0.008]:
+   var band := MeshInstance3D.new()
+   band.mesh=link;band.position=Vector3(0,0,z)
+   holder.add_child(band)
+ return strip
 
 func make_magazine(id: String) -> Node3D:
  var baked: Node3D=load("res://assets/models/"+("ak74m" if id=="ak74" else id)+".scn").instantiate()
@@ -280,6 +331,64 @@ func make_magazine(id: String) -> Node3D:
  mag.position=Vector3.ZERO;mag.rotation=Vector3.ZERO
  MagazineView.decorate(mag,id)
  return mag
+
+# The PKM's box in the left hand, mouth toward the open can held up out of
+# the pack: the rest of the old belt runs out of the box into the can, then
+# the new belt of 100 runs from the can into the box, the right hand drawing
+# it over in loops; its end left in the mouth.
+func animate_belt(tx: MagazineTransfer) -> void:
+ var p:=1.0 if tx.moved>0 else clampf(tx.clock/MagazineTransfer.BELT_TIME,0,1)
+ target_mag.visible=true
+ target_mag.rotation=Vector3(0.12,PI-0.35,0.08)
+ const BOX_CENTER := Vector3(0.037,-0.141,-0.1085)
+ target_mag.position=Vector3(0.0,-0.33,-0.46)-target_mag.basis*BOX_CENTER
+ var box_belt:=target_mag.get_node_or_null("Belt")
+ if box_belt!=null:box_belt.visible=p>=0.97 and int(tx.destination.rounds)>0
+ pack.visible=true;pack.position=Vector3(-0.18,-0.46,-0.64);pack.rotation=Vector3(-0.25,0.2,0)
+ pack.get_node("Lid").rotation.x=-1.8
+ item_prop.visible=true
+ item_prop.position=Vector3(-0.21,-0.36,-0.58);item_prop.rotation=Vector3(0.30,0.25,0)
+ var box_mouth: Vector3=target_mag.transform*Vector3(0.047,-0.058,-0.1085)
+ var can_mouth: Vector3=item_prop.transform*Vector3(0,0.085,0)
+ # Out of the box (the rest of the old belt), then in (the new one).
+ var old:=int(tx.destination.rounds) if tx.moved==0 else 0
+ var fresh:=int(tx.source.rounds) if tx.moved==0 else int(tx.destination.rounds)
+ var run:=0.0
+ var count:=0
+ var from:=box_mouth;var to:=can_mouth
+ if p<0.46 and old>0:
+  run=smoothstep(0.04,0.44,p);count=old
+ elif p>=0.50:
+  run=smoothstep(0.52,0.95,p);count=fresh;from=can_mouth;to=box_mouth
+ var apex:=(from+to)*0.5+Vector3(0.02,0.11,0.03)
+ var arc:=from.distance_to(apex)+apex.distance_to(to)
+ var head:=run*(arc+count*BELT_PITCH)
+ var first:=maxi(0,ceili((head-arc)/BELT_PITCH))
+ for k in range(BELT_ROUNDS):
+  var holder: Node3D=belt_train.get_child(k)
+  var index:=first+k
+  var s:=head-index*BELT_PITCH
+  holder.visible=count>0 and index<count and s>=0.0 and s<=arc and run>0.0 and run<1.0
+  if not holder.visible:continue
+  var u:=s/arc
+  var at:=from.lerp(apex,u).lerp(apex.lerp(to,u),u)
+  var along:=(apex-from).lerp(to-apex,u).normalized()
+  var side:=along.cross(Vector3.UP)
+  side=Vector3.RIGHT if side.length()<0.01 else side.normalized()
+  holder.transform=Transform3D(Basis(along.cross(side),along,side).orthonormalized(),at)
+ belt_train.visible=true
+ # The left hand under the box, the right on the belt at the top of its loop,
+ # going over hand by hand.
+ left.position=target_mag.transform*BOX_CENTER+Vector3(0.05,-0.06,0.02)
+ left.rotation=Vector3(-0.3,0,-0.6)
+ var working:=run>0.0 and run<1.0 and count>0
+ var pull:=sin(tx.clock*9.0)*0.025 if working else 0.0
+ right.position=(apex+Vector3(0.02,-0.01+pull,0.04)) if working else box_mouth+Vector3(0.07,0.03,0.05)
+ right.rotation=Vector3(-0.3,0.0,1.1)
+ if tx.stow_left>0:
+  var down := 1-tx.stow_left/2.2
+  target_mag.position.y-=down*0.45;left.position.y-=down*0.45
+  animate_access(1-clampf(down,0,1))
 
 func animate_access(progress: float) -> void:
  # Reach over shoulder, slide the pack forward, undo the lid, reach into it.
@@ -314,7 +423,11 @@ func animate() -> void:
   if tx.box_bag!=null and tx.draw_left>0:
    kind=item_kind;target_mag.visible=false
    if is_instance_valid(cartridge):cartridge.visible=false
+   if is_instance_valid(belt_train):belt_train.visible=false
+   var box_belt:=target_mag.get_node_or_null("Belt")
+   if box_belt!=null:box_belt.visible=false
    animate_access(clampf(tx.elapsed/ACCESS_TIME,0,1));pose_arms();return
+  if tx.belt:animate_belt(tx);pose_arms();return
   target_mag.visible=true
   var cycle := clampf(tx.clock/MagazineTransfer.ROUND_TIME,0,1)
   var picking := smoothstep(0,0.40,cycle)
@@ -353,7 +466,7 @@ func animate() -> void:
   animate_access(1-clampf(timer/2.2,0,1))
  elif mode=="work":
   pack.visible=false
-  for node in [item_prop,source_mag,target_mag,cartridge]:
+  for node in [item_prop,source_mag,target_mag,cartridge,belt_train]:
    if is_instance_valid(node):node.visible=false
   var swing := sin(timer*5.0)*0.04
   if work_target.is_finite():
@@ -378,6 +491,7 @@ func animate() -> void:
   if is_instance_valid(target_mag):target_mag.visible=false
   if is_instance_valid(source_mag):source_mag.visible=false
   if is_instance_valid(cartridge):cartridge.visible=false
+  if is_instance_valid(belt_train):belt_train.visible=false
   item_prop.position=Vector3(0,-0.28,-0.42).lerp(Vector3(0,-0.01,-0.08),smoothstep(0,1.2,timer))
   item_prop.rotation=Vector3.ZERO;item_prop.visible=true
   left.position=item_prop.position+Vector3(-0.09,0,0);right.position=item_prop.position+Vector3(0.09,0,0)
@@ -433,7 +547,8 @@ func pose_arms() -> void:
 func toggle_drone() -> void:
  if operator.concussion.acute_left>0 or operator.concussion.incapacitated():return
  if operator.is_vaulting():return
- if mode in ["drone","goggles"]:cancel();return
+ # J again calls off the goggles, the drone being reached for or folded.
+ if mode in ["drone","goggles"] or (kind=="recon_drone" and mode in ["access","recover_drone"]):cancel();return
  if active() or operator.current().phase!="" or operator.arm_injury>=0.5 or operator.injury_time>0 or operator.bandage_time>0:return
  if is_instance_valid(drone):
   if drone.health<=0 or drone.battery<=0:drone_notice="Дрон пошкоджений або розряджений.";return
@@ -491,17 +606,22 @@ func finish_drone_recovery() -> bool:
  drone_notice="Дрон повернуто в наплічник. Заряд і пошкодження збережено."
  return true
 
+# The recon drone set out on the ground or in the air (not an FPV).
+func recon_parked() -> bool:return is_instance_valid(drone) and not (drone is FPV_DRONE)
+
 # --- FPV ----------------------------------------------------------------------
-# Y: the first FPV from the pack, out (3.4 s), set down (1 s), goggles on;
-# Y again in its goggles takes them off (in the air it flies on a moment
-# and falls; still on the ground it goes back into the pack).
-func toggle_fpv() -> void:
+# Y: an FPV from the pack (the kind asked for, else the first), out (3.4 s),
+# set down (1 s), goggles on; Y again in its goggles takes them off (in the
+# air it flies on a moment and falls; still on the ground it goes back into
+# the pack).
+func toggle_fpv(which: String="") -> void:
  if operator.concussion.acute_left>0 or operator.concussion.incapacitated():return
  if operator.is_vaulting():return
  if FPV_DRONE.is_fpv_kind(kind) and mode in ["access","fpv_place","goggles","drone"]:cancel();return
  if mode in ["drone","goggles"]:drone_notice="Спершу зніми окуляри розвіддрона (J).";return
  if active() or operator.current().phase!="" or operator.arm_injury>=0.5 or operator.injury_time>0 or operator.bandage_time>0:return
- var uid := first_fpv()
+ var uid := operator.backpack.first(which) if which!="" else first_fpv()
+ if uid<0:uid=first_fpv()
  if uid<0:drone_notice="Додай FPV-дрон до наплічника в лодауті.";return
  if not request(uid):drone_notice="Зараз не дістати FPV-дрон."
 
