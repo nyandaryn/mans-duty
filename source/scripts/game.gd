@@ -319,6 +319,7 @@ func start_match() -> void:
 	player.sensitivity=sensitivity
 	for point in district.spawn_points:
 		var bot := Hostile.new()
+		bot.set_meta("kit_index",bots.size())
 		add_child(bot)
 		bot.setup(self,point)
 		bots.append(bot)

@@ -276,7 +276,7 @@ func build_chooser() -> void:
  close.offset_left=-40;close.offset_right=-4;close.offset_top=3;close.offset_bottom=31
  var faces := chooser_page("face",2)
  for id in FaceCover.IDS:
-  var tile := choice_tile(96,0.46,func():game.choose_face(id);pinned="face:"+id,"face:"+id)
+  var tile := choice_tile(96,0.46,func():pinned="face:"+id;game.choose_face(id);inspect(pinned),"face:"+id)
   faces.add_child(tile);face_buttons[id]=tile
   tile_caption(tile,"%s\n%s" % [FaceCover.DATA[id].short,"%d г" % roundi(FaceCover.mass(id)*1000) if FaceCover.mass(id)>0 else "обличчя відкрите"],0.48)
  var outfits := chooser_page("outfit",2)
