@@ -21,6 +21,7 @@ var cancel_notice_left := 0.0
 
 var inspection_combo := false
 var outfit_id := "ua_pixel"
+var face_cover := "none"
 var game: Node3D
 var camera: Camera3D
 var weapons: Array = []
@@ -108,6 +109,7 @@ var anchor := Callable()
 func setup(owner_game: Node3D, primary: String, secondary: String) -> void:
 	game = owner_game
 	outfit_id=game.player_outfit
+	face_cover=FaceCover.valid(game.player_face)
 	vest=VestKind.valid(game.player_vest)
 	weapons = [WeaponState.new(primary),WeaponState.new(secondary)]
 	backpack=BackpackState.restore(game.loadout_bag.serialize())

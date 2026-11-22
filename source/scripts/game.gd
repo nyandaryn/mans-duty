@@ -55,6 +55,8 @@ var outfit_buttons: Array[Button] = []
 var map_buttons: Array[Button] = []
 var player_outfit := "ua_pixel"
 var player_vest := "korsar"
+# A balaclava or a gaiter under the helmet (FaceCover).
+var player_face := "none"
 var enemy_outfit := "rf_digital"
 var outfit_preview: SubViewport
 var campaign := Campaign.new()
@@ -648,6 +650,7 @@ func load_settings() -> void:
 		loadout_bag=BackpackState.restore(settings.get_value("loadout","backpack",{}))
 		player_outfit=Wardrobe.valid(str(settings.get_value("loadout","outfit","ua_pixel")))
 		player_vest=VestKind.valid(str(settings.get_value("loadout","vest","korsar")))
+		player_face=FaceCover.valid(str(settings.get_value("loadout","face","none")))
 		battle_size=int(settings.get_value("operation","battle_size",27))
 		# Sizes before the BMPs (12, 20, 28, 50) are not whole crews: the nearest one.
 		if battle_size not in BattleMode.SIZES:
@@ -682,6 +685,7 @@ func save_settings() -> void:
 	settings.set_value("settings","ui_width",ui_width)
 	settings.set_value("loadout","outfit",player_outfit)
 	settings.set_value("loadout","vest",player_vest)
+	settings.set_value("loadout","face",player_face)
 	settings.set_value("loadout","backpack",loadout_bag.serialize())
 	settings.set_value("operation","enemy_outfit",enemy_outfit)
 	settings.set_value("loadout","class",player_class)
@@ -1102,6 +1106,11 @@ func refresh_inventory() -> void:
 
 func choose_vest(id: String) -> void:
 	player_vest=VestKind.valid(id)
+	refresh_outfit_preview()
+	save_settings()
+
+func choose_face(id: String) -> void:
+	player_face=FaceCover.valid(id)
 	refresh_outfit_preview()
 	save_settings()
 

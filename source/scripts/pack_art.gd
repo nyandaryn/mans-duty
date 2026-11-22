@@ -38,14 +38,42 @@ static func build() -> Node3D:
  Models.merge_rigid(root)
  return root
 
-static func equip(model: Node3D, equipped: bool) -> void:
+const ON_BACK := Vector3(0,1.2,0.265)
+
+static func equip(model: Node3D, equipped: bool, lite: bool=false) -> void:
  var previous := model.get_node_or_null("Backpack")
  if previous!=null:previous.free()
  if not equipped:return
- var pack := build()
+ var pack := build_lite() if lite else build()
  pack.name="Backpack"
- pack.position=Vector3(0,1.2,0.265)
+ pack.position=ON_BACK
  model.add_child(pack)
+
+# A soldier of the battle carries the same pack with its colours merged into
+# vertex colours (CharacterArt.consolidate): three draw calls, not seventeen.
+# Built once; every copy shares the meshes.
+static var lite_pack: PackedScene
+static func build_lite() -> Node3D:
+ if lite_pack==null:
+  var root := build()
+  for mesh in root.find_children("*","MeshInstance3D",true,false):
+   if mesh.get_parent()==root:continue
+   var pose: Transform3D=mesh.transform
+   var parent: Node=mesh.get_parent()
+   while parent!=root:
+    pose=parent.transform*pose
+    parent=parent.get_parent()
+   mesh.get_parent().remove_child(mesh)
+   root.add_child(mesh)
+   mesh.transform=pose
+  for child in root.get_children():
+   if not child is MeshInstance3D:child.free()
+  CharacterArt.consolidate(root)
+  CharacterArt.assign_owner(root,root)
+  lite_pack=PackedScene.new()
+  lite_pack.pack(root)
+  root.free()
+ return lite_pack.instantiate()
 
 static func item_model(kind: String) -> Node3D:
  if kind=="rpo_a":return ShmelArt.build()

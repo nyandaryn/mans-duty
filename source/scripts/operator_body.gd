@@ -20,6 +20,7 @@ func setup(owner_operator: Operator) -> void:
  Wardrobe.dress(model,operator.outfit_id)
  CharacterArt.team_markings(model,true)
  CharacterArt.wear_vest(model,operator.vest)
+ FaceCover.wear(model,operator.face_cover,operator.outfit_id)
  PackArt.equip(model,operator.backpack.equipped)
  launcher_model=PackArt.attach_launcher(model)
  launcher_models["rpo_a"]=launcher_model

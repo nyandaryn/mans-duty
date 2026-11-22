@@ -2,8 +2,8 @@ class_name CrowdRenderer
 extends Node3D
 
 # Distant soldiers in the large battle are drawn by GPU instancing: one
-# MultiMesh per body part and faction, so the whole distant crowd costs ten
-# draw calls instead of ~25 per soldier. Nearby soldiers in view, magnified
+# MultiMesh per body part (and the pack) and faction, so the whole distant
+# crowd costs twelve draw calls instead of ~25 per soldier. Nearby soldiers in view, magnified
 # ones in the PSO-1 field of view and the commander's own group keep the
 # detailed model. Parts follow the same animated nodes that carry the hitboxes, so
 # poses, wounds, prone positions and ragdolls match what the bullets hit.
@@ -216,3 +216,4 @@ func _process(delta: float) -> void:
 		parts[2].set_instance_transform(slot,actor.n_legs[1].global_transform)
 		parts[3].set_instance_transform(slot,actor.n_knees[0].global_transform)
 		parts[4].set_instance_transform(slot,actor.n_knees[1].global_transform)
+		parts[5].set_instance_transform(slot,actor.model.global_transform if actor.has_pack else Transform3D(Basis().scaled(Vector3.ZERO),Vector3.ZERO))

@@ -55,7 +55,9 @@ static func sleeve(parent: Node3D, end: Vector3, upper: bool) -> void:
  # A stitched cuff sits at the wrist; it follows the forearm's actual axis.
  if not upper:Models.tube(parent,end*0.96,0.043,0.022,"uniform",end.normalized(),0.041)
 
-static func head(parent: Node3D) -> void:
+# The anatomical head (assets/characters/head.json), smooth-shaded; the
+# balaclava is cut from the same surface (FaceCover).
+static func anatomical_head() -> ArrayMesh:
  if head_mesh==null:
   var data: Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://assets/characters/head.json"))
   var st := SurfaceTool.new()
@@ -69,9 +71,12 @@ static func head(parent: Node3D) -> void:
   st.generate_normals()
   st.index()
   head_mesh=st.commit()
+ return head_mesh
+
+static func head(parent: Node3D) -> void:
  var face := MeshInstance3D.new()
  face.name="AnatomicalHead"
- face.mesh=head_mesh
+ face.mesh=anatomical_head()
  var skin := StandardMaterial3D.new()
  skin.resource_name="character_skin"
  skin.albedo_texture=load("res://assets/characters/young_caucasian_male_diffuse.png")

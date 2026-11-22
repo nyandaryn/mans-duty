@@ -47,6 +47,9 @@ var idle := {}
 # His body armour (VestKind) and the share of a burst it lets through.
 var vest := "korsar"
 var vest_blast := 1.0
+# A balaclava or a gaiter (FaceCover), and the assault pack on his back.
+var face_cover := "none"
+var has_pack := false
 var hitbox_layers: Array[int]=[]
 var suppress_point := Vector3.ZERO
 var suppress_age := 100.0
@@ -184,6 +187,10 @@ func setup(owner_game: Node3D, spawn: Vector3) -> void:
 	Wardrobe.dress(model,outfit_id)
 	CharacterArt.team_markings(model,friendly)
 	wear_vest(VestKind.issue(friendly,formation_index))
+	face_cover=FaceCover.issue(friendly,formation_index)
+	FaceCover.wear(model,face_cover,outfit_id)
+	# Three men in four carry a pack.
+	wear_pack(formation_index%4!=1)
 	hitboxes.append(DamageModel.hitbox(self,model.get_node("Head"),"head",Vector3(0,0.156,-0.045),Vector3(0.225,0.27,0.235)))
 	hitboxes.append(DamageModel.hitbox(self,model,"chest",Vector3(0,1.29,0),Vector3(0.40,0.36,0.30)))
 	hitboxes.append(DamageModel.hitbox(self,model,"abdomen",Vector3(0,1.00,0),Vector3(0.34,0.22,0.28)))
@@ -244,8 +251,16 @@ func set_kit(id: String) -> void:
 		n_mag=n_rifle.get_node("Magazine")
 		n_muzzle=n_rifle.get_node("BotMuzzle")
 	optic=2.5 if id=="sniper" else 1.0
+	# A grenadier's rounds and an operator's drones go in a pack.
+	if id in ["rpg7","uav"]:wear_pack(true)
 
 func kit_id() -> String:return kit.kind if kit!=null else "rifle"
+
+# Puts on or takes off his pack (PackArt, merged for the battle).
+func wear_pack(on: bool) -> void:
+	if on==has_pack:return
+	has_pack=on
+	remodel(func():PackArt.equip(model,on,true))
 
 # Puts on a vest: its model over the plate bags of the uniform.
 func wear_vest(id: String) -> void:

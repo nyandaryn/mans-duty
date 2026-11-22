@@ -6,7 +6,7 @@ extends RefCounted
 # Vertex colours replace materials (sRGB); alpha 1 marks camouflage
 # fabric, which the shader samples from the faction's own uniform texture.
 # The silhouette uses the same garment cross-sections as CharacterArt.
-const PARTS := ["upper","thigh_left","thigh_right","shin_left","shin_right"]
+const PARTS := ["upper","thigh_left","thigh_right","shin_left","shin_right","pack"]
 const AIM_WEIGHT := 0.6
 static var cache: Dictionary = {}
 static var shader: Shader
@@ -118,6 +118,7 @@ static func parts(friendly: bool) -> Array[ArrayMesh]:
 	var result: Array[ArrayMesh]=[upper(friendly)]
 	for side in [-1,1]:result.append(thigh(side))
 	for side in [-1,1]:result.append(shin(side))
+	result.append(pack())
 	cache[key]=result
 	return result
 
@@ -171,6 +172,18 @@ static func upper(friendly: bool) -> ArrayMesh:
 		var axis := elbow.normalized()
 		b.tube(arm_xf,elbow*0.48-axis*0.032,elbow*0.48+axis*0.032,0.079,0.079,tape,8)
 	model.free()
+	return b.commit()
+
+# The assault pack of PackArt, where it hangs on his back: drawn only for the
+# men who carry one (CrowdRenderer).
+static func pack() -> ArrayMesh:
+	var b := Builder.new()
+	var at := Transform3D(Basis.IDENTITY,PackArt.ON_BACK)
+	var cloth := tint("#62684e")
+	b.shell(at,[Vector4(-0.225,0.22,0.13,0),Vector4(-0.19,0.29,0.18,0),Vector4(-0.08,0.30,0.185,0),Vector4(0.08,0.28,0.175,0),Vector4(0.175,0.25,0.15,0)],cloth,8)
+	b.box(at,Vector3(0,0.178,-0.06+0.07),Vector3(0.24,0.035,0.16),cloth)
+	b.box(at,Vector3(0,-0.07,0.115),Vector3(0.22,0.2,0.05),tint("#596047"))
+	for side in [-1,1]:b.box(at,Vector3(side*0.155,-0.11,0.01),Vector3(0.05,0.1,0.12),tint("#535c44"))
 	return b.commit()
 
 static func thigh(side: int) -> ArrayMesh:
