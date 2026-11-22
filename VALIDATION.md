@@ -1,3 +1,33 @@
+# 0.32.6 validation — 2026-11-22
+
+The gear screen redone as a soldier with slots, balaclavas, packs seen on the
+soldiers.
+
+- Screen rendered at 1280×720 and 1920×1080: the class view, the face list
+  open over the middle, a weapon and a vest examined, the soldier turned
+  round (pack on his back). Fixed from the renders: the class shown was not
+  the one chosen, long weapon names ran out of their tiles, the head
+  thumbnails cut the helmet off, stat readings were clipped.
+- test_face_cover (new, 83 checks): five covers and none, about half of
+  each side issued one; the balaclava's eye slot open (no drawn corner in
+  it) and knit above and below the eyes; the gaiter's top at the bridge of
+  the nose; the face slot opens its list, a card puts the cover on the
+  portrait and the slot, Esc closes the list first; the class view shows
+  the kit's weight, run and pack, the cover counts in the weight; settings
+  round-trip; a preset keeps the cover; in the forest every bot's model
+  wears the cover he was issued (mask and neck tube) and a pack when he
+  carries one, some with and some without.
+- Found by the test: presets dropped the face cover (LoadoutPresets.validate
+  did not keep it); bots outside a formation (quarter, forest) all had
+  formation index 0, so all carried packs and none a balaclava: they now
+  take both by their order of spawning (meta kit_index); vests unchanged.
+- Bench (bench_battle, rendered 1600×900, great assault 27, seeds 11/22/33,
+  0.32.5 vs this): the same battles (max_alive, casualties equal); draws
+  +6–7 (+0.6 %), primitives +1.7 %, scripts per tick equal. Fps −1.6 to
+  −4.7 with this build run second; seed 33 run in the reverse order: 71.7
+  and 71.7. Within the noise (the player's game was open).
+- Full suite from source: 77 scenarios pass with no script errors.
+
 # 0.32.5 validation — 2026-11-22
 
 The column of the great assault no longer stands for ever at the start when
