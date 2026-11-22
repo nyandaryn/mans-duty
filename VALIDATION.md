@@ -1,3 +1,25 @@
+# 0.32.7 validation — 2026-11-22
+
+The FPV goggles can be pushed up in flight and pulled down again.
+
+- test_fpv (77 checks, 18 new in place of the old "Y in the air: it falls"):
+  Y in the air puts the goggles up (FieldRig "fpv_up"): the player's own
+  camera and HUD back, the drone armed and hands-off, not falling; the HUD
+  says "Y — НАДІТИ ОКУЛЯРИ · ~ — ВІДПУСТИТИ ДРОН"; W walks the soldier at
+  0.8–1.45 m/s and leaves the drone's sticks centred; three seconds on the
+  drone is within 2 m of its height and its way dies in the drag only
+  (9.0 → 6.6 m/s when it was let go at speed: angle mode does not brake);
+  no weapon in the hands; Y pulls the goggles down, ~ while they come down
+  puts them back up; Y and 0.8 s later he flies it again and the sticks
+  answer; up once more and ~ lets the radio go: it coasts a moment, the
+  motors stop, it falls and is finished as before. Before take-off Y still
+  puts it back in the pack (unchanged checks).
+- Rendered (1280×720): goggles on (OSD now says "Y — ПІДНЯТИ ОКУЛЯРИ (ДРОН
+  ЗАВИСНЕ)" in the air), goggles up (the radio in both hands low in front,
+  the HUD lines), coming down, back on; the soldier from outside with the
+  goggles on the helmet's brim and the radio in his hands.
+- Full suite from source: 77 scenarios pass with no script errors.
+
 # 0.32.6 validation — 2026-11-22
 
 The gear screen redone as a soldier with slots, balaclavas, packs seen on the
