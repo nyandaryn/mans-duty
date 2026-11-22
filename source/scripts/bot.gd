@@ -141,9 +141,12 @@ var shape_stance := -1.0
 # A drone of the other side: heard close by or seen in the air, noticed after
 # a moment, then shot at with a lead when no man of the other side in sight
 # nearer than DRONE_FIRST comes first and the shells do not keep heads down.
-# A small quadcopter is heard over the battle within some 50 m and seen
-# against the sky to about 120 m; high up it is a speck a rifle rarely hits.
-const DRONE_HEARD := 50.0
+# A Mavic class quadcopter is heard over the battle only within some 35 m
+# (an FPV's whine much further, ReconDrone.heard_within) and seen against
+# the sky to about 120 m, slowly further out: high up it is a speck few men
+# notice and a rifle rarely hits. Not every man fires at one — some keep
+# their heads down, the more so under a diving FPV (drone_shooter), and only
+# a few get a clear shot at a time (ReconDrone.take_aim).
 const DRONE_SIGHT := 120.0
 const DRONE_FIRST := 60.0
 var drone_target: ReconDrone
@@ -152,9 +155,12 @@ var drone_lost := 0.0
 var drone_aim := Vector3.INF
 var drone_aim_time := 0.0
 var drone_lead := 1.0
+var drone_shooter := true
 
 func setup(owner_game: Node3D, spawn: Vector3) -> void:
 	game=owner_game
+	# About half the men fire at a drone (by where they start: no dice drawn).
+	drone_shooter=absi(hash(Vector2i(roundi(spawn.x*7.0),roundi(spawn.z*7.0))))%100<50
 	weapon.debug_infinite=game.debug_invulnerable
 	position=spawn
 	home=spawn
@@ -575,7 +581,9 @@ func _tick(delta: float) -> void:
 	# up whatever comes.
 	if kit!=null and kit.kind=="mg" and at_cover and shelled<=0 and suppression<=2.2 and not reload_active and fmod(peek_clock,6.0)<4.2:hide=false
 	if kit!=null and kit.exposed():hide=false
-	var drone_fire := drone_engaged() and not (sees_player and distance<DRONE_FIRST) and shelled<=0 and suppression<=1.4 and not reload_active and wound_timer<=0 and arm_wound<0.5 and collapse<0.01 and treatment_time<=0
+	var drone_fire := drone_shooter and drone_engaged() and not (sees_player and distance<DRONE_FIRST) and shelled<=0 and suppression<=1.4 and not reload_active and wound_timer<=0 and arm_wound<0.5 and collapse<0.01 and treatment_time<=0 and drone_target.take_aim(self)
+	# The rest keep their heads down when a fast one comes (an FPV).
+	if not drone_fire and drone_engaged() and drone_target.velocity.length()>12.0 and at_cover:hide=true
 	if drone_fire:
 		hide=false
 		var at: Vector3=drone_target.global_position
@@ -896,7 +904,7 @@ func set_bipod(open: bool) -> void:
 func bipod_down(at_cover: bool) -> bool:
 	return kit!=null and kit.kind=="mg" and alerted and contact_age<10 and weapon.phase=="" and velocity.length()<0.3 and (not at_cover or cover_requires_prone)
 
-# Drones of the other side in the air, heard within DRONE_HEARD or seen in
+# Drones of the other side in the air, heard (heard_within) or seen in
 # front or overhead against the sky: the nearest is noticed after a moment
 # (sooner close by), and forgotten three seconds after it is out of sight.
 func spot_drone(eye: Vector3, interval: float) -> void:
@@ -909,7 +917,8 @@ func spot_drone(eye: Vector3, interval: float) -> void:
 		var distance := eye.distance_to(at)
 		if distance>=best_distance:continue
 		var toward := eye.direction_to(at)
-		if distance>DRONE_HEARD and (-global_basis.z).dot(toward)<0.3 and toward.y<0.5:continue
+		var heard: float=drone.heard_within()
+		if distance>heard and (-global_basis.z).dot(toward)<0.3 and toward.y<0.5:continue
 		if not line_clear(eye,at) or game.district.foliage_visibility(eye,at)<=0:continue
 		best=drone
 		best_distance=distance
@@ -923,7 +932,11 @@ func spot_drone(eye: Vector3, interval: float) -> void:
 	if best!=drone_target:
 		drone_target=best
 		drone_notice=0.0
-	var rate := 2.4 if best_distance<40.0 else lerpf(1.6,0.35,(best_distance-40.0)/(DRONE_SIGHT-40.0))
+	# Heard: noticed in a second or so. Only seen: the smaller it looks the
+	# longer (by its apparent area), longer still overhead out of the eyeline.
+	var heard_at: float=best.heard_within()
+	var rate := 1.1 if best_distance<heard_at else 0.55*pow(35.0/best_distance,2.0)
+	if best_distance>=heard_at and (-global_basis.z).dot(eye.direction_to(best.global_position))<0.3:rate*=0.35
 	drone_notice=minf(1.5,drone_notice+interval*rate*(1.3 if alerted else 1.0))
 
 func drone_engaged() -> bool:
@@ -935,7 +948,7 @@ func fire_at_drone(delta: float) -> void:
 	drone_aim_time+=delta
 	if sprinting or drone_aim_time<0.6 or weapon.phase!="" or shoot_timer>0.000001:return
 	if burst_left<=0:
-		burst_left=randi_range(3,5)
+		burst_left=randi_range(2,4)
 		drone_lead=randf_range(0.5,1.3)
 		shoot_timer=0
 	while burst_left>0 and shoot_timer<=0.000001:
@@ -944,7 +957,8 @@ func fire_at_drone(delta: float) -> void:
 			shoot_timer=0.3
 			break
 		burst_left-=1
-		shoot_timer+=float(weapon.data.interval) if burst_left>0 else randf_range(0.6,1.3)
+		# Short bursts, the sights brought back on it after each.
+		shoot_timer+=float(weapon.data.interval) if burst_left>0 else randf_range(1.0,2.2)
 
 func shoot_drone() -> bool:
 	if not concussion.can_fire() or dead or reaction_left>0 or sprinting or wound_timer>0 or treatment_time>0 or collapse>0.01 or arm_wound>=0.5:return false
@@ -956,10 +970,14 @@ func shoot_drone() -> bool:
 	if not safe_fire_lane(origin,drone_aim):return false
 	if not weapon.fire():return false
 	since_shot=0
-	# A small target moving across the sky: wider than at a man, wider the
-	# further it is, and wider still until the rifle has followed it a while.
-	var spread := 0.011+0.006*minf(2.0,origin.distance_to(drone_aim)/60.0)+suppression*0.006+concussion.severity*0.05+(0.012 if drone_aim_time<1.4 else 0.0)
-	var direction := sighted(origin,drone_aim,kit_id())+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randf_range(-spread,spread),randf_range(-spread,spread),randf_range(-spread,spread))
+	# A small target in the sky, the rifle up steeply off-hand, in a hurry:
+	# the aim wanders some 12 mils, more the further it is, more while the
+	# rifle swings after a drone crossing the sky (and the lead is a guess,
+	# above), more still until it has followed it a while.
+	var reach := origin.distance_to(drone_aim)
+	var sweep: float=drone_target.velocity.slide(origin.direction_to(drone_aim)).length()/maxf(reach,1.0) if is_instance_valid(drone_target) else 0.0
+	var spread := 0.012+0.004*minf(reach,150.0)/30.0+sweep*0.05+suppression*0.006+concussion.severity*0.05+(0.010 if drone_aim_time<2.0 else 0.0)
+	var direction := sighted(origin,drone_aim,kit_id())+global_basis.x*recoil_offset.x+Vector3.UP*recoil_offset.y+Vector3(randfn(0.0,spread),randfn(0.0,spread),randfn(0.0,spread))
 	game.ballistics.launch(origin,direction.normalized(),weapon.id,68,self)
 	game.spatial_shot(weapon.id,origin)
 	game.alert_opponents(self,origin)

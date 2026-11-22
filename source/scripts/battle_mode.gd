@@ -154,6 +154,7 @@ func start() -> void:
  # column moves off after it.
  if barrage_class(game.player_class) and (not mech.is_empty() or game.player_class=="bmp"):prep="barrage"
  game.bmp.start_battle(self)
+ if game.player_class=="mortarman":place_mortar_crew()
  if game.player_class in ["mortarman","grad"]:
   set_halt(true);awaiting=true
   game.squad.tell("Штурм очікує твоєї команди · G — %s" % ("радіо" if game.player_class=="grad" else "розрахунок"))
@@ -162,6 +163,29 @@ func start() -> void:
  mark_squad()
 
 static func enemies(size: int) -> int:return size*ENEMY_RATIO
+
+# The mortar crew starts on its firing position (BattleMap.MORTAR), not on
+# the old start line at the forest strip: that was 190 m from the nearest
+# strongpoint, in sight of the posts and inside the ground the opening
+# salvo of the «Grads» lands on. The mortarman faces the village, the
+# assistant beside him with the baseplate and the box of mines.
+func place_mortar_crew() -> void:
+ var spot:=mortar_position()
+ var toward:=center(1)-spot;toward.y=0
+ var yaw:=atan2(-toward.x,-toward.z)
+ game.player.global_position=spot+Vector3.UP*0.12;game.player.rotation.y=yaw;game.player.velocity=Vector3.ZERO
+ var helper: Hostile=game.crew.assistant
+ if is_instance_valid(helper):
+  var at:=spot+Basis(Vector3.UP,yaw)*Vector3(2.4,0,1.2)
+  at.y=game.district.ground_height(at)+0.15
+  helper.global_position=at;helper.rotation.y=yaw;helper.velocity=Vector3.ZERO
+  helper.order_point=at;helper.has_cover=false
+  game.crew.assistant_point=at
+ game.squad.trail=PackedVector3Array([spot])
+ if is_instance_valid(game.district.operation_area):game.district.operation_area.stream(spot,40)
+
+func mortar_position() -> Vector3:
+ return BmpRoutes.flat(BattleMap.MORTAR,game.district)
 
 # On foot with the squad by its vehicle at the start.
 static func field_class(id: String) -> bool:return id in PlayerClass.INFANTRY
@@ -181,7 +205,7 @@ func begin_field() -> void:
  battery.setup(game,self)
  match game.player_class:
   "bmp":game.squad.tell("Колона стоїть, десант спішений: спершу б'ють «Гради» · на КПК — «Гради» і село · рушай після «Колона — вперед!»")
-  "mortarman":game.squad.tell("Спершу б'ють «Гради» · на КПК — «Гради» і село · потім десант сідає, і колона чекає твоєї команди · G — розрахунок")
+  "mortarman":game.squad.tell("Вогнева позиція за 0,8 км від села · спершу б'ють «Гради» · на КПК — «Гради» і село · потім десант сідає, і колона чекає твоєї команди · G — розрахунок")
   _:game.squad.tell("Відділення спішене біля БМП-1 · чекай команди · на КПК — «Гради» і село")
 
 func barrage_shown() -> bool:return prep=="barrage" and is_instance_valid(battery)
@@ -1168,7 +1192,7 @@ func status() -> String:
 func prep_status() -> String:
  var line:="ВИХІДНИЙ РУБІЖ · ВІДДІЛЕННЯ СПІШЕНЕ БІЛЯ БМП · ЧЕКАЙ КОМАНДИ"
  if game.player_class=="bmp":line="ВИХІДНИЙ РУБІЖ · КОЛОНА СТОЇТЬ · РУШАЙ ПІСЛЯ «КОЛОНА — ВПЕРЕД!»"
- elif game.player_class=="mortarman":line="ВИХІДНИЙ РУБІЖ · ПЕРШИМИ Б'ЮТЬ «ГРАДИ» · ПОТІМ ШТУРМ ЧЕКАЄ ТВОЄЇ КОМАНДИ"
+ elif game.player_class=="mortarman":line="ВОГНЕВА ПОЗИЦІЯ МІНОМЕТА · ПЕРШИМИ Б'ЮТЬ «ГРАДИ» · ПОТІМ ШТУРМ ЧЕКАЄ ТВОЄЇ КОМАНДИ"
  if prep=="mount":
   match game.player_class:
    "bmp":line="«ПО МАШИНАХ!» · СТІЙ: ТВІЙ ДЕСАНТ СІДАЄ"

@@ -33,8 +33,10 @@ const SIGHT_RADIUS := 0.32
 # Centre of the rear peep (extended state); the front frame stands SIGHT_RADIUS ahead.
 const APERTURE := Vector3(0,0.095,0.020)
 const APERTURE_RADIUS := 0.0055
-# Right hand wraps the tube from above-right, index finger on the trigger lever.
-const GRIP := Vector3(0.024,0.036,-0.050)
+# Right hand round the tube from the right, index finger up on the trigger
+# lever: the knuckles stay under the line of sight (the frame is only 9.5 cm
+# over the bore), not up in front of the peep.
+const GRIP := Vector3(0.040,0.006,-0.050)
 const TRIGGER := Vector3(0,0.0625,-0.052)
 # Left hand under the brown sleeve; the tube's rear third lies on the shoulder.
 const SUPPORT := Vector3(0,-0.047,-0.290)
@@ -135,7 +137,7 @@ static func front_sight(root: Node3D, z: float, extended: bool, marks: Array) ->
 	Models.bevel(pose,Vector3(-0.0037,low/2,0),Vector3(0.0366,low,t),"rpg22_mech",0.0004)
 	for i in range(marks.size()):
 		var y: float=heights[i]
-		Models.bevel(pose,Vector3(0,y,0),Vector3(0.011,0.0008,0.0011),"gun_recess",0.0001)
+		Models.bevel(pose,Vector3(0,y,0),Vector3(0.011,0.0012,0.0011),"gun_recess",0.0001)
 		digits(pose,str(int(marks[i][0])/10),Vector3(-0.0165,y,t/2+0.0002),0.0040,"white")
 	pose.rotation.x=0.0 if extended else -PI/2
 	Kit.bake(pose)

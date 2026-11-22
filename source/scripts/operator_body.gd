@@ -78,8 +78,11 @@ func update_pose() -> void:
   m.visible=m==in_hands or (not hands and mounted.has(kind) and ready==(mounted.get(kind,{}).get("extended",false)==true))
   m.transform=PackArt.mount(kind)
   if kind=="rpg7":
-   var round:=m.get_node_or_null("Grenade") as Node3D
-   if round!=null:round.visible=drawn.loaded() if m==in_hands else mounted.get("rpg7",{}).get("loaded",false)==true
+   # The round actually in the tube: the PG-7VL, the OG-7V or the TBG-7V.
+   var seated:=""
+   if m==in_hands:seated=drawn.seated_round()
+   elif mounted.get("rpg7",{}).get("loaded",false)==true:seated=str(mounted.rpg7.get("round","pg7vl"))
+   LauncherRig.seat_round(m,seated)
  if operator.is_vaulting():
   vault_pose()
   return

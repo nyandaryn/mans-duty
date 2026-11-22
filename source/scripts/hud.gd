@@ -100,6 +100,7 @@ func _draw() -> void:
 		draw_string(font,Vector2(center.x-310,size.y-90),launcher.notice,HORIZONTAL_ALIGNMENT_LEFT,-1,15,col)
 	if launcher.active():
 		if launcher.through_scope():draw_pgo7(center)
+		elif launcher.peep_sighted():draw_peep(center)
 		var short: String={"rpo_a":"РПО-А","rpg7":"РПГ-7","rpg22":"РПГ-22"}[launcher.kind]
 		var text := "РПО-А «ШМЕЛЬ» · ПКМ — ПРИЦІЛ · ЛКМ — ПОСТРІЛ · 4 — ПРИБРАТИ"
 		if launcher.kind=="rpg7":
@@ -109,9 +110,9 @@ func _draw() -> void:
 				if count>0 or which=="pg7vl":stock.append("%s %d" % [LauncherRig.ROUND_TITLE[which],count])
 			var choice := " (УТРИМАЙ — ВИБІР)" if launcher.rpg7_rounds().size()>1 else ""
 			text="РПГ-7В1 · %s · ПОСТРІЛИ: %s · ПКМ — ПГО-7 · ЛКМ — ПОСТРІЛ · R — ЗАРЯДИТИ%s · 4 — ПРИБРАТИ" % [("ЗАРЯДЖЕНО "+LauncherRig.ROUND_TITLE[launcher.loaded_round()]) if launcher.loaded() else "НЕ ЗАРЯДЖЕНО"," / ".join(stock),choice]
-			# The PGO-7's chevrons are laid for the PG-7VL (LauncherRig.OG7V_PGO).
-			if launcher.loaded_round()=="og7v":
-				var hint := LauncherRig.og7v_hint()
+			# The PGO-7's chevrons are laid for the PG-7VL (LauncherRig.ROUND_PGO).
+			var hint := LauncherRig.round_hint(launcher.loaded_round())
+			if hint!="":
 				draw_string(font,Vector2(center.x-font.get_string_size(hint,HORIZONTAL_ALIGNMENT_LEFT,-1,15).x*0.5,size.y-114),hint,HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("e4bf68"))
 		elif launcher.kind=="rpg22":
 			if launcher.armed():text="РПГ-22 · БОЙОВЕ ПОЛОЖЕННЯ · РАМКА 5 / 15 / 25 — 50 / 150 / 250 м · ПКМ — ПРИЦІЛ · ЛКМ — ПОСТРІЛ · 4 — ПРИБРАТИ"
@@ -170,6 +171,8 @@ func draw_drone_view() -> void:
 	for side in [-1,1]:draw_line(center+Vector2(side*10,0),center+Vector2(side*45,0),ink,1)
 	draw_line(center+Vector2(0,-8),center+Vector2(0,8),ink,1)
 	draw_string(font,Vector2(40,size.y-95),drone.notice,HORIZONTAL_ALIGNMENT_LEFT,-1,16,ink)
+	var sensed := drone.obstacle_text()
+	if sensed!="":draw_string(font,Vector2(0,size.y*0.36),sensed,HORIZONTAL_ALIGNMENT_CENTER,size.x,22,Color(0.98,0.76,0.30))
 	var alarm := drone.alarm()
 	if alarm!="":
 		var blink := 0.55+0.45*absf(sin(float(Time.get_ticks_msec())*0.008))
@@ -183,7 +186,40 @@ func draw_drone_view() -> void:
 			draw_line(Vector2(screen.position.x,i),Vector2(screen.end.x,i),Color(flicker,flicker,flicker,loss*0.55),2)
 		if drone.signal_strength<0.04:
 			draw_rect(screen,Color(0.04,0.05,0.04,0.96))
-			draw_string(font,center-Vector2(130,0),"ВТРАТА ВІДЕОЗВ’ЯЗКУ",HORIZONTAL_ALIGNMENT_LEFT,-1,23,ink)
+			draw_string(font,center-Vector2(130,0),"ДРОН ЗБИТО" if drone.downed>0.0 else "ВТРАТА ВІДЕОЗВ’ЯЗКУ",HORIZONTAL_ALIGNMENT_LEFT,-1,23,ink)
+
+# The RPG-22's diopter 7 cm in front of the eye, the eye on the front frame:
+# the plate is a soft dark blur with the hole clear in it (a ghost ring), the
+# frame and the target sharp through it. Sizes from Rpg22Art: the hole, the
+# plate 24 mm wide, its top edge over the hole, its foot out of sight below.
+func draw_peep(center: Vector2) -> void:
+	var camera: Camera3D=game.player.camera
+	var per_radian := size.y*0.5/tan(deg_to_rad(camera.fov)*0.5)
+	var eye := 0.07
+	var hole := Rpg22Art.APERTURE_RADIUS/eye*per_radian
+	var half := 0.012/eye*per_radian
+	var top := 0.0152/eye*per_radian
+	var bottom := size.y-center.y+40.0
+	# Defocus of the plate with the eye on the frame 0.4 m off: a 3 mm pupil
+	# blurs it over 0.003 × (1/0.07 − 1/0.4) ≈ 0.035 rad. The blur band is
+	# laid as layers stepping across it, nearly opaque inside the plate.
+	var blur := 0.035*per_radian
+	var layers := 14
+	var alpha := 1.0-pow(0.04,1.0/layers)
+	var steps := 72
+	for layer in range(layers):
+		var shift := blur*(float(layer)/(layers-1)-0.5)
+		var inner := maxf(1.0,hole+shift)
+		for i in range(steps):
+			var quad := PackedVector2Array()
+			for a in [TAU*i/steps,TAU*(i+1)/steps]:
+				var d := Vector2(cos(a),sin(a))
+				var reach := (half-shift)/maxf(absf(d.x),0.0001)
+				if d.y<-0.0001:reach=minf(reach,(top-shift)/-d.y)
+				elif d.y>0.0001:reach=minf(reach,bottom/d.y)
+				quad.append(center+d*inner)
+				quad.append(center+d*maxf(reach,inner))
+			draw_colored_polygon(PackedVector2Array([quad[0],quad[1],quad[3],quad[2]]),Color(0.05,0.055,0.05,alpha))
 
 # The PGO-7V3 at the eye: the round eyepiece, the PG-7VL's range chevrons
 # 2…5 (200…500 m; the top one is the optical axis), the lead scale in

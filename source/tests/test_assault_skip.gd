@@ -180,6 +180,17 @@ func run():
  took=await through(battle)
  check(took>0,"Mortarman: the march skipped")
  await at_drops(battle,"Mortarman")
+ # --- The BM-21 commander: his radio order sends the column -----------------
+ battle=await start(game,"grad",18)
+ check(battle.prep=="" and battle.awaiting and not battle.can_skip(),"BM-21 commander: nothing to skip before his order (prep «%s», awaiting %s)" % [battle.prep,battle.awaiting])
+ game.grad.order_assault(true)
+ await frames(10)
+ check(battle.column_go and not battle.halted and battle.can_skip(),"His radio order sends the column; the march can be skipped")
+ f6(battle);f6(battle)
+ took=await through(battle)
+ check(took>0 and not battle.skipping,"BM-21 commander: the march skipped (%d frames)" % took)
+ await at_drops(battle,"BM-21 commander")
+ check(game.player.global_position.distance_to(battle.mech[0].vehicle.global_position)>3000.0,"…while he stays on his firing position, kilometres away")
  # --- The BMP driver --------------------------------------------------------
  battle=await start(game,"bmp",27)
  check(battle.can_skip() and game.bmp.seat=="driver","The driver may skip the start")

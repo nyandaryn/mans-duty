@@ -163,5 +163,60 @@ func run():
  var at_line:=true
  for actor in battle.mech[0].on_foot():at_line=at_line and actor.global_position.length()<260.0
  check(battle.prep=="" and battle.battery==null and battle.column_go and at_line and game.player.global_position.length()<260.0,"skip_approach puts everybody at the start line in the village")
+ game.queue_free();await frames(5)
+ for s in [11,22,33]:await mortarman(s)
  print("PASS" if not failed else "FAILED"," checks=",checks)
  quit(1 if failed else 0)
+
+# The mortarman's start: his crew on the firing position 0.7–1 km south of
+# the village, standing still through the whole opening salvo. Rocket
+# artillery keeps its targets at least 600 m from its own men; nothing of the
+# salvo lands near ours, and nobody in the village can reach him.
+func mortarman(s: int) -> void:
+ seed(s)
+ var game=await new_game()
+ game.set_player_class("mortarman");game.battle_size=18;game.selected_map=BattleMap.ID;game.start_match()
+ await frames(4)
+ var battle: BattleMode=game.battle
+ var spot:=battle.mortar_position()
+ var helper: Hostile=game.crew.assistant
+ check(battle.prep=="barrage" and game.player.global_position.distance_to(spot)<1.0 and is_instance_valid(helper) and helper.global_position.distance_to(spot)<4.0,"Seed %d: the mortarman and his assistant on the firing position" % s)
+ var reach:=true
+ var nearest_aim:=INF
+ for i in range(3):
+  var d:=Vector2(spot.x,spot.z).distance_to(BattleMap.CENTERS[i])
+  nearest_aim=minf(nearest_aim,d)
+  var covered:=false
+  for charge in range(MortarBallistics.CHARGES.size()):
+   var limits:=MortarBallistics.range_limits(charge)
+   covered=covered or (d>=limits.x and d<=limits.y)
+  reach=reach and covered
+ check(nearest_aim>=600.0 and reach,"Seed %d: every strongpoint 600+ m away (%.0f m) and in the 2B14's range" % [s,nearest_aim])
+ # Our men during the salvo: the mortar crew and the squads by the column.
+ var ours: Array=[game.player,helper]
+ for squad in battle.mech:ours.append_array(squad.on_foot())
+ var last:={}
+ var impacts: Array=[]
+ var seen:=0
+ var tagged:=0
+ for f in range(60*150):
+  await physics_frame
+  if battle.prep!="barrage":break
+  var now:={}
+  for shot in game.blasts.grads:
+   # A rocket's own tag: the dictionary changes in flight, so it is no key.
+   if not shot.has("probe_id"):shot["probe_id"]=tagged;tagged+=1
+   now[int(shot.probe_id)]=Vector3(shot.position)
+  for shot in last:
+   if not now.has(shot):impacts.append(last[shot])
+  last=now
+  for b in game.bots:if is_instance_valid(b) and b.combat_target==game.player and b.sees_player:seen+=1
+ var closest:=INF
+ for p in impacts:
+  for actor in ours:
+   if is_instance_valid(actor):closest=minf(closest,Vector2(p.x-actor.global_position.x,p.z-actor.global_position.z).length())
+ check(battle.prep!="barrage" and impacts.size()>=100,"Seed %d: the salvo over (%d rockets came down)" % [s,impacts.size()])
+ check(closest>=300.0,"Seed %d: no rocket within 300 m of our men (closest %.0f m)" % [s,closest])
+ check(game.player.health>=100.0 and is_instance_valid(helper) and not helper.dead and helper.health>=100.0,"Seed %d: the mortarman and his assistant unhurt (%.0f / %.0f)" % [s,game.player.health,helper.health if is_instance_valid(helper) else -1.0])
+ check(seen==0,"Seed %d: no defender ever had him in sight" % s)
+ game.queue_free();await frames(5)

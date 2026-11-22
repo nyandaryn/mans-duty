@@ -41,6 +41,81 @@ func drift(n: int) -> Vector2:
   most=Vector2(maxf(most.x,planar(off)),maxf(most.y,absf(off.y)))
  return most
 
+func block(size: Vector3, at: Vector3) -> StaticBody3D:
+ var body := StaticBody3D.new()
+ var shape := CollisionShape3D.new();var box := BoxShape3D.new();box.size=size;shape.shape=box;body.add_child(shape)
+ game.world_root.add_child(body);body.global_position=at
+ return body
+
+# Obstacle sensing (N mode only): full forward at a wall it stops short and
+# hovers there; in sport the sensors are off and it flies into it; beside a
+# wall and under a roof it is not thrown off.
+func obstacles() -> void:
+ var wall:=block(Vector3(40,40,1),Vector3(0,40,89.5))
+ await frames(2)
+ await place(Vector3(0,40,150))
+ Input.action_press("forward")
+ var bumped:=false;var warned:="";var nearest:=INF;var fastest:=0.0
+ for i in range(720):
+  await physics_frame
+  bumped=bumped or drone.touching
+  if warned=="" and drone.obstacle_text()!="":warned=drone.obstacle_text()
+  nearest=minf(nearest,drone.global_position.z-0.17-90.0)
+  fastest=maxf(fastest,planar(drone.velocity))
+ var halted:=planar(drone.velocity)
+ var gap:=drone.global_position.z-0.17-90.0
+ var stopped_text:=drone.obstacle_text()
+ Input.action_release("forward")
+ check(fastest>13.0 and not bumped and nearest>0.8,"N: full forward (%.1f m/s) at a wall, it stops short: closest %.1f m" % [fastest,nearest])
+ check(halted<0.3 and gap>1.5 and gap<4.0,"N: hovers %.1f m before the wall (%.2f m/s), the stick still forward" % [gap,halted])
+ check(warned.contains("ГАЛЬМУЮ") and stopped_text.contains("ПЕРЕШКОДА"),"Goggles warn: «%s», then «%s»" % [warned,stopped_text])
+ # Sport: no sensing.
+ drone.on_lost=func():pass
+ await place(Vector3(0,40,150))
+ Input.action_press("forward");Input.action_press("sprint")
+ bumped=false;var impact:=0.0
+ for i in range(720):
+  var speed:=planar(drone.velocity)
+  await physics_frame
+  if drone.touching:bumped=true;impact=speed;break
+ Input.action_release("forward");Input.action_release("sprint")
+ check(bumped and impact>12.0 and drone.health<1.0,"S: sensors off, it flies into the wall at %.0f m/s and breaks (health %.2f)" % [impact,drone.health])
+ drone.on_lost=Callable()
+ wall.queue_free()
+ # Beside a wall a metre off: it hovers and flies along it untroubled.
+ var side:=block(Vector3(0.4,40,200),Vector3(1.2,40,60))
+ await frames(2)
+ await place(Vector3(0,40,150))
+ var braked:=false
+ var start:=drone.global_position
+ for i in range(600):
+  await physics_frame
+  braked=braked or drone.obstacle_braking
+ check(not braked and planar(drone.global_position-start)<0.5,"Hovering a metre from a wall, it is not pushed off")
+ Input.action_press("forward")
+ bumped=false
+ for i in range(180):
+  await physics_frame
+  braked=braked or drone.obstacle_braking
+  bumped=bumped or drone.touching
+ Input.action_release("forward")
+ check(not braked and not bumped and planar(drone.velocity)>9.0,"Flying along the wall it is not braked (%.1f m/s)" % planar(drone.velocity))
+ side.queue_free()
+ # A roof above: climbing, it stops under it.
+ var roof:=block(Vector3(20,1,20),Vector3(0,52.5,150))
+ await frames(2)
+ await place(Vector3(0,40,150))
+ Input.action_press("jump")
+ bumped=false
+ for i in range(300):
+  await physics_frame
+  bumped=bumped or drone.touching
+ Input.action_release("jump")
+ var under:=52.0-(drone.global_position.y+0.065)
+ check(not bumped and under>0.5 and under<2.5 and absf(drone.velocity.y)<0.3,"Climbing under a roof, it stops %.1f m below it" % under)
+ roof.queue_free()
+ await frames(2)
+
 func run():
  game=load("res://main.tscn").instantiate();game.set_meta("automated_preview",true);root.add_child(game)
  await process_frame
@@ -206,6 +281,7 @@ func run():
  await place(Vector3(215,40,0),false)
  await frames(900)
  check(drone.global_position.x<200.5,"Past the edge, it comes back inside (x %.1f)" % drone.global_position.x)
+ await obstacles()
  drone.end_control();drone.queue_free()
  game.queue_free();await frames(3)
  print("FAIL: " if failed else "PASS: ",checks," recon drone flight checks")

@@ -112,7 +112,7 @@ fragment-by-fragment terminal mechanics or certified armor behavior.
 Додай «Розвіддрон / FPV» у наплічник (3×2 клітинки, комплект 1,2 кг).
 J — дістати дрон / надягти або зняти окуляри; також через інвентар Tab.
 WASD — горизонтальний рух, миша — курс і нахил камери.
-Space — зліт / набір висоти, Ctrl — зниження / посадка, Shift — режим S (спорт).
+Space — зліт / набір висоти, Ctrl — зниження / посадка, Shift — режим S (спорт, без датчиків перешкод).
 F після посадки — вимкнути мотори; J — повернутися до бійця.
 Підійди до дрона і натисни F: складання у наплічник займає 2,2 с.
 Потрібні вільні 3×2 клітинки. Батарея й пошкодження зберігаються.
@@ -120,7 +120,8 @@ F після посадки — вимкнути мотори; J — повер�
 Режим польоту стабілізований (GPS-утримання, як у Mavic 3): стік задає
 швидкість, рама нахиляється, тяга й опір повітря розганяють і гальмують
 дрон. Відпустиш — гальмує нахилом назад і зависає там, де спинився, проти
-вітру й поривів. Це не acro-симулятор. При втраті зв’язку / низькому
+вітру й поривів. У режимі N датчики перешкод гальмують перед стіною,
+деревом чи дахом і пишуть «ПЕРЕШКОДА · ГАЛЬМУЮ». Це не acro-симулятор. При втраті зв’язку / низькому
 заряді — автопосадка; на порожній батареї мотори зупиняються.
 
 Game parameters (from DJI Mavic 3 specs): 40 minutes of hover, a fifth
@@ -128,7 +129,10 @@ less flat out; 15 m/s at up to 30° of pitch (N) / 21 m/s at 35° (S, Shift),
 0→14 m/s in ~3.6 s, ~17 m to stop from 15 m/s, ~28 m from 21 m/s; climb
 6 / 8 m/s, descent 6 m/s easing to ~1 m/s at touchdown; yaw up to 200°/s;
 holds within a metre in wind to 12 m/s; thrust to weight 2, sagging in the
-last quarter of the charge. Geofence at the edge of the map (the whole
+last quarter of the charge. Obstacle sensing in N only (Mavic 3 vision
+sensors: forward 20 m, backward 16 m, sideways 25 m, upward 10 m; backward
+speed held to their 12 m/s): it brakes at 4 m/s² and hovers ~2.5 m short
+(~1 m under a roof); off in S, where it flies into things. Geofence at the edge of the map (the whole
 operation area in the great assault), 450 m nominal radio range with
 occlusion penalty, 100 m height limit. Pilot-side 0.4 kg controller/goggles remains
 counted after deploying the 0.8 kg aircraft. Radio obstruction, battery and

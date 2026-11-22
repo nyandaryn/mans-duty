@@ -4,7 +4,10 @@ extends CharacterBody3D
 # A full charge hovers for 40 minutes, as a Mavic 3 class recon quadcopter
 # (46 minutes rated); flat out in sport it drains a quarter quicker.
 const FLIGHT_SECONDS := 2400.0
-const MAX_LINK_DISTANCE := 450.0
+# The radio link, DJI O3+ of the Mavic 3: 8 km in the open under CE rules
+# (15 km FCC); houses or a ridge between the pilot and the drone cut it to
+# about a third (https://www.dji.com/mavic-3/specs: 1.5–3 km in a town).
+const MAX_LINK_DISTANCE := 8000.0
 # Flight of a Mavic 3 class quadcopter, by DJI's specs
 # (https://www.dji.com/mavic-3/specs): 895 g at take-off; 15 m/s level in
 # N mode and 21 m/s in S (sport) at most 30° / 35° of pitch; climbing at
@@ -38,6 +41,20 @@ const SPEED_GAIN := 2.6
 const TRIM_GAIN := 0.6
 const HOLD_GAIN := 1.0
 const CLIMB_GAIN := 4.5
+# Obstacle sensing, the Mavic 3's vision sensors by DJI's specs: forward
+# 0.5–20 m (effective up to 15 m/s), backward 0.5–16 m (12 m/s), sideways
+# 0.5–25 m (15 m/s), upward 0.2–10 m (6 m/s), downward 0.3–18 m (6 m/s).
+# They are off in sport mode. In N mode, set to brake, it slows along the way
+# the sticks send it and hovers short of a wall, a tree or a house; backward
+# it goes no faster than its rear sensors can stop it.
+const FRONT_SENSING := 20.0
+const BACK_SENSING := 16.0
+const SIDE_SENSING := 25.0
+const UP_SENSING := 10.0
+const BACK_SENSING_SPEED := 12.0
+const OBSTACLE_BRAKING := 4.0
+const OBSTACLE_GAP := 2.5
+const OBSTACLE_GAP_ABOVE := 1.0
 var operator: Operator
 var model: Node3D
 var camera: Camera3D
@@ -81,6 +98,11 @@ var yaw_target := 0.0
 var flown_to := Vector3.INF
 var flown_yaw := INF
 var touching := false
+# What the sensors see this step: the distance to it (INF: nothing in the
+# way), and whether the drone is braking for it.
+var obstacle_distance := INF
+var obstacle_braking := false
+var sensor_query: PhysicsShapeQueryParameters3D
 var zoomable := false
 var zoom := 1.0
 var base_fov := 95.0
@@ -95,6 +117,21 @@ var spin_axis := Vector3.RIGHT
 # Rounds going past: the pilot is told he is being shot at.
 var fired_on := 0.0
 const FALL_SHOWN := 1.2
+# Hit and still flying: what was hit (for the goggles), how long the warning
+# stays up, and the harm to its flight — 0 sound, 1 barely flying (a chipped
+# blade or a bent arm shakes it, pulls it aside, costs lift and charge).
+var hit_part := ""
+var hit_notice := 0.0
+var damage := 0.0
+var damage_pull := Vector3.ZERO
+# The men firing at it just now (instance id → physics frame): only a few at
+# a time get a clear shot at a speck in the sky.
+var aimed_by: Dictionary={}
+const PART_NAMES := {"camera":"ПІДВІС КАМЕРИ","arm":"ПРОМЕНЬ РАМИ","prop":"ПРОПЕЛЕР","warhead":"БОЙОВА ЧАСТИНА"}
+# A blade sweeps a tenth of its disc: a round through the disc mostly passes
+# between the blades.
+const BLADE_SHARE := 0.12
+const MOST_SHOOTERS := 3
 
 func setup(owner_operator: Operator, entry: Dictionary) -> void:
  operator=owner_operator
@@ -198,7 +235,7 @@ func _physics_process(delta: float) -> void:
   if Input.is_action_pressed("jump") and battery>0 and health>0:armed=true
  air_clock+=delta
  if armed:
-  battery=maxf(0,battery-delta/FLIGHT_SECONDS*(0.1+0.9*pow(lift/GRAVITY,1.5)))
+  battery=maxf(0,battery-delta/FLIGHT_SECONDS*(0.1+0.9*pow(lift/GRAVITY,1.5))*(1.0+damage))
   if fail_safe:notice="АВТОПОСАДКА · НИЗЬКА БАТАРЕЯ / ВТРАТА ЗВ’ЯЗКУ"
   fly_controlled(stick,fail_safe,delta)
  else:
@@ -227,6 +264,7 @@ func _physics_process(delta: float) -> void:
   if impact>5.5:health=maxf(0,health-(impact-5.5)*0.12)
  if health<=0 and downed<=0.0:armed=false;notice="ДРОН ПОШКОДЖЕНО"
  fired_on=maxf(0.0,fired_on-delta)
+ hit_notice=maxf(0.0,hit_notice-delta)
  # Rest on the supporting slope; level the airframe as the motors lift it.
  var target_basis := Basis(Vector3.UP,yaw)
  if landed and not armed:
@@ -240,6 +278,8 @@ func _physics_process(delta: float) -> void:
  # The airframe leans; the camera on its three-axis gimbal keeps level.
  model.basis=airframe
  camera.rotation=Vector3(camera_pitch,0,0)
+ # Damaged, it shakes: the picture with it.
+ if damage>0.0:camera.rotation+=Vector3(sin(air_clock*29.0),0,sin(air_clock*31.0+1.0))*0.01*damage
  for i in range(rotors.size()):rotors[i].rotation.y+=delta*(130 if armed else 0)*(1 if i%2==0 else -1)
  if armed and not motor_sound.playing:motor_sound.play()
  elif not armed and motor_sound.playing:motor_sound.stop()
@@ -253,7 +293,7 @@ func _physics_process(delta: float) -> void:
 # One step of the flight controller and the airframe under it. The sticks:
 # x right, y up, z back.
 func fly_controlled(stick: Vector3, fail_safe: bool, delta: float) -> void:
- floor_height=ground_clearance()
+ obstacle_distance=INF;obstacle_braking=false
  # On its legs with the motors idling: it stays where it stands until the
  # throttle lifts it.
  var on_legs := is_on_floor() and stick.y<=0.05
@@ -267,6 +307,7 @@ func fly_controlled(stick: Vector3, fail_safe: bool, delta: float) -> void:
  var asked := heading*Vector3(stick.x,0,stick.z)
  if asked.length()>0.05:
   target=asked.limit_length(1.0)*(SPORT_SPEED if sport else NORMAL_SPEED);hold_point=Vector3.INF
+  if not sport:target=avoid(target,heading)
  elif hold_point==Vector3.INF:
   if planar.length()<0.4:hold_point=Vector3(clampf(global_position.x,box.position.x,box.end.x),0,clampf(global_position.z,box.position.y,box.end.y))
  else:target=(Vector3(hold_point.x-global_position.x,0,hold_point.z-global_position.z)*HOLD_GAIN).limit_length(3.0)
@@ -278,10 +319,19 @@ func fly_controlled(stick: Vector3, fail_safe: bool, delta: float) -> void:
  if fail_safe:climb=-1.5;hold_height=INF
  elif absf(stick.y)>0.05:
   climb=stick.y*((SPORT_CLIMB if sport else NORMAL_CLIMB) if stick.y>0 else DESCENT);hold_height=INF
+  if climb>0.3 and not sport:
+   var above := sense(Vector3.UP,UP_SENSING)
+   if above!=INF:
+    obstacle_distance=minf(obstacle_distance,above)
+    var room := sqrt(2.0*OBSTACLE_BRAKING*maxf(above-OBSTACLE_GAP_ABOVE,0.0))
+    if room<climb:climb=room;obstacle_braking=true
  elif hold_height==INF:
   if absf(velocity.y)<0.3:hold_height=global_position.y
  else:climb=clampf((hold_height-global_position.y)*1.2,-2.0,2.0)
  # Close over the ground the descent eases off: it sets down at ~1 m/s.
+ # (The ground is measured every step only while it goes down; otherwise
+ # five times a second with the link.)
+ if climb<-0.3 or velocity.y<-0.3:floor_height=ground_clearance()
  climb=maxf(climb,-(0.8+1.2*floor_height))
  var height: float=global_position.y-operator.game.district.ground_height(global_position)
  if height>ceiling:climb=minf(climb,maxf((ceiling-height)*0.8,-2.0))
@@ -311,6 +361,8 @@ func fly_controlled(stick: Vector3, fail_safe: bool, delta: float) -> void:
   velocity.z=move_toward(velocity.z,0,delta*8)
   velocity+=(up*lift+Vector3.DOWN*GRAVITY)*delta
  else:velocity+=(up*lift+Vector3.DOWN*GRAVITY+drag(velocity-air()))*delta
+ if damage>0.0 and not on_legs:
+  velocity+=(damage_pull+Vector3(sin(air_clock*23.0)+0.6*sin(air_clock*37.1),0.5*sin(air_clock*19.3),sin(air_clock*27.7+2.0))*2.2*damage)*delta
 
 # Drag of the air moving past at this velocity (m/s²).
 func drag(air_velocity: Vector3) -> Vector3:
@@ -328,7 +380,7 @@ func air() -> Vector3:
  return wind+gust*(1.0+wind.length()*0.25)
 
 # Thrust the pack can give: the voltage sags in the last quarter of the charge.
-func max_lift() -> float:return MAX_LIFT*(0.8+0.2*clampf(battery/0.25,0.0,1.0))
+func max_lift() -> float:return MAX_LIFT*(0.8+0.2*clampf(battery/0.25,0.0,1.0))*(1.0-0.2*damage)
 
 # The geofence, x and z: the battlefield, or the whole operation area round
 # the great assault (the 400 m square of the old maps held the drone back
@@ -342,21 +394,119 @@ func fence() -> Rect2:
  if district.map_id==TrainingRange.ID:return Rect2(-200,-415,400,670)
  return Rect2(-195,-195,390,390)
 
+# The sticks send it along target: the sensor on that side looks ahead, and
+# the speed toward what it sees is cut to what stops it OBSTACLE_GAP short.
+func avoid(target: Vector3, heading: Basis) -> Vector3:
+ var direction := target.normalized()
+ var ahead := -(heading.inverse()*direction).z
+ var reach := SIDE_SENSING
+ if ahead>0.707:reach=FRONT_SENSING
+ elif ahead<-0.707:
+  reach=BACK_SENSING;target=target.limit_length(BACK_SENSING_SPEED)
+ var distance := sense(direction,reach)
+ if distance==INF:return target
+ obstacle_distance=distance
+ # Braking at a steady rate, and the last metres in proportion to the gap,
+ # so that it settles there (and backs off a little if blown closer).
+ var room := distance-OBSTACLE_GAP
+ var allowed := maxf(minf(sqrt(2.0*OBSTACLE_BRAKING*maxf(room,0.0)),room*1.5),-1.0)
+ if target.length()>allowed:
+  target=direction*allowed;obstacle_braking=true
+ return target
+
+# The gap between the airframe and the first thing along a unit direction
+# within reach (INF: nothing): a sphere the airframe's size swept along it,
+# one query; hugging a wall already, a ray instead.
+func sense(direction: Vector3, reach: float) -> float:
+ if sensor_query==null:
+  var sphere := SphereShape3D.new();sphere.radius=0.22
+  sensor_query=PhysicsShapeQueryParameters3D.new();sensor_query.shape=sphere
+  sensor_query.collision_mask=collision_mask
+ var excluded: Array[RID]=[get_rid()]
+ if is_instance_valid(operator):excluded.append(operator.get_rid())
+ sensor_query.exclude=excluded
+ sensor_query.transform=Transform3D(Basis(),global_position)
+ sensor_query.motion=direction*reach
+ var space := get_world_3d().direct_space_state
+ var sweep := space.cast_motion(sensor_query)
+ if sweep[1]>=1.0:return INF
+ if sweep[1]>0.0:return sweep[0]*reach
+ var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(global_position,global_position+direction*reach,collision_mask,excluded))
+ return INF if hit.is_empty() else maxf(global_position.distance_to(hit.position)-0.22,0.0)
+
+# The warning on the goggles.
+func obstacle_text() -> String:
+ if not obstacle_braking:return ""
+ if velocity.length()<0.5:return "ПЕРЕШКОДА %.1f м · ЗУПИНКА" % obstacle_distance
+ return "ПЕРЕШКОДА %.1f м · ГАЛЬМУЮ" % obstacle_distance
+
 # The flight mode for the goggles.
 func mode_text() -> String:
  if not armed:return "МОТОРИ ВИМКНЕНО"
  if landed:return "НА ЗЕМЛІ"
- var text := "S · СПОРТ" if sport else "N"
+ var text := "S · СПОРТ · ДАТЧИКИ ПЕРЕШКОД ВИМКНЕНО" if sport else "N"
  if hold_point!=Vector3.INF and hold_height!=INF:text+=" · ЗАВИСАННЯ"
+ if damage>0.0:text+=" · ПОШКОДЖЕНО"
  return text
 
-# A rifle round through it, or fragments of a burst nearby: a quadcopter of
-# this class does not fly on with a motor, a prop arm or the battery hit.
-func receive_hit(amount: float, _zone: String, _incoming: Vector3, _point: Vector3) -> void:
+# Where things are on the airframe (the model's coordinates): the body with
+# the battery and the flight controller, the camera on its gimbal, the four
+# motors on their arms, the props over them (Mavic 3: 9.4-inch props on a
+# 380 mm diagonal).
+func airframe_parts() -> Dictionary:
+ var motors: Array[Vector3]=[Vector3(-0.19,0.045,-0.15),Vector3(0.19,0.045,-0.15),Vector3(-0.19,0.045,0.15),Vector3(0.19,0.045,0.15)]
+ var roots: Array[Vector3]=[]
+ for motor in motors:roots.append(Vector3(signf(motor.x)*0.04,0.04,signf(motor.z)*0.06))
+ return {"body":[Vector3(0,0.045,0),Vector3(0.058,0.044,0.09)],"camera":[Vector3(0,0.012,-0.095),Vector3(0.024,0.02,0.02)],
+  "motors":motors,"roots":roots,"motor_radius":0.016,"motor_height":0.02,"arm_radius":0.012,"prop_up":0.023,"prop_radius":0.11,"warhead":[]}
+
+# What a round meets on its line through the airframe's box: "body",
+# "motor", "camera", "arm", "prop" (a blade, by BLADE_SHARE where it crosses
+# a disc), "warhead", or "" — only air between them.
+func struck_part(point: Vector3, incoming: Vector3) -> String:
+ var parts := airframe_parts()
+ var into := model.global_transform.affine_inverse()
+ var way := (model.global_basis.inverse()*incoming).normalized()
+ var start: Vector3=into*point-way*0.06
+ var discs: Array[int]=[]
+ for i in range(120):
+  var at: Vector3=start+way*(i*0.005)
+  for piece in ["body","camera"]:
+   var box: Array=parts[piece]
+   var off: Vector3=(at-box[0]).abs()
+   if off.x<box[1].x and off.y<box[1].y and off.z<box[1].z:return piece
+  if not parts.warhead.is_empty():
+   var axis: Vector3=at-parts.warhead[0]
+   if absf(axis.z)<parts.warhead[2] and Vector2(axis.x,axis.y).length()<parts.warhead[1]:return "warhead"
+  for k in range(parts.motors.size()):
+   var motor: Vector3=parts.motors[k]
+   var across := Vector2(at.x-motor.x,at.z-motor.z).length()
+   if across<parts.motor_radius and absf(at.y-motor.y)<parts.motor_height:return "motor"
+   var root: Vector3=parts.roots[k]
+   if at.distance_to(Geometry3D.get_closest_point_to_segment(at,root,motor))<parts.arm_radius:return "arm"
+   if across<parts.prop_radius and absf(at.y-motor.y-parts.prop_up)<0.006 and not discs.has(k):
+    discs.append(k)
+    if randf()<BLADE_SHARE:return "prop"
+ return ""
+
+# A rifle round: a motor or the body (the battery, the flight controller)
+# hit brings it down; a broken arm or blade often does, otherwise it flies on
+# shaking and pulled aside; a round through the gaps does nothing.
+# Fragments of a burst nearby pepper the whole airframe.
+func receive_hit(amount: float, zone: String, incoming: Vector3, point: Vector3) -> void:
  if health<=0:return
  var airborne:=armed and not landed
- health=maxf(0,health-amount/25.0)
- if health>0:return
+ if zone=="drone":
+  var part := struck_part(point,incoming)
+  if part=="" or amount<4.0:return
+  var fatal := part=="body" or part=="motor" or (part=="arm" and randf()<0.5) or (part=="prop" and randf()<0.4)
+  health=0.0 if fatal else maxf(0.0,health-0.5)
+  if health>0:
+   wounded(part)
+   return
+ else:
+  health=maxf(0,health-amount/25.0)
+  if health>0:return
  armed=false
  if airborne:
   downed=0.001
@@ -371,9 +521,35 @@ func receive_hit(amount: float, _zone: String, _incoming: Vector3, _point: Vecto
 func near_miss() -> void:
  if health>0:fired_on=2.0
 
-# The red line across the picture: shot down, or rounds going past.
+# Hit and still in the air: the pilot is told what was hit; it flies on worse.
+func wounded(part: String) -> void:
+ hit_part=part;hit_notice=3.0
+ damage=minf(1.0,damage+0.5)
+ var side := Vector2(sin(float(get_instance_id()%97)),cos(float(get_instance_id()%89))).normalized()*0.8
+ damage_pull+=Vector3(side.x,-0.3,side.y)
+ notice="ДРОН УРАЖЕНО: %s" % PART_NAMES.get(part,part)
+ if is_instance_valid(operator) and operator.field_rig!=null and operator.field_rig.drone==self:
+  operator.field_rig.drone_notice="Дрон уражено (%s), летить гірше." % String(PART_NAMES.get(part,part)).to_lower()
+
+# A man of the other side takes aim at it: yes while fewer than
+# MOST_SHOOTERS others have a go at it just now.
+func take_aim(shooter: Object) -> bool:
+ var frame := Engine.get_physics_frames()
+ var id := shooter.get_instance_id()
+ for other in aimed_by.keys():
+  if frame-int(aimed_by[other])>45:aimed_by.erase(other)
+ if not aimed_by.has(id) and aimed_by.size()>=MOST_SHOOTERS:return false
+ aimed_by[id]=frame
+ return true
+
+# How far the enemy hears it over the battle: a Mavic class drone is quiet,
+# above some 30 m it is hardly heard at all.
+func heard_within() -> float:return 35.0
+
+# The red line across the picture: shot down, hit, or rounds going past.
 func alarm() -> String:
  if downed>0.0:return "ДРОН ЗБИТО"
+ if hit_notice>0.0:return "ДРОН УРАЖЕНО: %s" % PART_NAMES.get(hit_part,hit_part)
  return "ПО ДРОНУ ВЕДУТЬ ВОГОНЬ" if fired_on>0.0 else ""
 
 # The wrist display takes this drone's picture while the goggles are off

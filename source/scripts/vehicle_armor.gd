@@ -32,6 +32,9 @@ const ROUNDS := {
  "rpg22":{"title":"РПГ-22","pen":390.0,"jet":0.0065,"cone":0.40,"heat":true},
  "ap30":{"title":"30-мм БТ","pen":35.0,"jet":0.06,"cone":0.30,"heat":false},
  "frag":{"title":"уламки","pen":10.0,"jet":0.05,"cone":0.25,"heat":false},
+ # TBG-7V: no jet; its case crushed on the plate cuts a 150–170 mm hole in
+ # 10–20 mm of homogeneous steel and the blast goes in (VehicleDamage).
+ "tbg7v":{"title":"ТБГ-7В","pen":20.0,"jet":0.02,"cone":1.0,"heat":false},
  "bullet":{"title":"куля","pen":6.0,"jet":0.12,"cone":0.12,"heat":false}
 }
 
@@ -41,6 +44,9 @@ var parts: Array[Dictionary]=[]
 # given relative to it and turn with the turret.
 var turret_pivot := Vector3.ZERO
 var turret_radius := 0.0
+# Where the fragments of a burst nearby are aimed (VehicleDamage.blast):
+# the hull of a BMP-2 by default.
+var frag_box := AABB(Vector3(-1.4,0.4,-3.0),Vector3(2.8,1.3,6.0))
 
 # A zero normal: thin sheet all round (a truck's cab, its bonnet), its
 # slope does not matter.
@@ -110,6 +116,8 @@ static func bm21() -> VehicleArmor:
  a.plate("кабіна",Vector3(0,1.95,-1.40),Vector3(1.17,0.75,0.80),Vector3.ZERO,1.5)
  a.plate("рама й баки",Vector3(0,1.15,1.35),Vector3(1.17,0.30,1.95),Vector3.ZERO,5.0)
  a.plate("пакет напрямних",Vector3(0,2.30,1.25),Vector3(0.88,0.38,1.25),Vector3.ZERO,2.0)
+ # The cab and the package stand higher than a BMP's hull.
+ a.frag_box=AABB(Vector3(-1.17,0.85,-3.6),Vector3(2.34,1.83,6.4))
  a.part("двигун","engine",Vector3(0,1.45,-2.80),Vector3(0.45,0.38,0.60))
  a.part("водій","driver",Vector3(-0.48,1.85,-1.15),Vector3(0.28,0.45,0.32))
  a.part("командир машини","commander",Vector3(0.50,1.85,-1.15),Vector3(0.28,0.45,0.32))

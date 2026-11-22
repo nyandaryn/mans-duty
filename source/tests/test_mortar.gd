@@ -232,6 +232,11 @@ func run():
  var east: Dictionary=TopoMap.measure(Vector2(0,0),Vector2(100,0))
  check(absf(north.distance-100)<0.01 and north.azimuth==0 and east.azimuth==1500,"Map ruler gives distance and grid bearing")
  check(TopoMap.grid_label(7311900)=="11,9" and TopoMap.grid_label(5497800)=="97,8","Grid labelled in kilometres and hundreds")
+ # On the firing position 0.8 km south of the village the map opens on the
+ # sheet of the route, which has both on it; the village's own sheet is a
+ # click away.
+ check(topo.page=="route","On the firing position the map opens on the route sheet (%s)" % topo.page)
+ topo.set_sheet("local")
  topo.zoom=3;topo.center=Vector2(150,150);topo.clamp_view()
  check(topo.center.x<=200-200/3.0+0.01,"Magnified map stays on the sheet")
  game.close_panels()

@@ -157,7 +157,8 @@ func wanted_mode() -> String:
  # The driver sees it in his seat too; a passenger is not in the vehicle yet.
  if battery()!=null and not goggles and game.bmp.seat!="troop":return "barrage"
  var unit := drone()
- if unit!=null and unit.shows_on_wrist() and not unit.piloting and unit.health>0 and not goggles:return "drone"
+ # Shot down, the picture stays a moment: the fall shows what happened.
+ if unit!=null and unit.shows_on_wrist() and not unit.piloting and (unit.health>0 or (unit.downed>0.0 and unit.downed<ReconDrone.FALL_SHOWN+1.5)) and not goggles:return "drone"
  return ""
 
 func wanted() -> bool:return wanted_mode()!=""
@@ -217,7 +218,7 @@ func _process(delta: float) -> void:
  header.text="РОЗВІДДРОН · КАНАЛ 1%s · U — СХОВАТИ" % ("" if unit.armed else " · НА ЗЕМЛІ")
  var minutes := unit.battery*ReconDrone.FLIGHT_SECONDS/60.0
  var bearing := MortarBallistics.mils_text(MortarBallistics.azimuth(-unit.camera.global_basis.z))
- telemetry.text="АКБ %d %% ≈%d хв · ЗВ’ЯЗОК %d %% · %s\nВИСОТА %.0f м · АЗ %s · ДО ДРОНА %.0f м" % [roundi(unit.battery*100),floori(minutes),roundi(unit.signal_strength*100),"НЕМАЄ СИГНАЛУ" if lost else ("ПОСАДКА" if unit.battery<=0.04 else "ЗАВИС"),unit.floor_height,bearing,unit.global_position.distance_to(game.player.global_position)]
+ telemetry.text="АКБ %d %% ≈%d хв · ЗВ’ЯЗОК %d %% · %s\nВИСОТА %.0f м · АЗ %s · ДО ДРОНА %.0f м" % [roundi(unit.battery*100),floori(minutes),roundi(unit.signal_strength*100),unit.alarm() if unit.alarm()!="" else ("НЕМАЄ СИГНАЛУ" if lost else ("ПОСАДКА" if unit.battery<=0.04 else "ЗАВИС")),unit.floor_height,bearing,unit.global_position.distance_to(game.player.global_position)]
 
 func place_box() -> void:
  on_right=mode=="barrage" and game.bmp.seat=="driver"

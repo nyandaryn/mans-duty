@@ -206,6 +206,8 @@ func ads_position() -> Vector3:
 	return Vector3(0,-float(viewmodel.get_meta("sight_height")),-float(viewmodel.get_meta("rear_z"))-float(viewmodel.get_meta("eye_relief")))
 
 func update_pose(delta: float) -> void:
+	# The RPG-22's diopter 7 cm off the eye is left to the HUD's blur.
+	camera.near=0.09 if launcher.peep_sighted() else 0.025
 	ads_weight=move_toward(ads_weight,1.0 if aim else 0.0,delta*5.5)
 	gun_kick=move_toward(gun_kick,0,delta*0.17)
 	sway=sway.lerp(Vector2.ZERO,minf(delta*8,1))
@@ -475,7 +477,7 @@ func _physics_process(delta: float) -> void:
 	var view_fov := field_rig.view_fov() if field_rig.mode=="rangefinder" else (50.0 if current().id=="svd" else 65.0) if aim else 78.0
 	if launcher.mode=="ready":
 		# Through the PGO-7 its 13° field fills the circle of the eyepiece.
-		var sighted: float=LauncherRig.PGO_FIELD/0.9 if launcher.kind=="rpg7" else (55.0 if launcher.kind=="rpg22" else 60.0)
+		var sighted: float=LauncherRig.PGO_FIELD/0.9 if launcher.kind=="rpg7" else (42.0 if launcher.kind=="rpg22" else 60.0)
 		view_fov=lerpf(78,sighted,smoothstep(0,1,launcher.ads))
 	camera.fov=lerpf(camera.fov,view_fov,minf(delta*12,1))
 	camera.far=4000.0 if game.player_class=="grad" and game.battle.active else 700.0 if game.battle.active else 1250.0 if field_rig.mode=="rangefinder" else (850.0 if launcher.active() else (900.0 if game.district.map_id==TrainingRange.ID else 160.0))
@@ -897,7 +899,7 @@ func launcher_choices() -> Array:
 func round_choices() -> Array:
 	var list := []
 	for which in launcher.rpg7_rounds():
-		list.append({"id":which,"title":LauncherRig.ROUND_TITLE[which],"count":backpack.count(which),"detail":{"pg7vl":"КУМУЛЯТИВНИЙ","og7v":"ОСКОЛКОВИЙ"}.get(which,""),"enabled":true})
+		list.append({"id":which,"title":LauncherRig.ROUND_TITLE[which],"count":backpack.count(which),"detail":LauncherRig.ROUND_KIND.get(which,""),"enabled":true})
 	return list
 
 func drone_choices() -> Array:

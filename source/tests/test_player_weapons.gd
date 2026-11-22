@@ -143,6 +143,24 @@ func run():
  p.update_pose(0.016)
  var drawn: Node3D=body.launcher_models.get("rpg22/ready/hands",null)
  check(drawn!=null and drawn.visible and body.launcher_models.has("rpg7") and body.launcher_models["rpg7"].visible and not mounted.visible,"His body shows the RPG-22 in the hands, the RPG-7 back on the mount")
+ # At the peep: the eye on the frame, the diopter a blur the camera leaves
+ # out, and no finger in front of the hole (the right hand used to stand up
+ # into the line of sight, the frame hidden behind its knuckles).
+ p.launcher.ads=1.0
+ p.launcher.animate()
+ p.update_pose(0.016)
+ check(p.launcher.peep_sighted() and p.camera.near>=0.085,"Through the RPG-22's peep the near plane leaves the diopter out (%.3f)" % p.camera.near)
+ var cam:=p.camera
+ var blocking:=PackedStringArray()
+ for hand in [p.launcher.left,p.launcher.right]:
+  for m in hand.find_children("*","MeshInstance3D",true,false):
+   var box: AABB=m.get_aabb()
+   for i in range(8):
+    var c:Vector3=cam.global_transform.affine_inverse()*(m.global_transform*box.get_endpoint(i))
+    # Inside the hole's cone (≈4.5°) between the near plane and the frame.
+    if c.z<-0.09 and c.z>-0.40 and Vector2(c.x,c.y).length()<-c.z*0.08:blocking.append(str(m.get_parent().name))
+ check(blocking.is_empty(),"No hand in front of the peep (%s)" % ", ".join(blocking))
+ p.launcher.ads=0.0
  before=game.blasts.rockets.size()
  check(p.launcher.fire() and game.blasts.rockets[-1].kind=="rpg22","The RPG-22 fires")
  check(p.backpack.count("rpg22")==0 and p.launcher.mode=="spent","…and the tube is thrown away")

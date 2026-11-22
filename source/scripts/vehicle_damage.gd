@@ -10,7 +10,9 @@ extends RefCounted
 # - fuel catches fire often, ammunition sometimes goes up at once
 #   (a catastrophic loss: everybody inside dies) and otherwise starts a fire
 #   that sets it off a minute later; a burning vehicle is abandoned;
-# - the gun and its sight can be put out of action.
+# - the gun and its sight can be put out of action, by a hit or by the
+#   fragments of a burst on the turret roof by the sight head;
+# - a TBG-7V through thin armour fills the inside with its blast.
 # Hooks on the vehicle (duck-typed): occupants() -> [[actor, local point]],
 # turret_yaw() -> float, on_immobile(), on_fire(), on_destroyed(catastrophic),
 # and for the BM-21 cook_off_rockets().
@@ -33,6 +35,19 @@ var penetrations := 0
 var last := {}
 var history: Array[String]=[]
 static var flame_material: StandardMaterial3D
+# A fragment tears a track only with this much left (mm): those of a mine or
+# a rocket close by, of a charge on the armour; not the small fragments of a
+# grenade, a 30 mm shell or a shaped charge's case.
+const TRACK_FRAG := 8.0
+# Bursts nearby and the vehicle (VehicleDamage.blast): reach, what a
+# fragment pierces at contact (mm), rays of fragments. OG-7V: 0.9 g steel
+# fragments: holes in a truck's sheet, nothing through a BMP's 6–7 mm.
+# TBG-7V outside the armour: its case breaks up the same way.
+const BLASTS := {"grad":[14.0,26.0,10],"mine":[6.0,9.0,6],"cannon":[2.5,4.0,3],"heat":[3.0,4.0,3],"rpo":[4.0,5.0,4],"fpv_frag":[5.0,8.0,5],"og7":[4.0,5.0,4],"tbg":[4.0,5.0,4],"cookoff":[20.0,30.0,12]}
+# The sight heads and periscopes on the roof by the gun: a fragmentation or
+# thermobaric grenade bursting within reach of them cracks the glass (odds at
+# contact, falling off to nothing at the reach) and the gun cannot be laid.
+const OPTICS := {"og7":[2.5,0.75],"tbg":[3.0,0.85]}
 
 func setup(owner: Node3D, layout: VehicleArmor) -> void:
  vehicle=owner;armor=layout;game=owner.game
@@ -62,7 +77,7 @@ func strike(point: Vector3, direction: Vector3, round: String, pen_mm: float=-1.
  var heat: bool=data.heat
  # A shaped charge on the road wheels or the track breaks it whether or not
  # the jet reaches the hull behind.
- if result.zone=="tracks" and (heat or round=="frag") and not immobile:
+ if result.zone=="tracks" and (heat or (round=="frag" and pen_mm>=TRACK_FRAG)) and not immobile:
   immobilize("перебита гусениця")
  if not result.penetrated:
   if round=="frag":return result
@@ -119,7 +134,25 @@ func strike(point: Vector3, direction: Vector3, round: String, pen_mm: float=-1.
   elif randf()<lethal:
    note("займання після пробиття")
    ignite(randf_range(8,25))
+ if round=="tbg7v" and not destroyed:thermobaric_inside(local_point)
  return result
+
+# The TBG-7V through the armour: the blast and the burning mixture go in
+# through the hole it cut, and the pressure inside tears the hatches off
+# their catches (the maker's description: it is made for rooms up to
+# 300 m³; a BMP's inside is a few). Nobody inside lives through it
+# unhurt; the fuel, the hydraulic fluid and the ammunition stowed all round
+# catch more often than not.
+func thermobaric_inside(at: Vector3) -> void:
+ note("термобаричний вибух усередині")
+ for entry in occupants():
+  var place: Vector3=entry[1]
+  var near:=at.distance_to(place)<2.5
+  hurt(entry[0],randf_range(160.0,320.0) if near else randf_range(90.0,220.0),1.0,at.direction_to(place) if not place.is_equal_approx(at) else Vector3.UP)
+ if randf()<0.25:explode()
+ elif randf()<0.6:
+  note("займання після вибуху")
+  ignite(randf_range(10,30))
 
 # The men inside: on the line of the jet (or slug) dead, near it hit by
 # spall; behind a HEAT penetration everyone takes the pressure and the
@@ -240,15 +273,17 @@ func show_flames(on: bool) -> void:
 # box, each a strike with what the fragment still pierces at that range.
 func blast(where: Vector3, kind: String) -> void:
  if destroyed or invulnerable:return
- var spec: Array={"grad":[14.0,26.0,10],"mine":[6.0,9.0,6],"cannon":[2.5,4.0,3],"heat":[3.0,4.0,3],"rpo":[4.0,5.0,4],"fpv_frag":[5.0,8.0,5],"cookoff":[20.0,30.0,12]}.get(kind,[0.0,0.0,0])
+ var spec: Array=BLASTS.get(kind,[0.0,0.0,0])
  var reach: float=spec[0]
  if reach<=0.0:return
+ if OPTICS.has(kind):optics(where,OPTICS[kind])
  var center:=vehicle.to_global(Vector3(0,1.1,0))
  var distance:=where.distance_to(center)
  if distance>reach+3.0:return
  var count:=clampi(int(float(spec[2])*clampf(3.0/maxf(distance,1.0),0.1,1.0)+0.5),1,int(spec[2]))
+ var box:=armor.frag_box
  for i in range(count):
-  var aim:=vehicle.to_global(Vector3(randf_range(-1.4,1.4),randf_range(0.4,1.7),randf_range(-3.0,3.0)))
+  var aim:=vehicle.to_global(box.position+Vector3(randf()*box.size.x,randf()*box.size.y,randf()*box.size.z))
   var dir:=where.direction_to(aim)
   var ray:=PhysicsRayQueryParameters3D.create(where,where+dir*(reach+4.0),1)
   var hit:=vehicle.get_world_3d().direct_space_state.intersect_ray(ray)
@@ -256,3 +291,20 @@ func blast(where: Vector3, kind: String) -> void:
   var pen: float=float(spec[1])*clampf(1.0-where.distance_to(hit.position)/(reach+3.0),0.0,1.0)
   if pen<1.0:continue
   strike(hit.position,dir,"frag",pen)
+
+# The sight head on the turret roof by the gun (the "weapon" part of the
+# layout): a burst within reach and in sight of it cracks the glass.
+func optics(where: Vector3, odds: Array) -> void:
+ if weapon_out:return
+ for part_data in armor.parts:
+  if String(part_data.kind)!="weapon":continue
+  var local: Vector3=Vector3(part_data.center.x,part_data.center.y+part_data.half.y+0.2,part_data.center.z)
+  if part_data.turret:local=armor.turret_pivot+local.rotated(Vector3.UP,turret_yaw())
+  var head:=vehicle.to_global(local)
+  var distance:=where.distance_to(head)
+  if distance>float(odds[0]):continue
+  var hit:=vehicle.get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(where,head,1))
+  if not hit.is_empty() and Vector3(hit.position).distance_to(head)>0.7:continue
+  if randf()<float(odds[1])*(1.0-distance/float(odds[0])):
+   note("приціл розбито уламками")
+   weapon_out=true

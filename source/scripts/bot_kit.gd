@@ -9,9 +9,11 @@ extends RefCounted
 # - "sniper": SVD, single aimed shots from far off, the gunners, the
 #   grenade launchers and the drone pilots first; keeps away from close
 #   fighting;
-# - "rpg7": RPG-7 with PG-7VL for the vehicles, then for groups and for the
-#   houses they fire from, the rifle in between; keeps a grenade for armour
-#   while enemy vehicles are about;
+# - "rpg7": RPG-7 with a mix of rounds (ROUND_MIX): the PG-7VL for the
+#   vehicles, the OG-7V for groups in the open and in windows, the TBG-7V
+#   for the houses they fire from; the rifle in between; keeps a round that
+#   pierces armour while enemy vehicles are about, and changes the round in
+#   the tube for the target when the bag has a better one;
 # - "rpg22": a rifleman with RPG-22 tubes, used on vehicles (and on a house
 #   once no armour is left);
 # - "uav": FPV drones from behind cover: flies over the enemy, finds a
@@ -26,19 +28,40 @@ const TITLES := {"rifle":"стрілець","mg":"кулеметник","sniper"
 # bag (manual: about 6 s) and to put it away; how far behind the danger
 # zone of the jet reaches (RPG-7: 30 m; RPG-22: 15 m).
 const LAUNCHER := {
- "rpg7":{"armour":330.0,"soft":260.0,"draw":2.2,"aim":1.6,"reload":6.0,"stow":1.4,"danger":30.0,"round":"pg7vl"},
+ "rpg7":{"armour":330.0,"soft":300.0,"draw":2.2,"aim":1.6,"reload":6.0,"stow":1.4,"danger":30.0,"round":"pg7vl"},
  "rpg22":{"armour":200.0,"soft":170.0,"draw":7.0,"aim":1.4,"reload":0.0,"stow":1.0,"danger":15.0,"round":"rpg22"},
 }
 const ARMED_DRAW := 2.0
+# The RPG-7 grenadier's bag beside the PG-7VL in the tube (the bag takes
+# three rounds): one of these, picked by a hash of where he joins the fight,
+# not the global RNG (seeded scenarios keep their course).
+const ROUND_MIX := [{"pg7vl":2,"og7v":1,"tbg7v":0},{"pg7vl":1,"og7v":2,"tbg7v":0},{"pg7vl":1,"og7v":1,"tbg7v":1}]
+# How far each round is worth firing: armour (the PG-7VL's 330 m; the
+# TBG-7V on light armour within its 200 m aimed range), and men (the OG-7V's
+# 350 m aimed range with the RPG-7V1, kept to 300).
+const ROUND_REACH := {"pg7vl":{"armour":330.0,"soft":260.0},"og7v":{"armour":0.0,"soft":300.0},"tbg7v":{"armour":180.0,"soft":200.0}}
+# Unloading a round to put in another, on top of the reload.
+const UNLOAD := 1.5
 const FPV_SCRIPT := "res://scripts/fpv_drone.gd"
 
 var bot: Hostile
 var game: Node3D
 var kind := "rifle"
-# PG-7VL rounds left for the RPG-7, RPG-22 tubes on the back.
-var grenades := 0
+# Rounds left in the bag for the RPG-7 (by kind; grenades: all of them),
+# the one in the tube, RPG-22 tubes on the back.
+var rounds := {"pg7vl":0,"og7v":0,"tbg7v":0}
+var grenades: int:
+ get:
+  var total:=0
+  for which in rounds:total+=int(rounds[which])
+  return total
 var tubes := 0
 var loaded := false
+var loaded_round := ""
+# The round to put in on the next reload ("" — the best for what is about),
+# and whether he aims again once it is in (a change of round for a target).
+var next_round := ""
+var then_aim := false
 # The RPG-22 on his back already armed: drawn out, it cannot be folded again.
 var armed := false
 # How long this draw takes (an armed RPG-22 is quicker).
@@ -63,7 +86,10 @@ static func make(owner: Hostile, id: String) -> BotKit:
  var kit:=BotKit.new()
  kit.bot=owner;kit.game=owner.game;kit.kind=id
  match id:
-  "rpg7":kit.grenades=3;kit.tubes=1;kit.loaded=true
+  "rpg7":
+   var at: Vector3=owner.global_position if owner.is_inside_tree() else owner.position
+   kit.rounds=ROUND_MIX[absi(hash([owner.friendly,roundi(at.x),roundi(at.z),int(owner.get_meta("battle_group",0))]))%ROUND_MIX.size()].duplicate()
+   kit.tubes=1;kit.loaded=true;kit.loaded_round="pg7vl"
   "rpg22":kit.tubes=2 if owner.friendly else 1
   "uav":kit.drones={"fpv_heat":3,"fpv_frag":2}
  return kit
@@ -166,19 +192,61 @@ func consider_launch() -> void:
   if not sees_vehicle(from,vehicle):continue
   best=vehicle;best_d=d
  if best!=null:
-  begin(which,best,best.to_global(Vector3(0,1.1,0)))
-  return
+  if which!="rpg7":
+   begin(which,best,best.to_global(Vector3(0,1.1,0)))
+   return
+  # The PG-7VL; the TBG-7V on light armour close in; never the OG-7V
+  # (with only those left he goes on with the men).
+  var round:=pick_round(["pg7vl","tbg7v"],"armour",best_d)
+  if round!="":
+   begin(which,best,best.to_global(Vector3(0,1.1,0)),round)
+   return
  # No armour in reach: a group, or the house they fire from. The RPG-7
- # keeps its last grenade for armour while there is any; an RPG-22 goes on
- # soft targets only when no enemy vehicle is left.
- var spare:=(which=="rpg7" and (int(loaded)+grenades)>1) or vehicles.is_empty()
- if not spare:return
+ # keeps a round that pierces armour while there is any about; an RPG-22
+ # goes on soft targets only when no enemy vehicle is left.
+ if which=="rpg7":
+  var point:=soft_target(from,float(spec.soft))
+  if point==Vector3.INF:return
+  var d:=from.distance_to(point)
+  # Men in the open or at a window: the OG-7V; the house they hold: the
+  # TBG-7V; the PG-7VL only as a spare.
+  var order:=["tbg7v","og7v","pg7vl"] if soft_kind=="house" else ["og7v","tbg7v","pg7vl"]
+  var round:=pick_round(order,"soft",d)
+  if round=="" or (not vehicles.is_empty() and not spare_after(round)):return
+  begin(which,null,point,round)
+  return
+ if not vehicles.is_empty():return
  var point:=soft_target(from,float(spec.soft))
  if point!=Vector3.INF:begin(which,null,point)
 
+# The first round of a list he has (in the tube or the bag) that reaches.
+func pick_round(order: Array, use: String, distance: float) -> String:
+ for round in order:
+  if distance>float(ROUND_REACH[round][use]):continue
+  if (loaded and loaded_round==round) or int(rounds.get(round,0))>0:return round
+ return ""
+
+# After this round is fired, one that pierces armour is still left.
+func spare_after(round: String) -> bool:
+ var left:=int(rounds.pg7vl)+int(rounds.tbg7v)
+ if loaded and loaded_round in ["pg7vl","tbg7v"]:left+=1
+ if round in ["pg7vl","tbg7v"]:left-=1
+ return left>0
+
+# The round for the next reload: against armour while there is any about,
+# else for men.
+func reload_choice() -> String:
+ if next_round!="" and int(rounds.get(next_round,0))>0:return next_round
+ var order:=["pg7vl","tbg7v","og7v"] if not enemy_vehicles().is_empty() else ["og7v","tbg7v","pg7vl"]
+ for round in order:
+  if int(rounds.get(round,0))>0:return round
+ return ""
+
 # Three or more of them close together in sight, or the window a seen enemy
-# fires from (a known contact behind a wall).
+# fires from (a known contact behind a wall). soft_kind: "open" or "house".
+var soft_kind := ""
 func soft_target(from: Vector3, reach: float) -> Vector3:
+ soft_kind="open"
  if bot.sees_player and is_instance_valid(bot.combat_target):
   var center: Vector3=bot.combat_target.global_position
   var d:=from.distance_to(center)
@@ -193,7 +261,9 @@ func soft_target(from: Vector3, reach: float) -> Vector3:
   if d2>30.0 and d2<reach and not own_near(point,14.0):
    # Hidden behind something solid: the grenade on that wall.
    var hit:=game.get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(from,point,1))
-   if not hit.is_empty() and Vector3(hit.position).distance_to(point)<5.0 and not hit.collider.has_meta("terrain"):return hit.position
+   if not hit.is_empty() and Vector3(hit.position).distance_to(point)<5.0 and not hit.collider.has_meta("terrain"):
+    soft_kind="house"
+    return hit.position
  return Vector3.INF
 
 func own_near(point: Vector3, radius: float) -> bool:
@@ -201,9 +271,12 @@ func own_near(point: Vector3, radius: float) -> bool:
   if alive_actor(actor) and actor.global_position.distance_to(point)<radius:return true
  return false
 
-func begin(which: String, target: Node3D, point: Vector3) -> void:
+func begin(which: String, target: Node3D, point: Vector3, round: String="") -> void:
  using=which;aim_at=target;aim_point=point
  phase="draw";clock=0.0;held=0.0
+ # Another round wanted in the RPG-7: changed once it is off the back.
+ next_round="";then_aim=false
+ if which=="rpg7" and round!="" and not (loaded and loaded_round==round):next_round=round;then_aim=true
  draw_time=ARMED_DRAW if using=="rpg22" and armed else float(LAUNCHER[using].draw)
  show_launcher(true)
 
@@ -227,7 +300,8 @@ func act(delta: float) -> bool:
    if using=="rpg22" and not armed and clock>=draw_time-2.0:
     armed=true
     show_launcher(true)
-   if clock>=draw_time:phase="aim";clock=0.0
+   if clock>=draw_time:
+    phase="reload" if then_aim else "aim";clock=0.0
   "aim":
    if clock>=float(spec.aim)+eye().distance_to(aim_point)*0.004:
     if safe_behind(float(spec.danger)):
@@ -236,10 +310,18 @@ func act(delta: float) -> bool:
      held+=delta
      if held>3.0:phase="stow";clock=0.0
   "reload":
-   if clock>=float(spec.reload):
-    loaded=true;grenades-=1
+   if clock>=float(spec.reload)+(UNLOAD if loaded else 0.0):
+    var round:=reload_choice()
+    if round!="":
+     # The round taken out goes back in the bag.
+     if loaded and loaded_round!="":rounds[loaded_round]=int(rounds.get(loaded_round,0))+1
+     rounds[round]=int(rounds[round])-1
+     loaded=true;loaded_round=round
+    next_round=""
     show_round(true)
-    phase="stow";clock=0.0
+    if then_aim and loaded and aim_point!=Vector3.INF:phase="aim"
+    else:phase="stow"
+    then_aim=false;clock=0.0
   "stow":
    if clock>=float(spec.stow):
     phase="";show_launcher(false)
@@ -267,7 +349,7 @@ func launcher_muzzle() -> Vector3:
 
 func fire() -> void:
  var spec: Dictionary=LAUNCHER[using]
- var round: String=spec.round
+ var round: String=loaded_round if using=="rpg7" and loaded_round!="" else String(spec.round)
  var muzzle:=launcher_muzzle()
  var point:=aim_point
  # The lead on a moving vehicle: its speed over the time of flight, judged
@@ -293,7 +375,7 @@ func fire() -> void:
  for k in range(3):effects.puff(muzzle-line*(1.5+k*1.8),0.9+k*0.4,0.75)
  fired+=1
  if using=="rpg7":
-  loaded=false
+  loaded=false;loaded_round=""
   show_round(false)
   if grenades>0:phase="reload";clock=0.0
   else:phase="stow";clock=0.0
@@ -386,6 +468,7 @@ func show_launcher(on: bool) -> void:
  if is_instance_valid(launcher_node):launcher_node.queue_free()
  launcher_node=launcher_model(using,armed if using=="rpg22" else loaded)
  bot.model.add_child(launcher_node)
+ if using=="rpg7":LauncherRig.seat_round(launcher_node,loaded_round if loaded else "")
  launcher_node.position=Vector3(0.18,1.28,0.25)
  launcher_node.rotation=Vector3(PI/2,0,-0.2)
 
@@ -410,7 +493,10 @@ static func build_launcher(which: String, ready: bool) -> Node3D:
   var art: Script=load(path)
   if art.has_method("build"):
    var built=art.build(ready)
-   if built is Node3D:return built
+   if built is Node3D:
+    # The other rounds of the RPG-7, hidden in the muzzle (seat_round).
+    if which=="rpg7":LauncherRig.add_round_models(built)
+    return built
  # Plain stand-in: a tube with the grenade or the folded sights.
  var root:=Node3D.new()
  var tube:=MeshInstance3D.new()
@@ -469,10 +555,10 @@ func pose_launcher() -> void:
  bot.pose_arm("Right",launcher_node.transform*Vector3(points.GRIP))
  bot.pose_arm("Left",launcher_node.transform*Vector3(points.SUPPORT))
 
-# The PG-7VL in the muzzle of the RPG-7, gone with the shot, back on reload.
+# The round in the muzzle of the RPG-7 (the one loaded), gone with the
+# shot, back on reload.
 func show_round(on: bool) -> void:
- if is_instance_valid(launcher_node) and launcher_node.has_node("Grenade"):
-  (launcher_node.get_node("Grenade") as Node3D).visible=on
+ if is_instance_valid(launcher_node) and using=="rpg7":LauncherRig.seat_round(launcher_node,loaded_round if on and loaded else "")
 
 # The empty RPG-22 tube is thrown down where he fired from.
 func discard_tube() -> void:

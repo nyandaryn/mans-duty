@@ -1,3 +1,42 @@
+# 0.32.1 validation — 2026-11-22
+
+The RPG-22 sight; the mortarman's firing position in the great assault;
+drones harder to shoot down, hit zones, the recon drone's link and obstacle
+sensing; the TBG-7V and OG-7V against armour.
+
+- test_player_weapons (70 checks): through the RPG-22 sight the camera's near
+  plane is ≥ 0.085 m and no part of the hands sits in the cone of the
+  diopter's hole (lowered grip on the right side of the tube).
+- New test_rpg_rounds (72, --fixed-fps 60): the TBG-7V's flight (100 →
+  125 m/s, 4.5 kg), room blast over a floor within ≈7 m, lethal ≈5 m in the
+  open, burning through ≤ 20 mm; the OG-7V against a BMP breaks the turret
+  optics but not the hull, the Grad's cab and pack take fragments; small
+  fragments no longer cut tracks (≥ 8 mm needed); the loaded round shows on
+  the tube in third person; bot grenadiers carry a mix and choose PG-7VL for
+  armour, OG-7V for men in the open, TBG-7V for a building.
+- test_field_start (48): over seeds 11/22/33 the mortarman and his assistant
+  start on the firing position 0.7–1 km south of the village, every
+  strongpoint 600+ m away and in the 2B14's range (charges 1–2); through the
+  whole salvo (100+ rockets) none lands within 300 m of our men, both stay
+  unhurt and no defender has him in sight.
+- test_assault_skip (47): the BM-21 commander's radio order sends the column
+  and the march can be skipped while he stays on his firing position.
+- test_mortar (84): on the firing position the map opens on the route sheet.
+- test_drone_shot (29, --fixed-fps 60): about half the enemy fire at drones;
+  six riflemen under a recon drone hovering 100 m away do not bring it down
+  in 30 s, at 30 m they do; a hit to an arm or a blade may only damage it
+  (less lift, pulled aside, «ДРОН УРАЖЕНО» on the goggles), a motor, the body
+  or the pack brings it down («ДРОН ЗБИТО», the fall shown on the wrist).
+- test_fpv (61): a round down through a motor or the middle, or head-on into
+  the warhead, finds that part; one into the warhead before the board arms it
+  does no harm; an FPV is heard over three times further than a Mavic.
+- test_recon_drone_flight (42): obstacle sensing in N mode brakes and holds
+  ≈2.5 m short of a wall, off in S mode; test_recon_drone (45): the link
+  reaches 8 km in the open, a wall between pilot and drone cuts it to a third.
+- Full suite from source: 73 scenarios pass with no script errors (the new
+  RPG-rounds and drone tests at --fixed-fps 60); test_bmp_bench 36.
+  `--quit-after 300` exits clean.
+
 # 0.32.0 validation — 2026-11-22
 
 Skipping the barrage and the march in the great assault; training courses

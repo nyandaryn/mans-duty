@@ -4,9 +4,9 @@ extends Node3D
 # The grenade launchers in the player's hands (key 4; 5 — the next one in the
 # pack):
 # - RPO-A «Шмель»: one-shot capsule off the pack's outer mount;
-# - RPG-7V1 with the PGO-7V3: taken off the mount, loaded with a PG-7VL or
-#   an OG-7V from the pack (R, 6 s; held R with both in the pack — the ring
-#   of choices), aimed through the 2.7× sight whose range chevrons
+# - RPG-7V1 with the PGO-7V3: taken off the mount, loaded with a PG-7VL, an
+#   OG-7V or a TBG-7V from the pack (R, 6 s; held R with more than one kind
+#   in the pack — the ring of choices), aimed through the 2.7× sight whose range chevrons
 #   (2…5 — 200…500 m) and stadia scale are laid off the PG-7VL's own flight;
 #   it stays in the hands after the shot, empty;
 # - RPG-22: taken off the mount, then brought into the firing position (R):
@@ -32,9 +32,14 @@ const TITLE := {"rpo_a":"РПО-А «ШМЕЛЬ»","rpg7":"РПГ-7В1","rpg22":
 const SHORT := {"rpo_a":"РПО-А","rpg7":"РПГ-7","rpg22":"РПГ-22"}
 # Rounds of the RPG-7 a pack may hold, in the order a man reaches for them:
 # the PG-7VL against armour, the OG-7V (40 mm fragmentation head, no
-# sustainer) against men in the open and behind light cover.
-const RPG7_ROUNDS := ["pg7vl","og7v"]
-const ROUND_TITLE := {"pg7vl":"ПГ-7ВЛ","og7v":"ОГ-7В"}
+# sustainer) against men in the open and behind light cover, the TBG-7V
+# (105 mm thermobaric head) against men in houses, trenches and dugouts.
+const RPG7_ROUNDS := ["pg7vl","og7v","tbg7v"]
+const ROUND_TITLE := {"pg7vl":"ПГ-7ВЛ","og7v":"ОГ-7В","tbg7v":"ТБГ-7В"}
+const ROUND_KIND := {"pg7vl":"КУМУЛЯТИВНИЙ","og7v":"ОСКОЛКОВИЙ","tbg7v":"ТЕРМОБАРИЧНИЙ"}
+# The loaded round's model in the muzzle of an RPG-7 model (Rpg7Art builds
+# the PG-7VL as "Grenade"; add_round_models() adds the others).
+const ROUND_NODE := {"pg7vl":"Grenade","og7v":"GrenadeOG","tbg7v":"GrenadeTBG"}
 # The backblast: how far behind the breech it maims (stylised, not firing
 # guidance: the real danger zones are 15–30 m).
 const BLAST_REACH := {"rpo_a":3.0,"rpg7":8.0,"rpg22":5.0}
@@ -48,10 +53,21 @@ const PGO_TOP := 200.0
 # (the PG-7VL's 276 m), 200 m — «4» (423 m), 250 m — «5» (553 m); past
 # that the scale runs out.
 const OG7V_PGO := [[150,3],[200,4],[250,5]]
-static func og7v_hint() -> String:
+# The TBG-7V is slower still (100 m/s off the launcher, a weak sustainer):
+# 100 m — «3» (the PG-7VL's 319 m), 125 m — «4» (404 m), 150 m — «5»
+# (480 m); its 200 m aimed range is past the chevrons. (The real PGO-7V3
+# has a scale of its own for the PG-7VR and the TBG-7V; the game's reticle
+# draws only the PG-7VL's chevrons.)
+const TBG7V_PGO := [[100,3],[125,4],[150,5]]
+const ROUND_PGO := {"og7v":OG7V_PGO,"tbg7v":TBG7V_PGO}
+static func og7v_hint() -> String:return round_hint("og7v")
+
+# The line under the PGO-7 for a round its chevrons are not laid for.
+static func round_hint(round: String) -> String:
+ if not ROUND_PGO.has(round):return ""
  var marks:=PackedStringArray()
- for row in OG7V_PGO:marks.append("%d м — «%d»" % [row[0],row[1]])
- return "ОГ-7В: ПГО-7 РОЗМІЧЕНИЙ ПІД ПГ-7ВЛ — ЦІЛЬСЯ "+", ".join(marks)+" · ДАЛІ — ПОНАД ШКАЛУ"
+ for row in ROUND_PGO[round]:marks.append("%d м — «%d»" % [row[0],row[1]])
+ return "%s: ПГО-7 РОЗМІЧЕНИЙ ПІД ПГ-7ВЛ — ЦІЛЬСЯ " % ROUND_TITLE[round]+", ".join(marks)+" · ДАЛІ — ПОНАД ШКАЛУ"
 
 # Front frame of the RPG-22: its bars, by range.
 const FRAME_RANGES := [50,150,250]
@@ -110,9 +126,7 @@ func use_model(which: String, extended: bool=true) -> void:
   match which:
    "rpg7":
     built=Rpg7Art.build(false)
-    var og:=Models.group(built,"GrenadeOG",Rpg7Art.MUZZLE)
-    og.add_child(og7v_model(true))
-    og.visible=false
+    add_round_models(built)
    "rpg22":built=Rpg22Art.build(extended,frame_marks())
    _:built=ShmelArt.build()
   add_child(built)
@@ -136,6 +150,8 @@ static func og7v_model(with_charge: bool=true) -> Node3D:
  # The notched steel of the body under the paint.
  for z in [-0.29,-0.25,-0.21,-0.17,-0.13,-0.09]:Models.tube(root,Vector3(0,0,z),0.0203,0.004,"#3c4430",Vector3.FORWARD)
  Models.tube(root,Vector3(0,0,-0.065),0.0200,0.040,"#3f4434",Vector3.FORWARD,0.016)
+ # The neck from the tail of the body back to the muzzle face.
+ Models.tube(root,Vector3(0,0,-0.025),0.0190,0.040,"#3f4434",Vector3.FORWARD,0.0160)
  if with_charge:Models.tube(root,Vector3(0,0,0.22),0.0193,0.47,"#8d8461",Vector3.FORWARD)
  else:
   Models.tube(root,Vector3(0,0,0.20),0.0085,0.40,"#2f322c",Vector3.FORWARD)
@@ -145,6 +161,51 @@ static func og7v_model(with_charge: bool=true) -> Node3D:
    fin.rotation.z=a-PI/2
  Models.merge_rigid(root)
  return root
+
+# The TBG-7V: the 105 mm thermobaric head (a short rounded nose with the
+# cap of the fuze, a cylinder, a long taper to the motor) ahead of the
+# muzzle, the PG-7VR's motor and the charge inside the tube (with_charge),
+# or with the fins out in flight. 950 mm in all. Origin on the muzzle face.
+static func tbg7v_model(with_charge: bool=true) -> Node3D:
+ var root:=Node3D.new();root.name="TBG7V"
+ Models.tube(root,Vector3(0,0,-0.446),0.016,0.008,"#a5a08a",Vector3.FORWARD,0.010)
+ Models.tube(root,Vector3(0,0,-0.418),0.046,0.048,"#4a5336",Vector3.FORWARD,0.018)
+ Models.tube(root,Vector3(0,0,-0.380),0.0525,0.028,"#4d5638",Vector3.FORWARD,0.046)
+ Models.tube(root,Vector3(0,0,-0.260),0.0525,0.212,"#4d5638",Vector3.FORWARD)
+ # The black band and the stencilled lot over the body.
+ Models.tube(root,Vector3(0,0,-0.300),0.0530,0.020,"#23261f",Vector3.FORWARD)
+ Models.tube(root,Vector3(0,0,-0.200),0.0528,0.014,"#c9c19c",Vector3.FORWARD)
+ Models.tube(root,Vector3(0,0,-0.098),0.024,0.112,"#454d33",Vector3.FORWARD,0.0525)
+ # The sustainer's nozzle ring just ahead of the muzzle.
+ Models.tube(root,Vector3(0,0,-0.022),0.0222,0.040,"#3f4434",Vector3.FORWARD,0.024)
+ if with_charge:
+  Models.tube(root,Vector3(0,0,0.115),0.0195,0.23,"#3f4434",Vector3.FORWARD)
+  Models.tube(root,Vector3(0,0,0.375),0.0193,0.29,"#8d8461",Vector3.FORWARD)
+ else:
+  Models.tube(root,Vector3(0,0,0.115),0.0195,0.23,"#3f4434",Vector3.FORWARD)
+  Models.tube(root,Vector3(0,0,0.36),0.0085,0.26,"#2f322c",Vector3.FORWARD)
+  for i in range(4):
+   var a:=TAU*i/4+PI/4
+   var fin:=Models.part(root,Vector3(cos(a),sin(a),0)*0.045+Vector3(0,0,0.45),Vector3(0.0016,0.085,0.03),"2f322c")
+   fin.rotation.z=a-PI/2
+ Models.merge_rigid(root)
+ return root
+
+# The OG-7V and the TBG-7V in the muzzle of an RPG-7 model, hidden: the
+# PG-7VL is Rpg7Art's own "Grenade".
+static func add_round_models(model: Node3D) -> void:
+ for round in ["og7v","tbg7v"]:
+  if model.has_node(ROUND_NODE[round]):continue
+  var group:=Models.group(model,ROUND_NODE[round],Rpg7Art.MUZZLE)
+  group.add_child(og7v_model(true) if round=="og7v" else tbg7v_model(true))
+  group.visible=false
+
+# Shows the round seated in an RPG-7 model ("" — empty).
+static func seat_round(model: Node3D, round: String) -> void:
+ if model==null:return
+ for which in ROUND_NODE:
+  var node:=model.get_node_or_null(ROUND_NODE[which]) as Node3D
+  if node!=null:node.visible=which==round
 
 # The rounds for the RPG-7 the pack holds, in the order a man reaches for them.
 func rpg7_rounds() -> Array:
@@ -252,11 +313,13 @@ func armed() -> bool:
 
 func show_round() -> void:
  if kind!="rpg7":return
- var seated:=loaded_round() if loaded() else (loading if mode=="load" and timer>LOAD_TIME*0.55 else "")
- var round:=tube.get_node_or_null("Grenade") as Node3D
- if round!=null:round.visible=seated=="pg7vl"
- var og:=tube.get_node_or_null("GrenadeOG") as Node3D
- if og!=null:og.visible=seated=="og7v"
+ seat_round(tube,seated_round())
+
+# The round in the muzzle: the one loaded, or the one being pushed in once
+# it is past half way.
+func seated_round() -> String:
+ if kind!="rpg7":return ""
+ return loaded_round() if loaded() else (loading if mode=="load" and timer>LOAD_TIME*0.55 else "")
 
 # R with the RPG-7 in the hands: a round from the pack into the muzzle (the
 # kind asked for, or the first the pack holds).
@@ -349,6 +412,10 @@ func shoulder_point() -> Vector3:
 # Through the PGO-7 the scope fills the view (the HUD draws it): the launcher
 # itself is out of sight.
 func through_scope() -> bool:return kind=="rpg7" and ads>0.85
+# At the RPG-22's peep the eye is on the front frame: the diopter 7 cm off
+# the eye is a blur round the hole (the HUD draws it; the camera's near plane
+# leaves the plate out).
+func peep_sighted() -> bool:return kind=="rpg22" and ads>0.85
 
 func animate() -> void:
  visible=active()

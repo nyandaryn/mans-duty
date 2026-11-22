@@ -73,6 +73,18 @@ func run():
  await frames(100)
  check(drone.velocity.y<0 and drone.notice.contains("АВТОПОСАДКА"),"Sustained radio loss starts physical failsafe descent")
  drone.link_timer=0;await frames(2)
+ # The link of a Mavic 3 (DJI O3+): far out over the field it still holds;
+ # behind a wall it drops to a third.
+ check(drone.link_range==ReconDrone.MAX_LINK_DISTANCE and ReconDrone.MAX_LINK_DISTANCE>=8000.0,"Its link reaches 8 km in the open")
+ var in_view := drone.signal_strength
+ var screen := StaticBody3D.new()
+ var screen_shape := CollisionShape3D.new();var screen_box := BoxShape3D.new();screen_box.size=Vector3(30,30,0.3);screen_shape.shape=screen_box;screen.add_child(screen_shape)
+ game.add_child(screen);screen.global_position=(drone.global_position+player.camera.global_position)*0.5
+ screen.look_at(drone.global_position,Vector3.UP)
+ await frames(2);drone.link_timer=0;await frames(2)
+ check(in_view>0.9 and absf(drone.signal_strength-in_view*0.3)<0.02,"A wall between them cuts the link to a third (%.2f → %.2f)" % [in_view,drone.signal_strength])
+ screen.queue_free();await frames(2)
+ drone.link_timer=0;await frames(2)
  var pos := drone.global_position;var charge := drone.battery
  game.paused=true;await frames(8)
  check(drone.global_position==pos and drone.battery==charge,"Pause freezes drone and battery")

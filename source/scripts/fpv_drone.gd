@@ -521,7 +521,7 @@ func _physics_process(delta: float) -> void:
   return
  if rest_y==INF:rest_y=global_position.y
  update_link(delta)
- fired_on=maxf(0.0,fired_on-delta)
+ fired_on=maxf(0.0,fired_on-delta);hit_notice=maxf(0.0,hit_notice-delta)
  if downed>0.0:downed+=delta
  if pilot_given and armed and coast_left<=0 and state!="falling" and pilot.get("dead")==true:abandon()
  steer_controls(delta)
@@ -708,13 +708,41 @@ func abandon() -> void:
  if armed and launched():coast_left=COAST_TIME
  state="falling"
 
+# A 7-inch frame: the stack and the 6S pack on top, motors on 7-inch props
+# at the ends of the arms, the warhead slung under it.
+func airframe_parts() -> Dictionary:
+ var motors: Array[Vector3]=[Vector3(-0.112,0.012,-0.112),Vector3(0.112,0.012,-0.112),Vector3(-0.112,0.012,0.112),Vector3(0.112,0.012,0.112)]
+ var roots: Array[Vector3]=[]
+ for motor in motors:roots.append(motor*0.25)
+ var charge: Array=[Vector3(0,-0.062,-0.05),0.047,0.21] if warhead=="heat" else [Vector3(0,-0.05,-0.04),0.039,0.13]
+ return {"body":[Vector3(0,0.03,0.005),Vector3(0.04,0.035,0.075)],"camera":[Vector3(0,0.016,-0.085),Vector3(0.015,0.015,0.012)],
+  "motors":motors,"roots":roots,"motor_radius":0.019,"motor_height":0.016,"arm_radius":0.013,"prop_up":0.03,"prop_radius":0.089,"warhead":charge}
+
+# Its whine is heard far over the battle.
+func heard_within() -> float:return 150.0
+
 # A rifle round through it, or fragments of a burst nearby: a 7-inch frame
-# does not fly on with a motor, an arm or the pack hit. It falls, and the
-# warhead may still go off where it lands.
-func receive_hit(amount: float, _zone: String, _incoming: Vector3, _point: Vector3) -> void:
+# does not fly on with a motor or the pack hit; a broken arm or blade often
+# brings it down too. A round into the warhead sets it off now and then
+# once the board has armed it. It falls, and the warhead may still go off
+# where it lands.
+func receive_hit(amount: float, zone: String, incoming: Vector3, point: Vector3) -> void:
  if over or health<=0:return
- health=maxf(0,health-amount/25.0)
- if health>0:return
+ if zone=="drone":
+  var part := struck_part(point,incoming)
+  if part=="" or amount<4.0:return
+  if part=="warhead":
+   if warhead_armed and rng.randf()<0.25:detonate(global_position,velocity,null)
+   return
+  var fatal := part=="body" or part=="motor" or (part=="arm" and rng.randf()<0.5) or (part=="prop" and rng.randf()<0.4)
+  health=0.0 if fatal else maxf(0.0,health-0.5)
+  if health>0:
+   hit_part=part;hit_notice=3.0
+   notice="FPV УРАЖЕНО: %s" % PART_NAMES.get(part,part)
+   return
+ else:
+  health=maxf(0,health-amount/25.0)
+  if health>0:return
  armed=false;coast_left=0.0
  if launched() and not grounded:
   downed=0.001;state="falling";goal=""

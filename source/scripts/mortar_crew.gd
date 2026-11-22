@@ -199,6 +199,9 @@ func order(actor: Hostile, id: String, point: Vector3) -> void:
  actor.cover_timer=0;actor.squad_role=""
 
 func reachable(point: Vector3) -> Variant:
+ # The firing position of the great assault lies in the open field, off the
+ # village's walking grid: any spot there can be walked to straight.
+ if game.district.off_grid(point):return Vector3(point.x,game.district.ground_height(point)+0.1,point.z)
  var cell: Vector2i=game.district.nearest_cell(game.district.navigation_cell(point))
  var snapped: Vector3=game.district.navigation_position(cell)
  if Vector2(snapped.x-point.x,snapped.z-point.z).length()>3:return null

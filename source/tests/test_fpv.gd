@@ -141,6 +141,21 @@ func run():
  for node in [moving,fleeing,hull]:node.queue_free()
  await frames(2)
 
+ # --- Where a round goes through it ----------------------------------------------
+ var parts: Node3D=bot_fpv(ground(-60,140))
+ await frames(2)
+ var mf: Transform3D=parts.model.global_transform
+ check(parts.struck_part(mf*Vector3(0.112,0.4,0.112),Vector3.DOWN)=="motor","Down through a motor: the motor")
+ check(parts.struck_part(mf*Vector3(0,0.4,0.0),Vector3.DOWN)=="body","Down through the middle: the stack and the pack")
+ check(parts.struck_part(mf*Vector3(0,-0.062,-0.6),Vector3.BACK)=="warhead","Head-on along its axis: the warhead first")
+ parts.receive_hit(68.0,"drone",parts.global_basis*Vector3.BACK,mf*Vector3(0,-0.062,-0.6))
+ check(parts.health==1.0 and not parts.over,"A round into the warhead before the board arms it: no harm")
+ var mavic:=ReconDrone.new()
+ check(parts.heard_within()>mavic.heard_within()*3.0,"An FPV's whine is heard much further than a Mavic")
+ mavic.free()
+ parts.queue_free()
+ await frames(2)
+
  # --- Shot down ---------------------------------------------------------------
  var shot: Node3D=bot_fpv(ground(60,140))
  shot.autopilot_point(ground(60,-150))

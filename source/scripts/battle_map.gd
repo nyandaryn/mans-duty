@@ -19,6 +19,13 @@ const TITLES := ["ОП-1 / ЗАХІД · ВУЛ. ЯРОСЛАВА ГОМЗИ","�
 const POSITIONS := [[Vector2(-168,-39),Vector2(-108,-2),Vector2(-145,27)],[Vector2(-52,-171),Vector2(-8,-140),Vector2(-79,-105)],[Vector2(113,40),Vector2(129,4),Vector2(170,61)]]
 const SPAWN := Vector2(-58,158)
 const FORMATION := Vector2(-40,136)
+# The mortarman's firing position: open field south of the village, below
+# the rise it stands on, 0.72–0.95 km from the strongpoints (charges 1–2 of
+# the 2B14). Out of sight of every defender's post and of their BMPs, 270 m
+# off the column's road, and further than the 600 m rocket artillery keeps
+# from its own men: the opening salvo of the «Grads» lands on the
+# strongpoints, not round the mortar.
+const MORTAR := Vector2(100,800)
 # Unit vector along the streets (towards east-south-east).
 const STREET := Vector2(0.913,0.407)
 const CAR_PAINT := ["5a4636","4a3e33","6a5444","3f3a33"]

@@ -96,7 +96,9 @@ func run():
  for d in [landed,theirs,far]:d.queue_free()
  await frames(2)
 
- # An enemy sees one of ours over him and shoots it down.
+ # An enemy (one of those who fire at drones) sees one of ours low over
+ # him and shoots it down.
+ bot.drone_shooter=true
  drone=hover(Vector3(5,12,7))
  await frames(5)
  check(bot.line_clear(eye,drone.global_position),"Clear sky between the enemy and the drone")
@@ -107,7 +109,7 @@ func run():
  var down_at := -1.0
  var t := 0.0
  var rounds: int=bot.weapon.rounds()
- while t<25.0:
+ while t<60.0:
   await physics_frame
   t+=1.0/60.0
   if noticed<0 and bot.drone_engaged():noticed=t
@@ -127,12 +129,87 @@ func run():
  bot.set_physics_process(false)
  drone.queue_free()
 
+ # Where a round goes through the airframe (Mavic 3 class): the body or a
+ # motor bring it down; between the arms and blades it passes through.
+ drone=hover(Vector3(-3,30,24))
+ await frames(5)
+ var frame: Transform3D=drone.model.global_transform
+ check(drone.struck_part(frame*Vector3(0,0.4,0),Vector3.DOWN)=="body","A round down through the middle meets the body")
+ check(drone.struck_part(frame*Vector3(0.19,0.4,0.15),Vector3.DOWN)=="motor","Down through a motor: the motor")
+ check(drone.struck_part(frame*Vector3(0.12,0.4,0.0),Vector3.DOWN)=="","Between the arms and the props: nothing")
+ var blades:=0
+ for i in range(400):
+  if drone.struck_part(frame*Vector3(0.25,0.4,0.18),Vector3.DOWN)=="prop":blades+=1
+ check(blades>24 and blades<80,"Through a prop disc a round meets a blade about one time in eight (%d / 400)" % blades)
+ drone.receive_hit(68.0,"drone",Vector3.DOWN,frame*Vector3(0.12,0.1,0.0))
+ check(drone.health==1.0 and drone.armed,"A round through the gaps does no harm")
+ var downed:=0;var hits:=0
+ for i in range(200):
+  drone.health=1.0;drone.damage=0.0;drone.downed=0.0;drone.armed=true;drone.landed=false
+  drone.receive_hit(68.0,"drone",Vector3.DOWN,frame*Vector3(0.115,0.1,0.105))
+  hits+=1
+  if drone.health<=0:downed+=1
+ check(downed>60 and downed<140,"An arm or a blade hit brings it down only some of the time (%d / %d)" % [downed,hits])
+ drone.queue_free()
+ # Hit and still flying: the goggles say what was hit, it shakes and is
+ # pulled aside but holds on, with less lift and more drain.
+ drone=hover(Vector3(-3,30,24))
+ await frames(5)
+ var lift_before: float=drone.max_lift()
+ for i in range(400):
+  if drone.health<1.0:break
+  drone.receive_hit(68.0,"drone",Vector3.DOWN,drone.model.global_transform*Vector3(0.115,0.1,0.105))
+  if drone.health<=0:drone.health=1.0;drone.downed=0.0;drone.armed=true;drone.landed=false
+ check(drone.health==0.5 and drone.armed and drone.damage>0.0,"A non-fatal hit: damaged, still flying")
+ check(drone.alarm().begins_with("ДРОН УРАЖЕНО") and drone.mode_text().contains("ПОШКОДЖЕНО"),"The goggles say it was hit: «%s»" % drone.alarm())
+ check(drone.max_lift()<lift_before,"It has less lift")
+ await frames(60)
+ var spot:=drone.global_position
+ await frames(600)
+ check(drone.flying() and drone.global_position.distance_to(spot)<2.0,"Damaged, it still holds its place (%.2f m)" % drone.global_position.distance_to(spot))
+ drone.queue_free()
+ # Six enemy riflemen under one of our drones hovering still: high up it
+ # is hard to notice and to hit; low it is in real danger.
+ var group: Array=[]
+ var shooters:=0
+ # (Our man well away: the drone is all they have to shoot at.)
+ player.position=Vector3(0,0.1,190)
+ for b in game.bots:
+  if b.drone_shooter:shooters+=1
+ check(shooters>=game.bots.size()*0.3 and shooters<=game.bots.size()*0.7,"About half the enemy fire at drones (%d / %d)" % [shooters,game.bots.size()])
+ for i in range(6):
+  var b: Hostile=game.bots[i]
+  var p: Vector3=game.district.navigation_position(game.district.nearest_cell(game.district.navigation_cell(Vector3(-4.5+3*i,0,27+(i%2)*2))))
+  b.position=Vector3(p.x,p.y+0.05,p.z);b.rotation.y=PI*0.25*(i+1)
+  b.set_physics_process(true)
+  group.append(b)
+ for spec in [[100.0,30.0,true],[30.0,60.0,false]]:
+  drone=hover(Vector3(0,float(spec[0])*0.87,28-float(spec[0])*0.5))
+  t=0.0
+  var spent:={}
+  for b in group:spent[b]=b.weapon.rounds()
+  var fired:=0;var seen:=0
+  while t<float(spec[1]) and drone.health>0:
+   await physics_frame
+   t+=1.0/60.0
+   for b in group:
+    if b.weapon.rounds()<spent[b]:fired+=spent[b]-b.weapon.rounds()
+    spent[b]=b.weapon.rounds()
+    if b.drone_engaged():seen=maxi(seen,1)
+  print("GROUP %.0f m: %.1f s, %d rounds, noticed %d, health %.1f" % [spec[0],t,fired,seen,drone.health])
+  if spec[2]:check(drone.health>0,"Hovering %.0f m from six riflemen it lives through %.0f s" % [spec[0],spec[1]])
+  else:check(drone.health<=0,"Hovering %.0f m from them it is brought down (%.1f s)" % [spec[0],t])
+  drone.queue_free()
+  await frames(200)
+ for b in group:b.set_physics_process(false)
+
  # A burst close by brings one down.
  drone=hover(Vector3(40,7,-20))
  await frames(5)
  game.blasts.detonate(drone.global_position+Vector3(3,-4,0),"rpo")
  await frames(2)
  check(drone.health<=0 and drone.downed>0,"Fragments of a burst nearby bring it down")
+
 
  print("FAIL: " if failed else "PASS: ",checks," drone shot-down and anti-drone fire checks")
  game.queue_free()

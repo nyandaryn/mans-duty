@@ -37,6 +37,11 @@ const WARHEADS := {
  # OG-7V: 40 mm steel body, about 210 g of A-IX-1, ≥850 fragments of 0.9 g
  # (the maker's sheet); its "effective defeat radius" is given as 14 m.
  "og7":{"reach":14.0,"damage":200.0,"frag":true,"lift":0.0,"effect":0.5,"sound":"mine_blast","db":0.0,"hearing":1.1,"sphere":1.5,"surfaces":4,"demolish":"cannon"},
+ # TBG-7V: 1.8 kg of thermobaric mixture in a 105 mm case, "comparable to
+ # a 120 mm shell or mine"; men in the open are hit within 8–10 m, in
+ # trenches within 2 m of the burst. Indoors (room: the volume in m³ it
+ # fills with lethal pressure, 300) see room_blast(). Game units.
+ "tbg":{"reach":16.0,"damage":250.0,"frag":false,"lift":0.0,"effect":1.0,"sound":"rpo_blast","db":2.0,"hearing":1.5,"sphere":3.0,"surfaces":8,"demolish":"rpo","room":300.0},
  "cookoff":{"reach":34.0,"damage":460.0,"frag":true,"lift":1.0,"effect":-1.0,"sound":"mine_blast","db":8.0,"hearing":3.0,"sphere":6.0,"surfaces":16,"demolish":"cookoff"},
 }
 # Grenades fired from the shoulder. "rpo": the RPO-A capsule (its own
@@ -57,6 +62,13 @@ const ROCKETS := {
  # RPG-22 above). Its self-destruct time is not in the sources at hand:
  # 9 s is about 740 m of flight, near the 700 m maximum range given for it.
  "og7v":{"speed":152.0,"ignite":INF,"burn":0.0,"thrust":0.0,"drag":0.0015,"warhead":"og7","round":"og7v","life":9.0,"arm":2.5},
+ # TBG-7V: 4.5 kg shot, 3.1 kg grenade, 100 m/s off the launcher, then the
+ # sustainer of the PG-7VR. Thrust fitted to the 150 m direct-fire range
+ # (2 m target); k scaled from the PG-7VL's by the 105 mm head and the
+ # heavier grenade. Comes to about 125 m/s, 1.3 s to 150 m. Neither its
+ # self-destruct time nor its arming distance is in the sources at hand:
+ # 9 s and 2.5 m as for the OG-7V.
+ "tbg7v":{"speed":100.0,"ignite":11.0,"burn":0.4,"thrust":78.0,"drag":0.0013,"warhead":"tbg","round":"tbg7v","life":9.0,"arm":2.5},
 }
 var game: Node3D
 var rockets: Array[Dictionary]=[]
@@ -160,6 +172,10 @@ func build_grenade(kind: String) -> Node3D:
  if kind=="og7v":
   var og:=Node3D.new();og.add_child(LauncherRig.og7v_model(false))
   return og
+ if kind=="tbg7v":
+  var tbg:=Node3D.new();tbg.add_child(LauncherRig.tbg7v_model(false))
+  add_flame(tbg)
+  return tbg
  var art_path:="res://scripts/rpg7_art.gd" if kind=="pg7vl" else "res://scripts/rpg22_art.gd"
  var art: Node3D=null
  if kind in ["pg7vl","rpg22"] and ResourceLoader.exists(art_path):
@@ -423,7 +439,13 @@ func grenade_hit(rocket: Dictionary, hit: Dictionary) -> void:
   if body!=null:body.vehicle_hit(hit.position,line,String(spec.round))
   else:behind_wall(hit.position,line,String(spec.round),hit.collider)
   detonate(point,"heat")
- else:detonate(point,String(spec.warhead))
+ else:
+  # The TBG-7V on light armour: its case, crushed on the plate, cuts a
+  # hole and the blast goes in (VehicleDamage.strike). Other heads only
+  # throw their fragments at it (VehicleDamage.blast).
+  var body:=strike_target(hit.collider)
+  if body!=null and spec.warhead=="tbg":body.vehicle_hit(hit.position,Vector3(rocket.velocity).normalized(),String(spec.round))
+  detonate(point,String(spec.warhead))
 
 func show_grenade(rocket: Dictionary, from: Vector3, step: float) -> void:
  var node: Node3D=rocket.get("node")
@@ -471,6 +493,42 @@ func posture_factor(actor: Node3D) -> float:
  if actor is Operator:return 0.45 if actor.prone else (0.75 if actor.crouched else 1.0)
  return lerpf(lerpf(1.0,0.5,clampf(float(actor.stance),0,1)),0.4,clampf(float(actor.tactical_prone),0,1))
 
+# Walls and a ceiling round a point: a burst inside a house (a roof within
+# 6 m above, walls within 9 m on most sides), not one against its outside.
+func enclosed(where: Vector3) -> bool:
+ var space:=get_world_3d().direct_space_state
+ var excluded: Array[RID]=[]
+ if is_instance_valid(game.district):excluded=Demolition.ground(game.district)
+ if space.intersect_ray(PhysicsRayQueryParameters3D.create(where,where+Vector3.UP*6.0,1,excluded)).is_empty():return false
+ var walls:=0
+ for k in range(8):
+  var dir:=Vector3.FORWARD.rotated(Vector3.UP,TAU*k/8.0)
+  if not space.intersect_ray(PhysicsRayQueryParameters3D.create(where+Vector3.UP*0.3,where+Vector3.UP*0.3+dir*9.0,1,excluded)).is_empty():walls+=1
+ return walls>=6
+
+# The pressure of a thermobaric burst in a room: everyone on that floor of
+# the house within the volume it is made for (TBG-7V: 300 m³, about 110 m²
+# under a 2.7 m ceiling) takes nearly the full blast, round corners and
+# through a doorway — a partition wall at most between him and the burst.
+func room_blast(where: Vector3, actor: Node3D, volume: float) -> float:
+ var reach:=sqrt(volume/2.7)*0.7
+ var chest: Vector3=actor.global_position+Vector3.UP*1.0
+ var distance:=Vector2(chest.x-where.x,chest.z-where.z).length()
+ if distance>reach or absf(chest.y-where.y)>2.2:return 0.0
+ var space:=get_world_3d().direct_space_state
+ var excluded: Array[RID]=[]
+ if actor is CollisionObject3D:excluded.append(actor.get_rid())
+ if space.intersect_ray(PhysicsRayQueryParameters3D.create(chest,chest+Vector3.UP*6.0,1,excluded)).is_empty():return 0.0
+ var walls:=0
+ for layer in range(3):
+  var query:=PhysicsRayQueryParameters3D.create(where,chest,1,excluded)
+  var hit:=space.intersect_ray(query)
+  if hit.is_empty():break
+  walls+=1
+  excluded.append(hit.rid)
+ if walls>1:return 0.0
+ return clampf(1.1-0.45*distance/reach,0.0,1.0)
+
 func detonate(where: Vector3, kind: String="rpo") -> void:
  detonations+=1
  last_detonation=where
@@ -491,6 +549,9 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
  var damage: float=spec.damage
  # Fragments leave the body of the mine above the fuse, not the soil surface.
  var source := where+Vector3.UP*float(spec.lift)
+ # A thermobaric head gone off inside a house: the pressure fills it.
+ var room := float(spec.get("room",0.0))
+ if room>0.0 and not enclosed(where):room=0.0
  # Resolve exposure before cosmetic fractures, so one frame cannot make a
  # protective wall disappear retroactively for actors behind it.
  for actor in [game.player]+game.bots+game.allies:
@@ -504,6 +565,7 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
   if frag:intensity*=posture_factor(actor)
   # Body armour takes part of the fragments (VestKind).
   if actor.has_method("blast_protection"):intensity*=actor.blast_protection(where)
+  if room>0.0:intensity=maxf(intensity,room_blast(where,actor,room))
   if intensity<0.015:continue
   actor.receive_blast(damage*intensity,clampf(intensity*1.35,0,1),where.direction_to(actor.global_position))
  # Vehicles: the fragments on their armour (VehicleDamage).
