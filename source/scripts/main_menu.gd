@@ -210,8 +210,8 @@ func play_intro() -> void:
 func _input(event: InputEvent) -> void:
  if game.running or not game.menu.visible:return
  if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_ESCAPE:
-  var picker: Control=game.loadout_screen.picker if is_instance_valid(game.loadout_screen) else null
-  if current=="loadout" and is_instance_valid(picker) and picker.visible:picker.hide()
+  # The weapon list or the list of what is worn closes before the screen.
+  if current=="loadout" and is_instance_valid(game.loadout_screen) and game.loadout_screen.dismiss():pass
   else:back()
   get_viewport().set_input_as_handled()
 

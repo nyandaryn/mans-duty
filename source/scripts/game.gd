@@ -1093,11 +1093,13 @@ func inventory_slot(kind: String, heading: String, text: String, height: float) 
 func refresh_inventory() -> void:
 	refresh_outfit_preview()
 	if is_instance_valid(primary_tile):
-		primary_tile.subtitle=WeaponState.DATA[primary].name+"  /  Натисни для заміни"
+		primary_tile.subtitle=WeaponState.DATA[primary].name
+		primary_tile.tooltip_text="ЛКМ — замінити"
 		primary_tile.show_weapon(primary)
 		primary_tile.queue_redraw()
 	if is_instance_valid(secondary_tile):
-		secondary_tile.subtitle=WeaponState.DATA[secondary].name+"  /  Натисни для заміни"
+		secondary_tile.subtitle=WeaponState.DATA[secondary].name
+		secondary_tile.tooltip_text="ЛКМ — замінити"
 		secondary_tile.show_weapon(secondary)
 		secondary_tile.queue_redraw()
 	for tile in rifle_mag_tiles:tile.show_weapon(primary)

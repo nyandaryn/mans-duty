@@ -84,6 +84,7 @@ static func item_model(kind: String) -> Node3D:
  if kind=="og7v":return LauncherRig.og7v_model(true)
  if kind=="tbg7v":return LauncherRig.tbg7v_model(true)
  if kind in Equipment.FPV:return fpv_model(kind)
+ if kind=="backpack":return build()
  var root := Node3D.new()
  root.name="EquipmentItem"
  if kind=="ammo_pkm":

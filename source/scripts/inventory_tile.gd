@@ -9,7 +9,7 @@ func _ready() -> void:
  preview=ModelPreview.new()
  add_child(preview)
  preview.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
- var compact := kind in ["magazine","medkit"]
+ var compact := kind in ["magazine","medkit","rangefinder"]
  preview.offset_left=40 if compact else 12
  preview.offset_right=-8 if compact else -12
  preview.offset_top=5 if compact else 30

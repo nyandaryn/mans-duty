@@ -8,6 +8,8 @@ var content_key := ""
 var corners: Array[Vector3] = []
 var actor_view := false
 var rear_view := false
+# Pixels rendered per pixel shown: 2 is supersampled, the portrait takes 3.
+var supersample := 2.0
 
 func _ready() -> void:
  mouse_filter=Control.MOUSE_FILTER_IGNORE
@@ -72,6 +74,27 @@ func show_outfit(id: String, weapon_id: String="", backpack: bool=false, launche
  if launcher:PackArt.attach_launcher(soldier)
  replace_model(holder)
 
+# The head alone in what covers the face (FaceCover), three-quarter front.
+func show_head(outfit: String, face: String) -> void:
+ var key := "head:"+outfit+"+"+face
+ if content_key==key:return
+ content_key=key
+ actor_view=true
+ var holder := Node3D.new()
+ var soldier := Models.soldier(holder)
+ Wardrobe.dress(soldier,outfit)
+ FaceCover.wear(soldier,face,outfit)
+ replace_model(holder)
+ corners.clear()
+ var head: Node3D=soldier.get_node("Head")
+ for mesh in head.find_children("*","MeshInstance3D",true,false):
+  var box: AABB=mesh.get_aabb()
+  for i in range(8):corners.append(mesh.global_transform*box.get_endpoint(i))
+ # Down to the collar, and some air over the helmet.
+ corners.append(head.global_position+Vector3(0,-0.07,0))
+ corners.append(head.global_position+Vector3(0,0.34,0))
+ fit()
+
 func show_item(kind: String) -> void:
  if content_key==kind:return
  content_key=kind
@@ -92,7 +115,7 @@ func replace_model(next: Node3D) -> void:
 
 func fit() -> void:
  if not is_instance_valid(viewport) or corners.is_empty():return
- viewport.size=Vector2i(maxi(64,int(size.x*2)),maxi(64,int(size.y*2)))
+ viewport.size=Vector2i(maxi(64,int(size.x*supersample)),maxi(64,int(size.y*supersample)))
  var low := corners[0]
  var high := corners[0]
  for point in corners:
