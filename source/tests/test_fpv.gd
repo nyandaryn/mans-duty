@@ -213,7 +213,27 @@ func run():
  link.global_position=Vector3(0,6,-100)
  link.link_timer=0.0;link.update_link(0.0)
  check(link.video<0.15 and link.control>0.3,"Behind a building the 5.8 GHz picture is gone (%.2f), the control link holds (%.2f)" % [link.video,link.control])
- wall.queue_free();link.queue_free()
+ wall.queue_free()
+ # His own parapet, 1.7 m high 5 m in front of him, its top over the
+ # antenna: the line runs just under its edge. A drone 3 m up 200 m out
+ # keeps a picture, a little snowy (before 0.32.4 anything in the line cut
+ # it to a tenth and it was lost).
+ await frames(2)
+ var parapet: Node3D=dummy(link.home+Vector3(0,0.85,-5),"destroyed",true)
+ var bags := CollisionShape3D.new();bags.shape=BoxShape3D.new();bags.shape.size=Vector3(7,1.7,1.3);parapet.add_child(bags)
+ await frames(2)
+ link.global_position=ground(0,-10)+Vector3.UP*3.0
+ link.link_timer=0.0;link.update_link(0.0)
+ var behind_parapet: float=link.video
+ check(not link.ray(link.antenna(),link.global_position,1).is_empty(),"The parapet is in the line")
+ check(behind_parapet>0.5 and behind_parapet<0.97,"Over his parapet the picture holds, snowier (%.2f)" % behind_parapet)
+ # A house 6 m tall next to the drone, the line into its wall: gone.
+ var house: Node3D=dummy(ground(0,-4)+Vector3(0,3,0),"destroyed",true)
+ var walls := CollisionShape3D.new();walls.shape=BoxShape3D.new();walls.shape.size=Vector3(8,6,6);house.add_child(walls)
+ await frames(2)
+ link.link_timer=0.0;link.update_link(0.0)
+ check(link.video<0.04,"Behind a house by the drone the picture is gone (%.2f)" % link.video)
+ parapet.queue_free();house.queue_free();link.queue_free()
  await frames(2)
 
  # --- The player's FPV ----------------------------------------------------------

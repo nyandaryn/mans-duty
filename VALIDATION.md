@@ -1,3 +1,72 @@
+# 0.32.5 validation — 2026-11-22
+
+The column of the great assault no longer stands for ever at the start when
+the player waits instead of skipping.
+
+- Reproduced first (repro script, the great assault waited out, 1 s steps):
+  rifleman 27 and 54 with boarding, rifleman 27 without, the BMP driver at
+  54. The driver at 54 (seed 4711): after the Grad barrage squad 1 stayed in
+  "board" for 390 s with every man aboard; prep "mount" never ended, the
+  other squads "wait" all the while. Its gunner stood 4.1 m from his hatch,
+  behind the stern (hull-local x 1.19, z 3.62), not moving: he walked
+  straight at the turret hatch through the hull, which is not on the
+  walking map, and stood against the stern.
+- Now the gunner goes round the hull's right corner (from its left side,
+  round the nearer end) and then to the hatch; the rear doors shut once the
+  troops are in. A safeguard: after 45 s of boarding whoever is still out
+  climbs in at once. After: the same run is under way by t = 80 s (all squads
+  boarded by ≈72 s); rifleman 27 and 54 with boarding go on to the march,
+  the approach and the assault as before.
+- Found on the way: "Trying to assign invalid previously freed instance" at
+  EnemyArmour.bail (a crewman of an enemy BMP cleared away before the crew
+  bailed out): its crew is read untyped and checked first.
+- test_board_stuck (new, 8 checks): the gunner put behind the stern gets in
+  within 25 s (1.1 s) and his squad waits with the doors shut; a man held
+  15 m off keeps his squad boarding at 40 s and is in at 45 s. Against the
+  0.32.4 squad code it fails (the gunner never in, the squad in "board").
+- Full suite from source: 76 scenarios pass with no script errors.
+
+# 0.32.4 validation — 2026-11-22
+
+The FPV picture no longer drops behind the operator's own parapet.
+
+- Measured first (forest_01, village_01, district_01, forest_03, the UAV
+  operator's start, the line to every enemy at 20 points, the drone 3, 10 and
+  30 m over the ground): the 5.8 GHz picture was lost (< 0.04) at 21–39 % of
+  the points at 3 m and up to 23 % at 10 m. Almost every block was the 7 ×
+  1.7 m parapet 5 m in front of him: the antenna at 1.5 m is under its top,
+  and anything in the line cut the picture to 0.12 like a house.
+- Now a link budget: the margin distance leaves (20·log10(2500/d) dB, the
+  same curve as before with nothing in the way), less the worst knife-edge
+  loss (ITU-R P.526 eq. 31) of the obstacle the line meets (its top found by
+  stepped rays along the line, then one down) or of the ground (12 points).
+  After: lost at 0–1 % at 10 m (drones behind houses), 7–15 % at 3 m (behind
+  ridges and houses); the parapet costs 10–15 dB.
+- test_fpv: 64 checks (new: over his parapet the picture holds, 0.5–0.97;
+  behind a house by the drone it is gone). Against the 0.32.3 link code the
+  parapet check fails (0.12). Distance curve unchanged (near 0.99, 1.9 km
+  0.37, past 2.5 km 0, low far out 0).
+- Full suite from source: 75 scenarios pass with no script errors.
+
+# 0.32.3 validation — 2026-11-22
+
+Crawling out from among men lying on the ground.
+
+- Reproduced first: eight men round the prone player (four within 0.7 m,
+  four at 1.1 m). Wounded men down: forward 0.06 m in 2 s, a 90° turn
+  blocked (a lying bot was a 1.8 m capsule on the ground, on the layer the
+  player collides with and his posture check reads). The dead already let
+  him through (their ragdolls are on layer 8), 1.7 m in 2 s every way.
+- New test_prone_bodies (11 checks, --fixed-fps 60): among the wounded he
+  turns ±90° and crawls out over them (> 1.2 m in 2 s); past men lying prone
+  by choice and over the dead the same; a wounded man who gets up is solid
+  again; a man standing in front of him stops him (< 0.4 m); the dead leave
+  no collision exceptions behind.
+- test_prone_spawn (35), test_surface_posture (117), test_vault (92),
+  test_tactics (35), test_corpse_stability pass.
+- Full suite from source: 75 scenarios pass with no script errors.
+  `--quit-after 300` exits clean.
+
 # 0.32.2 validation — 2026-11-22
 
 Bullet impact effects by material: powder, chips, splinters, sparks, soil
