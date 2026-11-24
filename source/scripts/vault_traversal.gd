@@ -6,6 +6,9 @@ extends Node3D
 const HEIGHT := 1.08
 const RADIUS := 0.30
 const MAX_LEDGE := 1.35
+# A fence or a thin wall is climbed over higher than a ledge is climbed onto:
+# the palms on its edge, the body over and down the far side.
+const MAX_FENCE := 1.6
 const REACH := 1.40
 var operator: Operator
 var active := false
@@ -64,11 +67,16 @@ func probe() -> Dictionary:
  # Check short sideways approaches instead of requiring perfect alignment
  # with both hand contacts. The full body path still has to be unobstructed.
  for lateral in [0.0,0.15,-0.15,0.30,-0.30,0.45,-0.45]:
-  var candidate := probe_offset(lateral)
+  var candidate := probe_offset(lateral,false)
+  if not candidate.is_empty():return candidate
+ # Then over a fence: its boards are a few centimetres thick, too thin for
+ # the sill's probe behind the face.
+ for lateral in [0.0,0.15,-0.15,0.30,-0.30,0.45,-0.45]:
+  var candidate := probe_offset(lateral,true)
   if not candidate.is_empty():return candidate
  return {}
 
-func probe_offset(lateral: float) -> Dictionary:
+func probe_offset(lateral: float, over: bool) -> Dictionary:
  var start := operator.global_position
  var forward := -operator.global_basis.z
  var right := operator.global_basis.x
@@ -76,11 +84,12 @@ func probe_offset(lateral: float) -> Dictionary:
  for height in [0.15,0.45,0.8,1.15]:
   var face := ray(scan_start+Vector3.UP*height,scan_start+Vector3.UP*height+forward*REACH)
   if face.is_empty() or face.normal.dot(-forward)<0.65:continue
-  var sample: Vector3=face.position+forward*0.13
-  var top := ray(Vector3(sample.x,start.y+MAX_LEDGE+0.12,sample.z),Vector3(sample.x,start.y+0.06,sample.z))
+  var ceiling:=MAX_FENCE if over else MAX_LEDGE
+  var sample: Vector3=face.position+forward*(0.04 if over else 0.13)
+  var top := ray(Vector3(sample.x,start.y+ceiling+0.12,sample.z),Vector3(sample.x,start.y+0.06,sample.z))
   if top.is_empty() or top.normal.y<0.75:continue
   var rise: float=top.position.y-start.y
-  if rise<0.12 or rise>MAX_LEDGE:continue
+  if rise<0.12 or rise>ceiling:continue
   var hands := PackedVector3Array()
   for side in [-1,1]:
    var point: Vector3=top.position+right*side*0.23
@@ -95,6 +104,7 @@ func probe_offset(lateral: float) -> Dictionary:
   var approach := start+right*lateral+forward*(distance_to_face-0.43)+Vector3.UP*minf(0.10,rise*0.4)
   var lift := Vector3(approach.x,top.position.y+0.065,approach.z)
   # Search beyond the near face, including thick ledges which can be climbed onto.
+  var bottom: float=minf(top.position.y-1.4,start.y-0.6) if over else top.position.y-1.4
   for distance in [0.65,0.9,1.2,1.55]:
    var landing: Vector3=Vector3(face.position.x,start.y,face.position.z)+forward*distance
    var floor_y := -INF
@@ -102,12 +112,14 @@ func probe_offset(lateral: float) -> Dictionary:
    for x in [-0.22,0.0,0.22]:
     for z in [-0.22,0.0,0.22]:
      var foot: Vector3=landing+right*x+forward*z
-     var ground := ray(Vector3(foot.x,lift.y+0.15,foot.z),Vector3(foot.x,top.position.y-1.4,foot.z))
+     var ground := ray(Vector3(foot.x,lift.y+0.15,foot.z),Vector3(foot.x,bottom,foot.z))
      if ground.is_empty() or ground.normal.y<0.7 or ground.position.y>top.position.y+0.08:
       supported=false;break
      floor_y=maxf(floor_y,ground.position.y)
     if not supported:break
    if not supported:continue
+   # Over a fence the body comes down its far side, never up onto a high top.
+   if over and floor_y>top.position.y-0.5:continue
    landing.y=floor_y+0.03
    var cross := Vector3(landing.x,lift.y,landing.z)
    var points := PackedVector3Array([start,approach,lift,cross,landing])

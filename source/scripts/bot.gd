@@ -186,7 +186,7 @@ func setup(owner_game: Node3D, spawn: Vector3) -> void:
 		cover_point=spawn
 	target=spawn
 	collision_layer=4
-	collision_mask=1|2|4|64
+	collision_mask=1|2|4|64|OperationArea.EDGE_LAYER
 	var collision := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
 	capsule.radius=0.30
@@ -1103,7 +1103,7 @@ func disembark(point: Vector3, facing: Vector3) -> void:
 	vehicle=null
 	visible=true
 	collision_layer=4
-	collision_mask=1|2|4|64
+	collision_mask=1|2|4|64|OperationArea.EDGE_LAYER
 	for i in range(mini(hitboxes.size(),hitbox_layers.size())):hitboxes[i].collision_layer=hitbox_layers[i]
 	global_position=point
 	rotation=Vector3(0,atan2(-facing.x,-facing.z),0)

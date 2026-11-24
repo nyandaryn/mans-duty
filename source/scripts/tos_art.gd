@@ -52,7 +52,11 @@ const TUBE_BOTTOM := 0.22
 const DRIVER_EYE := Vector3(0,1.22,-2.30)
 const GUNNER_EYE := Vector3(-0.62,0.30,-0.55)
 const COMMANDER_EYE := Vector3(0.62,0.30,-0.55)
-const SIGHT := Vector3(-0.62,0.62,-0.82)
+# The gunner's 1D14 and the commander's TKN-3A stand on brackets outboard of
+# the package: in its travel position the package lies right over the
+# platform, and devices under it would look into its floor.
+const SIGHT := Vector3(-1.32,0.64,-0.90)
+const TKN := Vector3(1.44,0.64,-0.90)
 # The foot of the elevating ram on the platform, and the bracket it lifts
 # under the package floor (cradle frame).
 const RAM_FOOT := Vector3(0,0.45,-1.55)
@@ -145,10 +149,15 @@ static func build() -> Dictionary:
  # The crew's hatches and devices: the gunner's 1D14 left, the commander's
  # TKN-3A right.
  for s in [-1.0,1.0]:base.cylinder(at(Vector3(s*0.62,0.52,0.05)),0.30,0.05,12,OLIVE_LIGHT)
- base.box(at(SIGHT),Vector3(0.30,0.24,0.26),OLIVE_DARK)
- base.box(at(SIGHT+Vector3(0,0.02,-0.135)),Vector3(0.22,0.12,0.01),GLASS)
- base.box(at(Vector3(0.62,0.60,-0.80)),Vector3(0.22,0.14,0.18),OLIVE_DARK)
- base.box(at(Vector3(0.62,0.61,-0.895)),Vector3(0.16,0.07,0.01),GLASS)
+ for device: Vector3 in [SIGHT,TKN]:
+  var s:=signf(device.x)
+  # The bracket from the platform's edge, and the armoured housing on it.
+  base.box(at(Vector3(s*1.14,0.47,device.z)),Vector3(absf(device.x)-0.90,0.08,0.24),OLIVE_DARK)
+  base.box(at(Vector3(device.x,0.40,device.z)),Vector3(0.14,0.16,0.16),OLIVE_DARK)
+ base.box(at(SIGHT),Vector3(0.24,0.24,0.26),OLIVE_DARK)
+ base.box(at(SIGHT+Vector3(0,0.02,-0.135)),Vector3(0.18,0.12,0.01),GLASS)
+ base.box(at(TKN),Vector3(0.22,0.18,0.20),OLIVE_DARK)
+ base.box(at(TKN+Vector3(0,0.02,-0.105)),Vector3(0.16,0.07,0.01),GLASS)
  # Whip aerial at the rear right of the platform.
  base.cylinder(at(Vector3(1.0,1.55,1.20)),0.008,2.0,4,BLACK)
  node(platform,"Base",base)

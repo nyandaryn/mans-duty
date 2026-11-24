@@ -44,7 +44,10 @@ func flat(a: Vector3, b: Vector3) -> float:return Vector2(a.x-b.x,a.z-b.z).lengt
 func in_village(p: Vector3) -> bool:return absf(p.x)<200.0 and absf(p.z)<200.0
 
 # Every squad but `skip` getting out at its drop: dismounting or already in
-# file behind its vehicle, 95…175 m from its objective, in the village.
+# file behind its vehicle, 95…175 m from its objective, in the village. The
+# salvo before can leave a strongpoint's last men dying: when it falls after
+# the drops were picked the objective moves on, and the squads go there on
+# foot (MechSquad.disperse), so the range is only held to a standing one.
 func at_drops(battle: BattleMode, label: String, skip: MechSquad=null) -> void:
  var ok:=true
  var seen: Array=[]
@@ -52,8 +55,9 @@ func at_drops(battle: BattleMode, label: String, skip: MechSquad=null) -> void:
   if squad==skip:continue
   var v:=squad.vehicle.global_position
   var range_m:=flat(squad.drop,battle.objective_point(squad.index))
-  seen.append("%s %.0f m %.1f off" % [squad.state,range_m,flat(v,squad.drop)])
-  ok=ok and squad.state in ["dismount","file"] and range_m>90.0 and range_m<180.0 and flat(v,squad.drop)<3.0 and in_village(v)
+  var standing:=squad.goal_sector==battle.sector
+  seen.append("%s %.0f m %.1f off%s" % [squad.state,range_m,flat(v,squad.drop),"" if standing else " (its strongpoint fell since)"])
+  ok=ok and squad.state in ["dismount","file"] and (not standing or (range_m>90.0 and range_m<180.0)) and flat(v,squad.drop)<3.0 and in_village(v)
  check(ok,"%s: every squad at its drop in the village, getting out (%s)" % [label,str(seen)])
  var apart:=true
  for a in battle.mech:

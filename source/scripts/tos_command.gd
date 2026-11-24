@@ -21,11 +21,21 @@ const DRONE_PREPARE := 12.0
 const REPORT_DELAY := 8.0
 const COUNTER_BATTERY := Vector2(150.0,230.0)
 const SEATS := ["driver","gunner","commander"]
+const SEAT_TITLES := {"driver":"Місце механіка-водія","gunner":"Місце навідника-оператора · приціл 1Д14","commander":"Місце командира · ТКН-3А, пульт, дрон СП"}
 var game: Node3D
 var vehicle: TosVehicle
 var seat := ""
 var look := Vector2.ZERO
 var zoomed := false
+# Closed down in the driver's seat: the right button decided on its press
+# by what the eyes rest on — "lean" to the TNPO-168V's eyepiece or "panel"
+# (the instruments large); how far the face has come to the eyepiece; the
+# device under the middle of the view.
+var press := ""
+var lean := 0.0
+var target: Dictionary={}
+const INSIDE_FOV := 70.0
+const LEAN_FOV := 60.0
 var hud: TosHud
 var data: AvdiivkaData
 var post := Vector3.ZERO
@@ -150,6 +160,7 @@ func enter(id: String) -> void:
  var player: Operator=game.player
  player.field_rig.cancel();game.inventory.close()
  seat=id;vehicle.seat=id;look=Vector2.ZERO;zoomed=false
+ press="";lean=0.0;target={}
  player.set_physics_process(false);player.set_process(false);player.set_process_unhandled_input(false)
  player.collision_layer=0;player.collision_mask=0;player.velocity=Vector3.ZERO
  player.viewmodel.hide();player.world_body.hide()
@@ -159,7 +170,7 @@ func enter(id: String) -> void:
 
 func next_seat() -> void:
  enter(SEATS[(SEATS.find(seat)+1)%SEATS.size()])
- vehicle.say({"driver":"Місце механіка-водія","gunner":"Місце навідника-оператора · приціл 1Д14","commander":"Місце командира · ТКН-3А, пульт, дрон СП"}[seat],2)
+ vehicle.say(SEAT_TITLES[seat],2)
 
 func leave() -> void:
  if seat=="":return
@@ -179,6 +190,8 @@ func leave() -> void:
  vehicle.throttle=0;vehicle.brake_pedal=0;vehicle.clutch_pedal=0;vehicle.lever_input=Vector2.ZERO
  vehicle.traverse_input=0;vehicle.priming=false
  seat="";vehicle.seat=""
+ press="";lean=0.0;target={}
+ if vehicle.interior!=null:vehicle.interior.show_cabin(false)
  hud.close_all()
  if game.running and not game.paused:Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
 
@@ -442,7 +455,11 @@ func _process(delta: float) -> void:
   if drone_eta<0:drone_eta=-1;spawn_drone()
  if seat!="":
   game.player.global_position=vehicle.to_global(seat_point(seat)+Vector3(0,-0.9,0))
+  var inside:=closed_down()
+  if inside!=(vehicle.interior!=null and vehicle.interior.shown):vehicle.cabin().show_cabin(inside)
+  update_press(delta)
   update_camera()
+  target=vehicle.interior.pick(vehicle.seat_camera) if inside and lean<=0.0 else {}
   read_controls(delta)
   # Out of a burning vehicle at once.
   if vehicle.hull.burning or vehicle.destroyed:leave()
@@ -464,25 +481,46 @@ func _process(delta: float) -> void:
  game.hud_text.visible=seat=="" and not game.player.field_rig.active()
  game.objective.visible=not piloting
 
+# In the driver's seat with the hatch shut: the eyes are in the compartment.
+func closed_down() -> bool:return seat=="driver" and not vehicle.hatch_open and not piloting
+
+# The right button: on the press it does what the eyes rest on, until it is
+# let go.
+func update_press(delta: float) -> void:
+ var held: bool=seat=="driver" and not piloting and hud.open_panel()=="" and not game.commands_open and Input.is_action_pressed("aim")
+ if not held:press=""
+ elif press=="":press="lean" if closed_down() and str(target.get("kind",""))=="prism" else "panel"
+ lean=move_toward(lean,1.0 if press=="lean" else 0.0,delta*5.0)
+
 func update_camera() -> void:
  var camera:=vehicle.seat_camera
+ camera.near=0.05;camera.far=6000;camera.cull_mask=1|OperatorBody.WORLD_BODY_LAYER
  match seat:
   "gunner":
    camera.global_transform=vehicle.sight_transform()
    camera.fov=TosVehicle.SIGHT_FOV
   "commander":
    var platform: Node3D=vehicle.art.platform
-   var device:=platform.global_transform*Transform3D(Basis.IDENTITY,Vector3(0.62,0.70,-0.80))
+   var device:=platform.global_transform*Transform3D(Basis.IDENTITY,TosArt.TKN+Vector3(0,0.04,-0.12))
    camera.global_transform=device*Transform3D(Basis(Vector3.UP,look.x)*Basis(Vector3.RIGHT,look.y),Vector3.ZERO)
    camera.fov=10.0 if zoomed else 70.0
   "driver":
    var body: Node3D=vehicle.art.root
-   var eye:=seat_point("driver")
-   var turn:=look
-   # Closed down, the TNPO-168V shows a strip ahead.
-   if not vehicle.hatch_open:turn=Vector2(clampf(look.x,-0.3,0.3),clampf(look.y,-0.12,0.12))
-   camera.global_transform=body.global_transform*Transform3D(Basis(Vector3.UP,turn.x)*Basis(Vector3.RIGHT,turn.y),eye+(Vector3(0,0,-0.12) if not vehicle.hatch_open else Vector3.ZERO))
-   camera.fov=75.0 if vehicle.hatch_open else 48.0
+   if closed_down():
+    # In the compartment, a few metres deep: the world comes in through the
+    # prism only.
+    var head:=body.global_transform*Transform3D(Basis(Vector3.UP,look.x)*Basis(Vector3.RIGHT,look.y),TosInterior.EYE)
+    var t:=smoothstep(0.0,1.0,lean)
+    if t>0.0:
+     var face:=body.global_transform*vehicle.cabin().lean_frame()
+     var turn:=Quaternion(head.basis.orthonormalized()).slerp(Quaternion(face.basis.orthonormalized()),t)
+     head=Transform3D(Basis(turn),head.origin.lerp(face.origin,t))
+    camera.global_transform=head
+    camera.fov=lerpf(INSIDE_FOV,LEAN_FOV,t)
+    camera.near=0.02;camera.far=6.0;camera.cull_mask=BmpArt.INTERIOR_LAYER
+   else:
+    camera.global_transform=body.global_transform*Transform3D(Basis(Vector3.UP,look.x)*Basis(Vector3.RIGHT,look.y),seat_point("driver"))
+    camera.fov=75.0
 
 func read_controls(delta: float) -> void:
  var v:=vehicle
@@ -505,13 +543,13 @@ func read_controls(delta: float) -> void:
  else:v.traverse_input=0.0
 
 func instruments_shown() -> bool:
- return seat=="driver" and not piloting and hud.open_panel()=="" and Input.is_action_pressed("aim")
+ return seat=="driver" and not piloting and hud.open_panel()=="" and press=="panel"
 
 func hint_text() -> String:
  match seat:
-  "driver":return "W ГАЗ  S ГАЛЬМО  A/D ВАЖЕЛІ (утримуй — до упору)  SHIFT ЗЧЕПЛЕННЯ  Q/E ПЕРЕДАЧА  I МАСА  P МЗН  X СТАРТЕР\nSPACE СТОЯНКОВЕ  [ ] РУЧНИЙ ГАЗ  H ЛЮК  ПКМ ПРИЛАДИ  C МІСЦЕ  F ВИЙТИ  M ПЛАНШЕТ  G РАДІО"
-  "gunner":return "← → ПЛАТФОРМА (CTRL — ТОЧНО)  ↑ ↓ / МИША — ГОЛОВКА ПРИЦІЛУ  R ДАЛЕКОМІР  ENTER ОБЧИСЛИТИ Й НАВЕСТИ\nSPACE ПУСК  M ПЛАНШЕТ  G РАДІО  C МІСЦЕ  F ВИЙТИ"
-  "commander":return "E ПУЛЬТ  SPACE ПУСК  ENTER ДАНІ З ПЛАНШЕТА → ОБЧИСЛЮВАЧ  J ДРОН СП  ПКМ ТКН-3А ×5  M ПЛАНШЕТ  G РАДІО  C МІСЦЕ  F ВИЙТИ"
+  "driver":return "W ГАЗ  S ГАЛЬМО  A/D ВАЖЕЛІ (утримуй — до упору)  SHIFT ЗЧЕПЛЕННЯ  Q/E ПЕРЕДАЧА  I МАСА  P МЗН  X СТАРТЕР\nSPACE СТОЯНКОВЕ  [ ] РУЧНИЙ ГАЗ  H ЛЮК  ПКМ ПРИЛАДИ / ДО ОКУЛЯРА  1 2 3 / C МІСЦЕ  F ВИЙТИ  M ПЛАНШЕТ  G РАДІО"
+  "gunner":return "← → / МИША — ПЛАТФОРМА  ↑ ↓ / МИША — ГОЛОВКА ПРИЦІЛУ  CTRL — ТОЧНО  R ДАЛЕКОМІР  ENTER ОБЧИСЛИТИ Й НАВЕСТИ\nSPACE ПУСК  M ПЛАНШЕТ  G РАДІО  1 2 3 / C МІСЦЕ  F ВИЙТИ"
+  "commander":return "E ПУЛЬТ  SPACE ПУСК  ENTER ДАНІ З ПЛАНШЕТА → ОБЧИСЛЮВАЧ  J ДРОН СП  ПКМ ТКН-3А ×5  M ПЛАНШЕТ  G РАДІО  1 2 3 / C МІСЦЕ  F ВИЙТИ"
  var station:=nearest_station()
  return station.text if not station.is_empty() else game.control_hint()
 
@@ -539,11 +577,17 @@ func _input(event: InputEvent) -> void:
  if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
   var s:float=game.player.sensitivity
   if seat=="gunner":
-   vehicle.sight_pitch=clampf(vehicle.sight_pitch-event.relative.y*s*(4.0 if vehicle.fine else 12.0),-8.0,20.0)
+   # The mouse works both handwheels: across the platform, up and down the
+   # head of the sight.
+   var step:=s*(4.0 if vehicle.fine else 12.0)
+   vehicle.sight_pitch=clampf(vehicle.sight_pitch-event.relative.y*step,-8.0,20.0)
+   if event.relative.x!=0.0:vehicle.turn_platform(-event.relative.x*step)
   else:
    var scale:=0.15 if zoomed else 1.0
-   look.x=clampf(look.x-event.relative.x*s*scale,-PI if seat=="commander" else -2.0,PI if seat=="commander" else 2.0)
-   look.y=clampf(look.y-event.relative.y*s*scale,-0.5 if seat=="commander" else -1.1,0.6 if seat=="commander" else 0.9)
+   # Closed down the head turns in the compartment round its seat.
+   var limits:=Vector4(-PI,PI,-0.5,0.6) if seat=="commander" else (Vector4(-1.6,1.6,-0.9,0.6) if closed_down() else Vector4(-2.0,2.0,-1.1,0.9))
+   look.x=clampf(look.x-event.relative.x*s*scale,limits.x,limits.y)
+   look.y=clampf(look.y-event.relative.y*s*scale,limits.z,limits.w)
   accept();return
  if event is InputEventKey:
   var key: int=event.physical_keycode
@@ -551,6 +595,9 @@ func _input(event: InputEvent) -> void:
   match key:
    KEY_F:leave()
    KEY_C:next_seat()
+   KEY_1,KEY_2,KEY_3:
+    var id: String=SEATS[key-KEY_1]
+    if id!=seat:enter(id);vehicle.say(SEAT_TITLES[id],2)
    KEY_E:
     if seat=="commander":hud.toggle("console")
     elif seat=="driver":vehicle.shift(1)

@@ -160,6 +160,25 @@ func run():
  fixture.get_child(0).free()
  box(fixture,Vector3(0,-0.2,2),Vector3(4,0.4,3.5));await frames(2);await reset_player()
  check(player.vault.probe().is_empty(),"Reject unsupported landing beyond a drop")
+ # The village's fences: a board as thin as the steel sheet's collider.
+ for height in [1.36,1.55]:
+  for node in fixture.get_children():node.free()
+  box(fixture,Vector3(0,-0.2,0),Vector3(12,0.4,12))
+  box(fixture,Vector3(0,height*0.5,0),Vector3(2.5,height,0.08));await frames(2);await reset_player()
+  check(player.vault.try_start(),"A %.2f m board fence can be climbed over" % height)
+  await tick_vault()
+  check(not player.is_vaulting() and fixture.to_local(player.position).z< -0.4 and player.is_on_floor(),"…down on its far side")
+  player.rotation.y+=PI
+  check(player.vault.try_start(),"…and back over it")
+  await tick_vault();check(fixture.to_local(player.position).z>0.4,"…landing where it began")
+ for node in fixture.get_children():node.free()
+ box(fixture,Vector3(0,-0.2,0),Vector3(12,0.4,12))
+ box(fixture,Vector3(0,0.95,0),Vector3(4,1.9,0.08));await frames(2);await reset_player()
+ check(player.vault.probe().is_empty(),"A 1.9 m wall is too high to climb")
+ for node in fixture.get_children():node.free()
+ box(fixture,Vector3(0,-0.2,0),Vector3(12,0.4,12))
+ box(fixture,Vector3(0,0.75,-1.15),Vector3(4,1.5,2.3));await frames(2);await reset_player()
+ check(player.vault.probe().is_empty(),"A 1.5 m ledge is not climbed onto")
  await window_fixture()
  # Plain ground still jumps using the original movement action.
  await reset_player();player.position=fixture.to_global(Vector3(4,0.03,3))

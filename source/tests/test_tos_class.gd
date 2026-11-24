@@ -32,6 +32,10 @@ func yaw_now() -> float:
 
 func heading_to(from: Vector3, point: Vector3) -> float:return atan2(point.x-from.x,-(point.z-from.z))
 
+func key(code: int, down: bool) -> void:
+ var event:=InputEventKey.new();event.physical_keycode=code;event.pressed=down
+ Input.parse_input_event(event)
+
 func run_engine() -> void:
  var v:=tos.vehicle
  v.master=true;v.running=true;v.omega=TosVehicle.IDLE_RPM/60.0*TAU;v.starter=false
@@ -262,6 +266,27 @@ func run():
   check(absf(float(reading.distance)-real)<=10.0 and fmod(float(reading.distance),5.0)==0.0,"1D14: %.0f m for %.1f m — within ±10 m, read to 5 m" % [reading.distance,real])
   check(tos.lay_by_laser() and v.solution.source=="1Д14","ENTER: the reading into the computer and laid")
  else:check(false,"The 1D14 got an echo from the ground ahead (%s)" % str(reading))
+ # The gunner's handwheel: → turns the platform to the right, the mouse
+ # too; on its stops it does not turn and says why.
+ var sight_before:=-v.sight_transform().basis.z
+ key(KEY_RIGHT,true);await frames(30);key(KEY_RIGHT,false);await frames(10)
+ var sight_after:=-v.sight_transform().basis.z
+ check(sight_before.cross(sight_after).y<-0.01,"→ turns the platform to the right (%+.1f°)" % rad_to_deg(Vector2(sight_before.x,sight_before.z).angle_to(Vector2(sight_after.x,sight_after.z))))
+ var wheel:=v.want_yaw
+ var motion:=InputEventMouseMotion.new();motion.relative=Vector2(-40,0)
+ Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
+ if Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
+  Input.parse_input_event(motion);await frames(2)
+  check(v.want_yaw>wheel,"The mouse to the left turns it left")
+ else:print("(no mouse capture headless: the mouse handwheel not checked)")
+ v.stops_locked=true;wheel=v.want_yaw
+ key(KEY_LEFT,true);await frames(20);key(KEY_LEFT,false)
+ check(v.want_yaw==wheel and "стопор" in v.notice,"On its stops the platform stays and the gunner is told why")
+ v.stops_locked=false
+ key(KEY_3,true);key(KEY_3,false);await frames(2)
+ check(tos.seat=="commander","3 — the commander's seat")
+ key(KEY_2,true);key(KEY_2,false);await frames(2)
+ check(tos.seat=="gunner","2 — back to the 1D14")
  v.compute(aim,"Ц-1");v.lay_solution()
  await frames(600)
 
@@ -286,6 +311,21 @@ func run():
  check(tos.status_text().begins_with("ТОС-1А"),"The objective line tells the commander's state")
  tos.order_assault(true)
  check(not game.battle.halted and tos.assault_ordered,"G — the assault groups go")
+
+ # --- The driver's compartment closed down --------------------------------------
+ tos.enter("driver")
+ if v.hatch_open:v.toggle_hatch()
+ await frames(5)
+ check(v.interior!=null and v.interior.shown and v.seat_camera.cull_mask==BmpArt.INTERIOR_LAYER,"Hatch shut: the eyes in the driver's compartment, not a frame on the screen")
+ check(str(tos.target.get("kind",""))=="prism","…the TNPO-168V straight ahead")
+ Input.action_press("aim");await frames(30)
+ check(tos.press=="lean" and tos.lean>=1.0 and v.interior.scope.live,"The right button: the face to the eyepiece, the world in the prism")
+ Input.action_release("aim");await frames(30)
+ tos.look=Vector2(0.95,-0.35);await frames(3)
+ check(str(tos.target.get("kind",""))=="panel","The instrument panel on the left wall")
+ v.toggle_hatch();await frames(3)
+ check(not v.interior.shown and v.seat_camera.cull_mask&1,"Hatch open: the head out in the world")
+ tos.look=Vector2.ZERO
 
  # --- «Навчання» -----------------------------------------------------------------
  game.to_menu()
@@ -312,6 +352,19 @@ func run():
   walked+=1
  check(not t.running and t.done_chapters().size()>=5,"F6 walks all five chapters to the end (%d steps)" % walked)
  check(tos.strongpoints[1].destroyed,"…OP-2 down")
+ # Chapter 3 met with the vehicle taken out of its firing state.
+ game.begin_training(2,"tos")
+ for i in range(1200):
+  if game.running and t.running and not game.launching:break
+  await process_frame
+ await frames(30)
+ v=tos.vehicle
+ check(t.current().get("id","")=="gunner" and t.undeployed()=="","Chapter 3 begins with the vehicle in its firing state")
+ v.stops_locked=true
+ check("стопор" in t.readout_text("traverse"),"Stops locked by hand: the course says what to undo")
+ v.stops_locked=false
+ t.auto("traverse");await frames(10)
+ check(absf(t.sight_error())<=TosTraining.BOARD_HALF and t.readout_text("traverse")=="Марка на щиті","Laid on the 6 m board at 1.6 km (%.2f°)" % t.sight_error())
  game.to_menu()
  check(game.training=="" and game.player_class=="tos","Out of the course: the class as it was")
  print("checks: ",checks)

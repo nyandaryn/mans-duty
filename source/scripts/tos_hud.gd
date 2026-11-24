@@ -233,10 +233,14 @@ func lamp(at: Vector2, on: bool, title: String, color: Color=GREEN) -> void:
  text(at+Vector2(12,5),title,12,INK if on else DIM)
 
 func draw_driver(v: TosVehicle) -> void:
- # Closed down: the TNPO-168V's window, wide and low.
- if not v.hatch_open:
-  var w:=size.x*0.86;var h:=size.y*0.34
-  mask(Rect2(Vector2((size.x-w)*0.5,size.y*0.2),Vector2(w,h)),false)
+ # Closed down the eyes are in the compartment (TosInterior): a dot in the
+ # middle of the view and the device it rests on.
+ if command.closed_down() and command.lean<0.02:
+  var c:=size*0.5
+  draw_circle(c,3.6,Color(0,0,0,0.55));draw_circle(c,2.2,Color(1,1,1,0.75))
+  var t: Dictionary=command.target
+  if not t.is_empty():
+   text(Vector2(0,c.y+40),"%s  ·  ПКМ — %s" % [t.title,"ДИВИТИСЯ" if t.kind=="prism" else "ВЕЛИКИМ ПЛАНОМ"],16,INK,HORIZONTAL_ALIGNMENT_CENTER,size.x)
  var base:=Vector2(size.x*0.5,size.y-120)
  if command.instruments_shown():draw_instruments(v,base)
  # The levers, always: where each one stands.

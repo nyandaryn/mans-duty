@@ -1,3 +1,44 @@
+# 0.34.1 validation — 2026-11-24
+
+The TOS-1A after the player's first pass through its course, and the
+fences.
+
+- test_tos_class, now 72 checks:
+  - → turns the platform to the right (+3.1° in half a second; it turned
+    left before). On its stops the platform stays and the gunner is told
+    what to do; 3 and 2 change seats.
+  - Hatch shut: the seat camera sees the interior layer only, the TNPO-168V
+    straight ahead; the right button brings the face to the eyepiece and the
+    prism shows the world; looking left, the instrument panel. Hatch open:
+    the head out in the world again.
+  - Chapter 3 begins with the vehicle in its firing state; stops locked by
+    hand make the card say what to undo; laid on the 6 m board at 1.6 km
+    0.05° off (the step wants 0.1°).
+- test_vault: board fences 1.36 m and 1.55 m, 8 cm thick, over and back;
+  a 1.9 m wall and a 1.5 m wide ledge are refused. All the window and
+  ledge checks as before.
+- The great assault's own fences: the player put 0.8 m in front of 92
+  fences from both sides (184 spots) can climb over 183; the last has
+  something behind it.
+- test_battle: the four walls of the 400 m edge are on their own layer
+  (OperationArea.EDGE_LAYER), the bots collide with it and the player does
+  not; the player's capsule moves 3 m out over the edge at two places.
+- test_assault_skip: with the 264 edge posts gone (each its own static
+  body) the seeded mortarman's salvo played out otherwise: it took two
+  strongpoints, not one, and the last man of the first died in the 1.2 s
+  fade after the vehicles had been put at their drops for it. The squads
+  stand at their drops in the village and go on foot to the next one, as
+  in the game; the check now holds the drop's range only to a strongpoint
+  still standing. With the posts put back on a copy the old check passes,
+  and the wall's layer alone changes nothing.
+- The suite, 79 tests at --fixed-fps 60: all pass (test_vault 102 checks,
+  test_battle 46, test_tos_class 72, test_assault_skip 47).
+- Renders (tests/render_tos_class.gd, 1280×720, in a window), looked at:
+  the driver's compartment with the hatch shut, the instrument panel on its
+  left, the view through the TNPO-168V's eyepiece; the gunner's and the
+  commander's devices now stand outboard of the package and see the field
+  over the hull.
+
 # 0.34.0 validation — 2026-11-24
 
 The TOS-1A commander's class: the player's BM-1 on the T-72A's drive, the

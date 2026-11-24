@@ -26,6 +26,14 @@ func run():
  check(game.running and battle.active,"Battle starts independently of campaign unlocks")
  check(game.district.grid.region.size==Vector2i(399,399),"400 m battlefield uses bounded one-metre navigation")
  await physics_frame;await physics_frame
+ # The village's edge: the battle's soldiers stay in, the player walks out
+ # into the ground around (no posts, no wall for him).
+ var edges: Array=game.district.get_children().filter(func(c):return c is StaticBody3D and c.has_meta("boundary"))
+ check(edges.size()==4 and edges.all(func(c):return c.collision_layer==OperationArea.EDGE_LAYER) and game.player.collision_mask&OperationArea.EDGE_LAYER==0 and game.bots[0].collision_mask&OperationArea.EDGE_LAYER!=0,"The 400 m edge holds the battle's soldiers, not the player")
+ for spot in [Vector2(0,197.5),Vector2(-197.5,0)]:
+  var walk:=Vector3(signf(spot.x),0,signf(spot.y))*3.0
+  var from:=Vector3(spot.x,game.district.ground_height(Vector3(spot.x,0,spot.y))+0.6,spot.y)
+  check(not game.player.test_move(Transform3D(Basis.IDENTITY,from),walk),"The player walks out over the edge at %s" % str(spot))
  var spawn_eye:Vector3=game.district.player_spawn+Vector3.UP*1.65
  var spawn_ray:=PhysicsRayQueryParameters3D.create(spawn_eye,spawn_eye+Vector3.FORWARD*40,1)
  check(not game.get_world_3d().direct_space_state.intersect_ray(spawn_ray).is_empty(),"Insertion has physical frontal cover")

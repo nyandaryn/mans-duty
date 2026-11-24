@@ -108,6 +108,7 @@ var scripted := true
 # The steering levers, pulled 0…1: part way the lagging side's clutches
 # slip toward the next lower gear, a full pull (FULL_PULL) locks it there.
 var levers := Vector2.ZERO
+var interior: TosInterior
 var lever_input := Vector2.ZERO
 # The oil pump before a start (МЗН): the starter turns a primed engine only.
 var priming := false
@@ -159,6 +160,16 @@ func setup(owner_game: Node3D, seed_value: int=0) -> void:
   output.position=Vector3(0,2.6,1.0);add_child(output);output.bus=game.hearing.bus_name
   launch_players.append(output)
  pose()
+
+# The driver's compartment, built when he first shuts his hatch.
+func cabin() -> TosInterior:
+ if interior==null:
+  interior=TosInterior.new()
+  interior.setup(self)
+ return interior
+
+# The jacks lamp closes the row of the driver's panel (BmpCockpit).
+func panel_lamp() -> Array:return [jacks>0.0,"ДОМКРАТИ",BmpCockpit.RED]
 
 # The player's vehicle: on its tracks, with the seats' camera.
 func make_drivable() -> void:
@@ -614,8 +625,9 @@ func update_fcs(delta: float) -> void:
   stop_motion-=delta
   if stop_motion<=0.0:say("Стопори платформи й пакета %s" % ("ЗАКРИТО" if stops_locked else "ЗНЯТО"),2)
  # The gunner's own traverse: the platform follows his handwheel.
- if traverse_input!=0.0 and can_traverse():
-  want_yaw=clampf(want_yaw+traverse_input*TRAVERSE_RATE*(0.2 if fine else 1.0)*delta,-TRAVERSE,TRAVERSE)
+ # The platform's angle grows to the left (as the model turns about +Y);
+ # the input is to the right.
+ if traverse_input!=0.0:turn_platform(-traverse_input*TRAVERSE_RATE*(0.2 if fine else 1.0)*delta)
  # Locked, or with no power for the drives, the platform stays as it is.
  if stops_locked or stop_motion>0.0 or not drives_powered():
   want_yaw=platform_yaw;want_elevation=elevation
@@ -623,6 +635,23 @@ func update_fcs(delta: float) -> void:
  if jacks<1.0 and not jacks_wanted and want_elevation>0.0 and absf(platform_yaw)<0.5:want_elevation=0.0
 
 func can_traverse() -> bool:return not stops_locked and stop_motion<=0.0 and drives_powered()
+
+# Why the platform stays where it is ("" when it can turn).
+func traverse_blocked() -> String:
+ if stops_locked or stop_motion>0.0:return "Платформа на стопорах: зніми їх — місце командира (3), E — пульт, СТОПОРИ"
+ if hull.weapon_out:return "Приводи платформи пошкоджено"
+ if not running:return "Приводи без гідравліки: заведи двигун"
+ return ""
+
+# The gunner's handwheel (keys or mouse): the platform turns ±100° from the
+# nose; beyond that only the whole vehicle turns. Degrees to the left.
+func turn_platform(degrees: float) -> void:
+ var why:=traverse_blocked()
+ if why!="":say(why,3);return
+ var limit:=TRAVERSE-0.05
+ if (want_yaw>=limit and degrees>0.0) or (want_yaw<=-limit and degrees<0.0):
+  say("Платформа на упорі: %d° %s від носа. Далі — розвертай машину (1 — механік-водій)" % [roundi(TRAVERSE),"ліворуч" if want_yaw>0.0 else "праворуч"],3);return
+ want_yaw=clampf(want_yaw+degrees,-TRAVERSE,TRAVERSE)
 
 func toggle_jacks() -> bool:
  if not jacks_wanted and not standing():say("Домкрати опускають лише на місці",2.5);return false

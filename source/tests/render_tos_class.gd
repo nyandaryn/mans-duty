@@ -1,8 +1,8 @@
 extends SceneTree
 
 # Screenshots of the TOS-1A commander's class: the start by the vehicle, the
-# driver's view out of the hatch and through the TNPO-168V with the
-# instruments, the commander's TKN-3A and his fire-control panel, the 1D14
+# driver's view out of the hatch, from inside his compartment and through
+# the TNPO-168V, the commander's TKN-3A and his fire-control panel, the 1D14
 # sight with a range, the tablet, the observation post's drone and the
 # training card. Run in a window:
 # KVARTAL_PREVIEW_DIR=<dir> godot --path source --fixed-fps 60 -s tests/render_tos_class.gd
@@ -40,9 +40,16 @@ func run():
  tos.enter("driver")
  await snap("class-driver-hatch",30)
  v.toggle_hatch()
+ await snap("class-driver-cabin",10)
+ tos.look=Vector2(0.95,-0.35)
+ await snap("class-driver-panel",10)
+ tos.look=Vector2.ZERO
+ await frames(3)
  Input.action_press("aim")
  await snap("class-driver-tnpo",30)
  Input.action_release("aim")
+ await frames(20)
+ v.toggle_hatch()
  # On the firing position, the drill done, laid on OP-2.
  var aim: Vector3=tos.strongpoints[1].point
  var fa:=TosCommand.FIRING_AREA

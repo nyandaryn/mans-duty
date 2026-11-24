@@ -82,7 +82,7 @@ static func threat(at: Vector2) -> Vector2:
  return (FORMATION-at).normalized()
 
 static func definition() -> Dictionary:
- return {"id":ID,"title":"ВЕЛИКИЙ ШТУРМ / АВДІЇВКА","kind":"battle","biome":"orchard","seed":161126,"relief":0.0,"terrain":"avdiivka","heading":0.0,"size":400,"spawn":SPAWN,"defender_count":0,"buildings":full_houses(),"belts":[],"trenches":[],"insertion_cover":false,"defer_flush":true}
+ return {"id":ID,"title":"ВЕЛИКИЙ ШТУРМ / АВДІЇВКА","kind":"battle","biome":"orchard","seed":161126,"relief":0.0,"terrain":"avdiivka","heading":0.0,"size":400,"spawn":SPAWN,"defender_count":0,"buildings":full_houses(),"belts":[],"trenches":[],"insertion_cover":false,"defer_flush":true,"edge_posts":false}
 
 # The OSM house behind each firing position becomes a full house with rooms,
 # its door towards the position; the rest of the village is built as closed

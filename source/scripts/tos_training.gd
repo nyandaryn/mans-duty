@@ -35,20 +35,20 @@ const STEPS := [
   {"id":"orient","title":"Стань носом до цілі","text":"Платформа повертається на ±100°, але найкраще наводити, коли ціль попереду: так машину менше розгойдує при пуску. Маркер «ЦІЛЬ» — у межах 45° від носа.","keys":["A","D"]},
   {"id":"park","title":"Зупинись і затягни гальма","text":"S — гальмо до зупинки, SHIFT + Q — до нейтралі N, SPACE — гальма на защіпку. Від цієї миті йде норматив — 90 с.","keys":["S","SHIFT","Q","SPACE"]}],
  [
-  {"id":"commander","title":"Перейди на місце командира","text":"C — наступне місце в машині: механік-водій → навідник → командир. Двигун лишається працювати: від нього гідравліка домкратів і приводів.","keys":["C"]},
+  {"id":"commander","title":"Перейди на місце командира","text":"3 — місце командира (1 — механік-водій, 2 — навідник, C — по колу). Двигун лишається працювати: від нього гідравліка домкратів і приводів.","keys":["3"]},
   {"id":"console","title":"Відкрий пульт","text":"E — пульт командира БМ-1: живлення, домкрати, стопори, режим вогню.","keys":["E"]},
   {"id":"fcs","title":"Увімкни живлення СУО","text":"ЖИВЛЕННЯ СУО: баллістичний обчислювач і датчик крену готуються 40 с — увімкни першим, далі роби решту, поки він гріється.","keys":["E"]},
   {"id":"jacks","title":"Опусти домкрати","text":"ДОМКРАТИ: два кормові домкрати знімають навантаження з підвіски — машина не розгойдується при пуску. Опускаються лише на місці.","keys":["E"]},
   {"id":"stops","title":"Зніми стопори","text":"СТОПОРИ: на марші платформа й пакет застопорені на 0° і 0°. Знімаються 4 с.","keys":["E"]},
   {"id":"ready","title":"Дочекайся готовності СУО","text":"Лампа «СУО» на пульті загориться, коли обчислювач буде готовий. Перелік ліворуч — уся машина в бойовому.","keys":["E"]}],
  [
-  {"id":"gunner","title":"Займи місце навідника-оператора","text":"C — до прицілу-далекоміра 1Д14. У прицілі ×8: марка-шеврон і шкала по 5 тисячних.","keys":["C"]},
-  {"id":"traverse","title":"Наведи платформу на мішень","text":"Мішень — щит у полі за 1,6 км, на 35° ліворуч від носа (маркер). ← → — платформа (CTRL — точно). Марка має стати на мішень по напрямку.","keys":["←","→","CTRL"]},
-  {"id":"range","title":"Виміряй дальність","text":"↑ ↓ або миша — головка прицілу: марку на основу мішені. R — лазер: 400 м – 10 км, ±10 м. Показання — червоним у полі зору.","keys":["↑","↓","R"]},
+  {"id":"gunner","title":"Займи місце навідника-оператора","text":"2 — до прицілу-далекоміра 1Д14. У прицілі ×8: марка-шеврон і шкала по 5 тисячних.","keys":["2"]},
+  {"id":"traverse","title":"Наведи платформу на мішень","text":"Мішень — щит 6 м у полі за 1,6 км, на 35° ліворуч від носа. ← → або миша вбік — платформа, з CTRL — утричі повільніше. Вершина марки має стати на щит.","keys":["←","→","CTRL"]},
+  {"id":"range","title":"Виміряй дальність","text":"↑ ↓ або миша вгору-вниз — головка прицілу: вершину марки на щит (CTRL — точно). R — лазер: 400 м – 10 км, ±10 м. Мимо щита промінь піде в поле перед ним або за ним — підказка нижче скаже, куди довернути.","keys":["↑","↓","R"]},
   {"id":"compute","title":"Дальність — в обчислювач","text":"ENTER: обчислювач візьме дальність, кут головки прицілу, крен і диферент машини — і сам наведе платформу й пакет. Зачекай, доки пакет стане.","keys":["ENTER"]},
-  {"id":"arm","title":"Серія 2 і запобіжник","text":"C — до командира, E — пульт: СЕРІЯ до 2, ЗБРОЯ — зняти запобіжник. «ГОТОВИЙ ДО ПУСКУ» на пульті — можна.","keys":["C","E"]},
+  {"id":"arm","title":"Серія 2 і запобіжник","text":"3 — до командира, E — пульт: СЕРІЯ до 2, ЗБРОЯ — зняти запобіжник. «ГОТОВИЙ ДО ПУСКУ» на пульті — можна.","keys":["3","E"]},
   {"id":"fire","title":"Пуск","text":"SPACE — пуск. Дві ракети підуть через 0,5 с. За кормою до 30 м — смертельна зона струменя.","keys":["SPACE"]},
-  {"id":"observe","title":"Спостерігай розриви","text":"Політ на 1,6 км — кілька секунд. Розриви видно в прицілі (C — до навідника).","keys":["C"]}],
+  {"id":"observe","title":"Спостерігай розриви","text":"Політ на 1,6 км — кілька секунд. Розриви видно в прицілі (2 — до навідника).","keys":["2"]}],
  [
   {"id":"drone","title":"Виклич дрон СП","text":"Місце командира, J. Спостережний пункт біля вихідних позицій штурму підніме дрон за 12 с; зв’язок через ретранслятор.","keys":["J"]},
   {"id":"pilot","title":"Візьми керування дроном","text":"Коли СП доповість, що дрон у повітрі, — J ще раз.","keys":["J"]},
@@ -63,7 +63,7 @@ const STEPS := [
   {"id":"stow","title":"Пакет у похідне","text":"Противник засік пуск: відповідь — за 2,5–4 хв. Пульт (E): ПОХІДНЕ — платформа й пакет на 0° і 0°.","keys":["E"]},
   {"id":"lock","title":"Застопори","text":"СТОПОРИ на пульті: 4 с.","keys":["E"]},
   {"id":"raise","title":"Підніми домкрати","text":"ДОМКРАТИ на пульті. Поки вони внизу, машина не рушить.","keys":["E"]},
-  {"id":"seat","title":"До важелів","text":"C — місце механіка-водія.","keys":["C"]},
+  {"id":"seat","title":"До важелів","text":"1 — місце механіка-водія.","keys":["1"]},
   {"id":"leave","title":"Залиш вогневу позицію","text":"SPACE — зняти гальма, SHIFT + E — передача, W — газ. Від’їдь від ВП на 300 м.","keys":["SPACE","SHIFT","E","W"]}]]
 
 var tos: TosCommand
@@ -125,6 +125,16 @@ func build_board() -> void:
  paint.call(Color(0.75,0.1,0.08),Vector3(5.2,0.5,0.14),Vector3(0,1.9,0))
  paint.call(Color(0.75,0.1,0.08),Vector3(0.5,2.8,0.14),Vector3(0,1.9,0))
  for x in [-2.6,2.6]:paint.call(Color(0.35,0.27,0.18),Vector3(0.2,1.6,0.2),Vector3(x,0.4,0.15))
+
+# What took the vehicle out of its firing state after chapter 2 ("" if
+# nothing): the player may well raise the jacks or lock the stops himself.
+func undeployed() -> String:
+ var v:=tos.vehicle
+ if not v.running:return "Двигун заглух: без нього немає гідравліки приводів. 1 — механік-водій, P і X"
+ if v.jacks<1.0:return "Домкрати не опущено (%d %%): 3 — місце командира, E — пульт, ДОМКРАТИ" % roundi(v.jacks*100)
+ if v.stops_locked or v.stop_motion>0.0:return "Платформа на стопорах: 3 — місце командира, E — пульт, СТОПОРИ"
+ if not v.fcs_ready():return "СУО не готова (%d %%): пульт командира, ЖИВЛЕННЯ СУО" % roundi(v.fcs_warm*100)
+ return ""
 
 # --- The vehicle put in a chapter's state -------------------------------------
 func heading_to(point: Vector3) -> float:
@@ -196,6 +206,11 @@ func sight_error() -> float:
  var to:=board_point()-eye.origin
  return rad_to_deg(Vector2(f.x,f.z).angle_to(Vector2(to.x,to.z)))
 
+# The bearing to the board from the sight, within half its width.
+const BOARD_HALF := 0.1
+
+func board_range() -> float:return tos.vehicle.sight_transform().origin.distance_to(board_point())
+
 func ranged() -> bool:
  var reading: Dictionary=tos.vehicle.laser_reading
  return reading.has("point") and flat_distance(reading.point,board_point())<30.0
@@ -233,7 +248,7 @@ func check(id: String) -> bool:
   "stops":return not v.stops_locked and v.stop_motion<=0.0
   "ready":return v.fcs_ready() and v.jacks>=1.0 and not v.stops_locked and v.stop_motion<=0.0
   "gunner":return tos.seat=="gunner"
-  "traverse":return absf(sight_error())<=0.6
+  "traverse":return absf(sight_error())<=BOARD_HALF
   "range":return ranged()
   "compute":return v.solution.get("source","")=="1Д14" and not v.solution.has("error") and v.laid() and v.elevation>=1.0
   "arm":return v.armed and v.series==2
@@ -257,6 +272,9 @@ func check(id: String) -> bool:
 
 func readout_text(id: String) -> String:
  var v:=tos.vehicle
+ if id in ["traverse","range","compute","arm","fire","load","salvo"]:
+  var why:=undeployed()
+  if why!="":return why
  match id:
   "prime":return "Тиск масла %.1f кгс/см² · потрібно понад 2" % v.oil_pressure
   "gear","move":return "Передача %s · %d км/год" % [TosVehicle.GEAR_NAMES[v.gear],roundi(absf(v.speed())*3.6)]
@@ -268,11 +286,19 @@ func readout_text(id: String) -> String:
   "commander","console","fcs","jacks","stops","ready":
    var t:=tos.clock-stopped_at if stopped_at>=0.0 else 0.0
    return "Від зупинки %d с · норматив %d с · СУО %d %%" % [roundi(t),roundi(NORM),roundi(v.fcs_warm*100)]
-  "traverse":return "Марка від мішені: %+.1f° по напрямку · платформа %+.1f°" % [sight_error(),v.platform_yaw]
+  "traverse":
+   var e:=sight_error()
+   if absf(e)<=BOARD_HALF:return "Марка на щиті"
+   return "Марка %s щита на %.2f° — %s%s" % ["лівіше" if e>0.0 else "правіше",absf(e),"→" if e>0.0 else "←"," (CTRL — точно)" if absf(e)<1.0 else ""]
   "range":
    var reading: Dictionary=v.laser_reading
-   if reading.has("point"):return "1Д14: %d м · точка за %d м від мішені%s" % [roundi(reading.distance),roundi(flat_distance(reading.point,board_point())),"" if ranged() else " — наведи точніше"]
-   return "Головка прицілу %+.1f° · R — виміряти" % v.sight_pitch
+   if reading.has("point"):
+    if ranged():return "1Д14: %d м · промінь на щиті" % roundi(reading.distance)
+    var e:=sight_error()
+    var miss:="марка %s щита — %s" % ["лівіше" if e>0.0 else "правіше","→" if e>0.0 else "←"] if absf(e)>BOARD_HALF else ("промінь у полі перед щитом — головку ↑ трохи вище" if float(reading.distance)<board_range() else "промінь пішов за щит — головку ↓ трохи нижче")
+    return "1Д14: %d м · %s" % [roundi(reading.distance),miss]
+   if v.laser_reading.get("distance",0.0)==-1.0:return "1Д14: немає відбиття — промінь пішов у небо, головку ↓ нижче"
+   return "Головка прицілу %+.2f° · R — виміряти" % v.sight_pitch
   "compute","load":return "Пакет %.1f° → %.1f° · платформа %+.1f° → %+.1f°" % [v.elevation,v.want_elevation,v.platform_yaw,v.want_yaw]
   "arm":return "Серія %d · %s · %s" % [v.series,"ЗБРОЯ" if v.armed else "запобіжник","ГОТОВИЙ" if v.ready_to_fire()=="" else v.ready_to_fire()]
   "fire","salvo":return "Випущено %d · ракет у пакеті %d" % [v.fired-int(shot.get("from",0)),v.remaining()]

@@ -115,6 +115,9 @@ func setup(owner_game: Node3D, label: String="") -> void:
  add_to_group("vehicles")
  VehicleMarkings.apply(self,friendly)
 
+# The receiver lamp closes the row of the driver's panel.
+func panel_lamp() -> Array:return [radio_on,"ПРИЙМАЧ",BmpCockpit.GREEN]
+
 func cabin() -> BmpInterior:
  if interior==null:
   interior=BmpInterior.new()

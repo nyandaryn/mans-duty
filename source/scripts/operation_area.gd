@@ -17,6 +17,9 @@ const TREE_CHUNK := 300.0
 const TREES_END := 900.0
 const RIBBONS_END := 3200.0
 const BOUNDARY_LAYER := 64
+# The village's 400 m edge in the great assault: it keeps the battle's soldiers
+# in, while the player, his vehicles, the drone, rockets and bullets cross it.
+const EDGE_LAYER := 128
 const INNER := 200.0
 const SKIP_ROADS := ["footway","path","steps","pedestrian","cycleway","bridleway"]
 const WALLS := {"H":["c9c3ad","c2b48c","9a5a44","b8b5a6","9fb0ad","b9a68a","a99e86"],"S":["8a8678","6f6a5e","7d7a6c","837261"],"A":["b9b3a3","a8a296","c4b9a0","9c9a92"],"I":["9a978c","8b8a83","a49d8b","7f7c74"],"P":["c6bda8","b3a991","a7b0a3"]}
@@ -56,10 +59,9 @@ func build() -> void:
  vertex_material.vertex_color_use_as_albedo=true
  vertex_material.vertex_color_is_srgb=true
  vertex_material.roughness=0.95
- # The battlefield keeps its fence, but only for people: the drone, rockets
- # and bullets pass over the edge into the operation area.
+ # The battlefield keeps its edge for the soldiers of the battle only.
  for child in world.get_children():
-  if child is StaticBody3D and child.has_meta("boundary"):child.collision_layer=BOUNDARY_LAYER
+  if child is StaticBody3D and child.has_meta("boundary"):child.collision_layer=EDGE_LAYER
  load_trees()
  ground()
  collision()

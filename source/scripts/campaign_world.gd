@@ -223,8 +223,11 @@ func scenery() -> void:
   part(Vector3(-2,0.65,0),Vector3(1.2,1.3,0.6),"737564","wood")
   part(Vector3(2,0.45,1),Vector3(1.4,0.9,0.7),"807660","wood")
  # Visible boundary markers; matching collision keeps the playable area 400 m.
+ # The great assault goes on into the ground around: no posts there, and
+ # OperationArea leaves the walls to the battle's soldiers.
  for side in [-1,1]:
   for along in range(-198,199,6):
+   if not definition.get("edge_posts",true):break
    for p in [Vector2(side*199,along),Vector2(along,side*199)]:
     origin=ground(p)
     basis=Basis.IDENTITY

@@ -131,6 +131,9 @@ func engine_torque(r: float) -> float:
   if r<=torque_curve[i+1][0]:return lerpf(torque_curve[i][1],torque_curve[i+1][1],(r-torque_curve[i][0])/(torque_curve[i+1][0]-torque_curve[i][0]))
  return 0.0
 
+# The last lamp of the driver's panel (BmpCockpit): lit, title, colour.
+func panel_lamp() -> Array:return [false,"",Color.BLACK]
+
 func clutch_engagement() -> float:return clampf((0.75-clutch_pedal)/0.5,0.0,1.0)
 
 func stationary() -> bool:return absf(speed())<0.4

@@ -148,7 +148,7 @@ static func t72_tos() -> VehicleArmor:
  a.part("трансмісія","drive",Vector3(0,0.85,2.95),Vector3(1.10,0.35,0.40))
  a.part("навідник-оператор","gunner",Vector3(-0.62,-0.30,-0.40),Vector3(0.30,0.50,0.35),true)
  a.part("командир","commander",Vector3(0.62,-0.30,-0.40),Vector3(0.30,0.50,0.35),true)
- a.part("прицілювач-далекомір 1Д14 і СКВ","weapon",Vector3(-0.62,0.55,-0.80),Vector3(0.20,0.15,0.20),true)
+ a.part("прицілювач-далекомір 1Д14 і СКВ","weapon",TosArt.SIGHT,Vector3(0.14,0.13,0.14),true)
  a.part("ракети МО.1.01.04М у пакеті","rockets",Vector3(0,p.y+0.42,p.z-1.8),Vector3(1.05,0.42,1.86),true)
  return a
 

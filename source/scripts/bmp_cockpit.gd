@@ -26,14 +26,14 @@ var game: Node3D
 var command: Node
 var large := 0.0
 var plate_only := false
-var source: BmpVehicle
+var source: TrackedVehicle
 
 func setup(owner_game: Node3D, owner_command: Node) -> void:
  game=owner_game;command=owner_command
  mouse_filter=Control.MOUSE_FILTER_IGNORE
  hide()
 
-func vehicle() -> BmpVehicle:return source if source!=null else command.vehicle
+func vehicle() -> TrackedVehicle:return source if source!=null else command.vehicle
 
 func view() -> String:
  if command==null or not command.active() or not game.running or command.seat=="":return ""
@@ -148,7 +148,7 @@ func draw_plate() -> void:
  clock(Vector2(945,row),56)
  plate_label(Vector2(945,row+56+30),"ГОДИННИК АЧС-1")
  # Warning lamps light from the batteries.
- var lamps:=[[v.master,"МАСА",GREEN],[v.starter,"СТАРТЕР",AMBER],[v.oil_pressure<1.0,"ТИСК МАСЛА",RED],[v.coolant>105.0,"ПЕРЕГРІВ",RED],[v.parking,"СТОЯНКОВЕ",AMBER],[v.radio_on,"ПРИЙМАЧ",GREEN]]
+ var lamps:=[[v.master,"МАСА",GREEN],[v.starter,"СТАРТЕР",AMBER],[v.oil_pressure<1.0,"ТИСК МАСЛА",RED],[v.coolant>105.0,"ПЕРЕГРІВ",RED],[v.parking,"СТОЯНКОВЕ",AMBER],v.panel_lamp()]
  for i in range(lamps.size()):
   var entry: Array=lamps[i]
   lamp(Vector2(880,62+i*38),power and bool(entry[0]),str(entry[1]),entry[2])
