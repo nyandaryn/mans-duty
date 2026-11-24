@@ -162,9 +162,18 @@ var drone_aim := Vector3.INF
 var drone_aim_time := 0.0
 var drone_lead := 1.0
 var drone_shooter := true
+# The order the men were made in in this match: keys a man's own error in
+# judging a range (sighted), the side he steps to when probing a flank and
+# his turn to cover in a pair (Game.coordinate_squad). The engine's object
+# id and his index among the game's children moved with every object made
+# before him and every node added to the game, and seeded battles with
+# them (0.34.0: the TOS-1A commander's node flipped test_assault_halt).
+static var made := 0
+var judge_key := 0
 
 func setup(owner_game: Node3D, spawn: Vector3) -> void:
 	game=owner_game
+	made+=1;judge_key=made
 	# About half the men fire at a drone (by where they start: no dice drawn).
 	drone_shooter=absi(hash(Vector2i(roundi(spawn.x*7.0),roundi(spawn.z*7.0))))%100<50
 	weapon.debug_infinite=game.debug_invulnerable
@@ -585,7 +594,7 @@ func _tick(delta: float) -> void:
 	if not friendly and alerted and squad_role!="cover" and at_cover and no_sight_time>(12 if game.battle.active else 5) and shelled<=0 and suppression<1 and not reload_active and health>60 and flank_timer<=0 and flank_probe_timer<=0:
 		flank_probe_timer=randf_range(1.0,1.8)
 		var away := (global_position-target).normalized()
-		var lateral := Vector3(-away.z,0,away.x)*(1 if get_index()%2==0 else -1)
+		var lateral := Vector3(-away.z,0,away.x)*(1 if judge_key%2==0 else -1)
 		var candidate := global_position+away*3+lateral*8
 		if defensive and candidate.distance_to(home)>defense_radius:candidate=home
 		var cell: Vector2i=game.district.nearest_cell(game.district.navigation_cell(candidate))
@@ -855,7 +864,7 @@ func sighted(origin: Vector3, point: Vector3, role: String) -> Vector3:
 	if absf(line.y)>0.98:return line
 	var distance := origin.distance_to(point)
 	if distance>FlightModel.direct_fire(weapon.id):
-		var judged := float(absi(hash([get_instance_id(),int(distance/50.0)]))%2001)/1000.0-1.0
+		var judged := float(absi(hash([judge_key,int(distance/50.0)]))%2001)/1000.0-1.0
 		distance*=1.0+judged*(0.06 if role=="sniper" else 0.12)
 	return line.rotated(line.cross(Vector3.UP).normalized(),FlightModel.aim_angle(weapon.id,distance))
 
@@ -1111,8 +1120,6 @@ func die() -> void:
 	if kit!=null:kit.clear()
 	var voice := get_node_or_null("PainVoice") as AudioStreamPlayer3D
 	if voice:voice.stop()
-	var callout := get_node_or_null("CoverVoice") as AudioStreamPlayer3D
-	if callout:callout.stop()
 	collision_layer=0
 	collision_mask=0
 	for hitbox in hitboxes:hitbox.collision_layer=0
@@ -1222,7 +1229,6 @@ func update_medical(delta: float) -> bool:
 	return false
 
 func assign_squad(role: String, partner: Hostile) -> void:
-	if role=="cover" and squad_role!="cover":game.cover_voice(self)
 	squad_partner=partner
 	if role=="move" and squad_role!=role:
 		# A defender bounds only out of cover that no longer shields him;

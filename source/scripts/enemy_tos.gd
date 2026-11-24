@@ -148,7 +148,7 @@ func _physics_process(delta: float) -> void:
      look()
    elif clock>=float(plan.fire_at)-ready_time-drive_time():go_out()
   "out":
-   if not vehicle.moving() and vehicle.speed<0.05:
+   if not vehicle.moving() and vehicle.crawl<0.05:
     arrived_at=clock;state="laying"
     if not lay():abort("поза досяжністю")
   "laying":
@@ -163,7 +163,7 @@ func _physics_process(delta: float) -> void:
     if salvo_done<0.0:salvo_done=clock
     if clock-salvo_done>6.0:go_back()
   "back":
-   if not vehicle.moving() and vehicle.speed<0.05:
+   if not vehicle.moving() and vehicle.crawl<0.05:
     vehicle.stow()
     state="hidden" if salvos<SALVOS and vehicle.has_rockets() else "spent"
     rest_until=clock+REST
@@ -258,7 +258,7 @@ func go_out() -> void:
   state="out";note("out_immobile");return
  var toward:=Vector3(plan.aim)-fire_point;toward.y=0;toward=toward.normalized()
  var mid:=ground(hide.lerp(fire_point,0.5))
- vehicle.drive(PackedVector3Array([mid,fire_point,ground(fire_point+toward*8.0)]))
+ vehicle.drive_to(PackedVector3Array([mid,fire_point,ground(fire_point+toward*8.0)]))
  state="out";note("out")
 
 func lay() -> bool:
@@ -286,7 +286,7 @@ func go_back() -> void:
  vehicle.stow()
  state="back"
  if vehicle.immobile:return
- vehicle.drive(PackedVector3Array([ground(vehicle.global_position.lerp(hide,0.5)),hide]))
+ vehicle.drive_to(PackedVector3Array([ground(vehicle.global_position.lerp(hide,0.5)),hide]))
  note("back")
 
 # The launches heard and seen: the warning on the squad radio net, the
@@ -308,3 +308,4 @@ func report_launch() -> void:
  var grid:=data().coordinates_text(located) if data().has_method("coordinates_text") else "%.0f, %.0f" % [located.x,located.z]
  game.squad.tell("Радіорозвідка: позиція ТОС противника — %s" % grid)
  if is_instance_valid(game.grad) and game.grad.has_method("enemy_target"):game.grad.enemy_target("ТОС",located)
+ if is_instance_valid(game.tos):game.tos.enemy_target("ТОС противника",located)

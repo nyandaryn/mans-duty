@@ -319,7 +319,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_F:
 		# F again while folding the drone: it stays out.
 		if field_rig.mode=="recover_drone":cancel_action()
-		elif not field_rig.recover_drone() and not game.grad.interact():game.crew.interact()
+		elif not field_rig.recover_drone() and not game.grad.interact() and not game.tos.interact():game.crew.interact()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_N:
 		game.crew.toggle_deploy()
@@ -488,7 +488,7 @@ func _physics_process(delta: float) -> void:
 		var sighted: float=LauncherRig.PGO_FIELD/0.9 if launcher.kind=="rpg7" else (42.0 if launcher.kind=="rpg22" else 60.0)
 		view_fov=lerpf(78,sighted,smoothstep(0,1,launcher.ads))
 	camera.fov=lerpf(camera.fov,view_fov,minf(delta*12,1))
-	camera.far=4000.0 if game.player_class=="grad" and game.battle.active else 700.0 if game.battle.active else 1250.0 if field_rig.mode=="rangefinder" else (850.0 if launcher.active() else (900.0 if game.district.map_id==TrainingRange.ID else 160.0))
+	camera.far=4000.0 if game.player_class in ["grad","tos"] and game.battle.active else 700.0 if game.battle.active else 1250.0 if field_rig.mode=="rangefinder" else (850.0 if launcher.active() else (900.0 if game.district.map_id==TrainingRange.ID else 160.0))
 	update_breath(delta,sprint and planar_speed>4.5)
 	recoil=move_toward(recoil,0,delta*0.12)
 	camera.rotation.x=pitch+recoil+recoil_offset.y+sin(symptom_clock*1.8)*blood_loss*0.025+sin(symptom_clock*17)*pain*0.002

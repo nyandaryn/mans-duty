@@ -24,6 +24,7 @@ var inventory: CombatInventory
 var squad: AssaultSquad
 var crew: MortarCrew
 var grad: GradCommand
+var tos: TosCommand
 var bmp: BmpCommand
 var topo_map: TopoMap
 var drone_feed: DroneFeed
@@ -92,8 +93,9 @@ var spatial_index := 0
 var orbit := 0.0
 var main_menu: MainMenu
 var grad_training: GradTraining
+var tos_training: TosTraining
 # Every «Навчання» course by class, in the order of the training screen.
-const COURSE_IDS := ["rifleman","machinegunner","grenadier","sniper","uav","mortarman","grad","bmp"]
+const COURSE_IDS := ["rifleman","machinegunner","grenadier","sniper","uav","mortarman","grad","bmp","tos"]
 const MACHINEGUNNER_TRAINING := preload("res://scripts/machinegunner_training.gd")
 const GRENADIER_TRAINING := preload("res://scripts/grenadier_training.gd")
 const UAV_TRAINING := preload("res://scripts/uav_training.gd")
@@ -274,6 +276,7 @@ func build_district() -> void:
 
 func start_match() -> void:
 	battle.reset()
+	Hostile.made=0;BmpVehicle.made=0
 	radio_voice.reset()
 	if selected_map in Campaign.IDS and not campaign.unlocked(selected_map):return
 	inventory.close()
@@ -299,9 +302,10 @@ func start_match() -> void:
 	crew.reset()
 	stop_courses()
 	grad.reset()
+	tos.reset()
 	bmp.reset()
-	# The BM-21 fights only in the great assault.
-	if player_class=="grad" and training=="":selected_map=BattleMap.ID
+	# The BM-21 and the TOS-1A fight only in the great assault.
+	if player_class in ["grad","tos"] and training=="":selected_map=BattleMap.ID
 	if district.map_id!=selected_map or selected_map in Campaign.IDS or selected_map==BattleMap.ID:
 		world_root.free()
 		build_district()
@@ -335,10 +339,12 @@ func start_match() -> void:
 	if training!="":
 		# The training ground: nobody on the field.
 		if training=="grad":grad.start()
+		elif training=="tos":tos.start()
 		course().begin(training_chapter)
 	elif selected_map==BattleMap.ID:
 		battle.start()
 		grad.start()
+		tos.start()
 	Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
 	save_settings()
 
@@ -366,9 +372,6 @@ func set_pause(value: bool) -> void:
 	if is_instance_valid(district):
 		for piece in district.fragments:
 			if is_instance_valid(piece):piece.freeze=value
-	for actor in bots+allies:
-		var voice := actor.get_node_or_null("CoverVoice") as AudioStreamPlayer3D
-		if voice:voice.stream_paused=value
 	pause_panel.visible=value
 	if is_instance_valid(pause_note):pause_note.text="НАВЧАННЯ ПРИЗУПИНЕНО" if training!="" else "ОПЕРАЦІЮ ПРИЗУПИНЕНО"
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if value else Input.MOUSE_MODE_CAPTURED
@@ -384,6 +387,7 @@ func to_menu(screen: String="") -> void:
 	crew.reset()
 	stop_courses()
 	grad.reset()
+	tos.reset()
 	bmp.reset()
 	end_training()
 	running=false
@@ -541,7 +545,7 @@ func _process(delta: float) -> void:
 		var w := player.current()
 		objective.text="%s\nЗачистіть локацію й поверніться до старту.\nENTER біля старту — завершити операцію." % district.map_title
 		if battle.active:objective.text=battle.status()
-		elif training!="" and training!="grad":objective.text=course().objective_text()
+		elif training!="" and not training in ["grad","tos"]:objective.text=course().objective_text()
 		var slots:=" / ".join(PackedStringArray(range(1,w.pouches.size()+1).map(func(i):return str(i))))
 		if w.id=="pkm":hud_text.text="%s  /  %s\n%s\nR + %s · ЗАМІНА КОРОБКИ\nV · РУКОЯТКА   T · КОРОБКА\nT + %s · ПІДСУМОК" % [w.data.name,w.data.caliber,w.status(),slots,slots]
 		else:hud_text.text="%s  /  %s\n%s\nR + %s · ОБМІН МАГАЗИНА\nI · ПАТРОННИК   T · МАГАЗИН\nT + %s · ПІДСУМОК" % [w.data.name,w.data.caliber,w.status(),slots,slots]
@@ -578,6 +582,9 @@ func distant_launch(where: Vector3, distance: float) -> void:
 		output.volume_db=db+linear_to_db(volume)
 		output.pitch_scale=randf_range(0.92,1.05)
 		output.play())
+
+func tos_impact(where: Vector3) -> void:
+	if is_instance_valid(tos) and tos.active():tos.impact(where)
 
 func grad_impact(where: Vector3) -> void:
 	if is_instance_valid(grad) and grad.active():grad.impact(where)
@@ -722,7 +729,7 @@ func setup_audio() -> void:
 	# Recorded: the PKM and the launches of the RPG-7 and of a disposable
 	# launcher (an M72 standing in for the RPG-22), public-domain DVIDS
 	# footage; provenance in AUDIO-CREDITS.
-	for key in ["ak74","m16","pm","m9","pkm","rpg7_launch","rpg22_launch","mag_in","mag_out","bolt","bolt_pull","pain_1","pain_2","pain_3","pain_4","cover","ak_bolt_back","ak_bolt_release","pkm_cover_open","pkm_cover_close","pkm_belt","pkm_bolt_back","pkm_handle_forward"]:
+	for key in ["ak74","m16","pm","m9","pkm","rpg7_launch","rpg22_launch","mag_in","mag_out","bolt","bolt_pull","pain_1","pain_2","pain_3","pain_4","ak_bolt_back","ak_bolt_release","pkm_cover_open","pkm_cover_close","pkm_belt","pkm_bolt_back","pkm_handle_forward"]:
 		sounds[key]=load("res://assets/audio/"+key+".wav")
 	# Recorded rifle placeholder; its provenance is documented in AUDIO-CREDITS.
 	sounds["svd"]=sounds["ak74"]
@@ -926,6 +933,9 @@ func setup_ui() -> void:
 	grad=GradCommand.new()
 	add_child(grad)
 	grad.setup(self,root)
+	tos=TosCommand.new()
+	add_child(tos)
+	tos.setup(self,root)
 	bmp=BmpCommand.new()
 	add_child(bmp)
 	bmp.setup(self,root)
@@ -942,9 +952,12 @@ func setup_ui() -> void:
 	# mortar sight; pause and results hide them.
 	grad_training=GradTraining.new()
 	grad_training.setup(self,root)
+	tos_training=TosTraining.new()
+	tos_training.setup(self,root)
 	courses={"rifleman":RiflemanTraining.new(),"machinegunner":MACHINEGUNNER_TRAINING.new(),"grenadier":GRENADIER_TRAINING.new(),"sniper":SniperTraining.new(),"uav":UAV_TRAINING.new(),"mortarman":MortarTraining.new(),"bmp":BmpTraining.new()}
 	for id in courses:courses[id].setup(self,root)
 	courses["grad"]=grad_training
+	courses["tos"]=tos_training
 	loading_panel=Control.new()
 	place(loading_panel,root,0,0,1,1)
 	var backdrop := ColorRect.new()
@@ -1176,7 +1189,7 @@ func coordinate_squad() -> void:
 		var receiver: Hostile=buddy if source==bot else bot
 		receiver.suppress_age=source.suppress_age
 		receiver.suppress_point=source.suppress_point
-		var covering: Hostile=bot if int(elapsed/6+bot.get_index())%2==0 else buddy
+		var covering: Hostile=bot if int(elapsed/6+bot.judge_key)%2==0 else buddy
 		var moving: Hostile=buddy if covering==bot else bot
 		if covering.weapon.phase!="" or covering.weapon.ammunition_total()==0:
 			var swap := covering
@@ -1186,24 +1199,6 @@ func coordinate_squad() -> void:
 		moving.assign_squad("move",covering)
 		assigned.append(bot)
 		assigned.append(buddy)
-
-func cover_voice(actor: Hostile) -> void:
-	if volume<=0 or elapsed<float(actor.get_meta("next_cover_voice",-1.0)):return
-	actor.set_meta("next_cover_voice",elapsed+4.5)
-	var voice := actor.get_node_or_null("CoverVoice") as AudioStreamPlayer3D
-	if voice==null:
-		voice=AudioStreamPlayer3D.new()
-		voice.name="CoverVoice"
-		actor.add_child(voice)
-	voice.position=Vector3(0,1.5,0)
-	voice.max_distance=110
-	voice.unit_size=5
-	voice.attenuation_model=AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
-	voice.bus=hearing.bus_name
-	voice.stream=sounds.cover
-	voice.volume_db=-3+linear_to_db(volume)
-	voice.pitch_scale=float(actor.get_meta("voice_pitch",1.0))
-	voice.play()
 
 func build_campaign_panel(parent: Control) -> void:
 	campaign_panel=Control.new()
@@ -1271,7 +1266,10 @@ func player_vehicle() -> BmpVehicle:
 
 # Inside the armour: out of sight and reach. Head and shoulders out of the
 # hatch with a rifle the operator is a target like any other.
-func player_sheltered() -> bool:return player_vehicle()!=null and not bmp.head_out
+func player_sheltered() -> bool:
+	if player_vehicle()!=null and not bmp.head_out:return true
+	# Inside the TOS-1A: all but the driver's head out of his hatch.
+	return is_instance_valid(tos) and tos.active() and tos.seat!="" and not (tos.seat=="driver" and tos.vehicle.hatch_open)
 
 func alert_opponents(shooter: Node3D, where: Vector3) -> void:
 	for actor in (bots if shooter.friendly else allies):actor.hear(where)
@@ -1289,6 +1287,7 @@ func _input(event: InputEvent) -> void:
 		elif event.physical_keycode==KEY_G:
 			# The BM-21 commander has the radio and the tablet instead (GradCommand).
 			if is_instance_valid(grad) and grad.active():return
+			if is_instance_valid(tos) and tos.active():return
 			# The BMP driver commands his squad (BmpCommand).
 			if is_instance_valid(bmp) and bmp.active() and player_class=="bmp":return
 			if player.field_rig.mode=="drone" or player.is_vaulting() or player.launcher.active():return
@@ -1298,6 +1297,7 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		elif event.physical_keycode==KEY_M:
 			if is_instance_valid(grad) and grad.active():return
+			if is_instance_valid(tos) and tos.active():return
 			if crew.panel.visible or crew.sight.visible or inventory_open:return
 			if player.is_vaulting() or player.launcher.active():return
 			topo_map.toggle()
@@ -1313,6 +1313,7 @@ func close_panels() -> void:
 		crew.sight.close()
 	if is_instance_valid(topo_map):topo_map.close()
 	if is_instance_valid(grad):grad.close_panels()
+	if is_instance_valid(tos):tos.close_panels()
 	if is_instance_valid(bmp):bmp.close_panels()
 	commands_open=false
 
@@ -1332,6 +1333,7 @@ func control_hint() -> String:
 	if player_class=="mortarman":text+="    G  РОЗРАХУНОК    N  МІНОМЕТ    F  ПРИЦІЛ / ЯЩИК"
 	if player_class=="bmp":text+="\nG  КОМАНДИ ВІДДІЛЕННЮ    F  БІЛЯ ЛЮКА — МІСЦЕ МЕХАНІКА-ВОДІЯ"
 	if player_class=="grad":text="SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    H  АПТЕЧКА    F  БІЛЯ МАШИНИ — ДІЯ / КАБІНА / ПРИЦІЛ    M  ПЛАНШЕТ    G  РАДІО    J  ДРОН З НАПЛІЧНИКА"
+	if player_class=="tos":text="SPACE  ПЕРЕЛІЗТИ    Z  ЛЯГТИ    H  АПТЕЧКА    F  БІЛЯ МАШИНИ — ЛЮКИ ВОДІЯ, НАВІДНИКА, КОМАНДИРА    M  ПЛАНШЕТ    G  РАДІО    J  ДРОН З НАПЛІЧНИКА"
 	return text
 
 func set_player_class(id: String) -> Array[String]:
@@ -1339,7 +1341,7 @@ func set_player_class(id: String) -> Array[String]:
 	primary=PlayerClass.primary_for(player_class,primary)
 	secondary=PlayerClass.secondary_for(player_class,secondary)
 	ally_count=PlayerClass.allies(player_class)
-	if player_class=="grad" and selected_map!=BattleMap.ID:
+	if player_class in ["grad","tos"] and selected_map!=BattleMap.ID:
 		selected_map=BattleMap.ID
 		update_map_description()
 	var removed := PlayerClass.clean_bag(player_class,loadout_bag)

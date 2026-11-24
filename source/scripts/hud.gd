@@ -24,7 +24,7 @@ func _draw() -> void:
 	var center := size/2
 	var col := Color("f0e7cf")
 	# In the cab of the BM-21 its own instruments replace the soldier's.
-	if (is_instance_valid(game.grad) and game.grad.seat!="") or (is_instance_valid(game.bmp) and game.bmp.seat!="" and not game.bmp.head_out):
+	if (is_instance_valid(game.grad) and game.grad.seat!="") or (is_instance_valid(game.tos) and game.tos.seat!="") or (is_instance_valid(game.bmp) and game.bmp.seat!="" and not game.bmp.head_out):
 		if game.damage_flash>0:draw_rect(game.screen_rect(self),Color(0.65,0.13,0.08,game.damage_flash*0.5),false,18)
 		# The compass stays at any seat: the bearing the view from it faces.
 		var seat_camera := get_viewport().get_camera_3d()

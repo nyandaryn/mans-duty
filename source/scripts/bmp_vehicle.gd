@@ -1,5 +1,5 @@
 class_name BmpVehicle
-extends RigidBody3D
+extends TrackedVehicle
 
 # BMP-2 after its technical manual (ТО и ИЭ): 14 t; UTD-20S1 six-cylinder
 # diesel, 300 hp at 2600 rpm, 1030 N·m at 1500–1600 rpm, governed at 2600;
@@ -40,17 +40,8 @@ const TRAVEL := 0.32
 const SEATS := 7
 const RADIO_TRACKS := [["res://assets/audio/radio/radio_200.mp3","200"]]
 
-var game: Node3D
 var friendly := true
-var art: Dictionary
-var wheel_mounts: Array[Vector3]=[]
-var compressions := PackedFloat32Array()
-var loads := PackedFloat32Array()
-var load_total := 0.0
-var ray: PhysicsRayQueryParameters3D
-var engine_sound: AudioStreamPlayer3D
 var radio_player: AudioStreamPlayer3D
-var seat_camera: Camera3D
 # The compartments seen from the seats: built for the player's vehicle only.
 var interior: BmpInterior
 var troops: BmpTroops
@@ -61,38 +52,9 @@ var callsign := ""
 # Who is inside: the troops in the rear, and the crew (bots or the player).
 var aboard: Array[Hostile]=[]
 var crew: Array[Hostile]=[]
-var seat := ""
-# Controls, set by the driver: the player or the bot behind the yoke.
-var master := false
-var running := false
-var omega := 0.0
-var heard_rpm := 0.0
 const RECORDED_RPM := 1190.0
-var heard_open := 0.0
-# Readings of the driver's panel (BmpCockpit) within the manual's normal
-# ranges: coolant 75–95 °C, oil pressure 2–8 kgf/cm², 24 V on the batteries
-# and 27–28 V from the generator, the bottle of the air start at about
-# 150 kgf/cm². A vehicle that has stood the night: the cooling is warm from
-# the heater, the oil still cold.
-var coolant := 46.0
-var oil_temp := 32.0
-var oil_pressure := 0.0
-var volts := 0.0
-var air_bottle := 142.0
-var odometer := 2417.3
-var engine_hours := 386.2
-var starter := false
-var crank_left := 0.0
-var catching := 0.0
-var throttle := 0.0
-var hand_throttle := 0.0
-var clutch_pedal := 0.0
-var brake_pedal := 0.0
 var yoke := 0.0
 var yoke_input := 0.0
-var gear := NEUTRAL
-var parking := true
-var hatch_open := true
 var doors_wanted := false
 var doors := 0.0
 var doors_open := false
@@ -100,34 +62,22 @@ var doors_open := false
 var troop_hatch_open := false
 var troop_hatch := 0.0
 var hatch := 1.0
-var drive_force := 0.0
-var grind := 0.0
-var notice := ""
-var notice_left := 0.0
 var radio_on := false
 var radio_track := 0
-var parked_time := 0.0
-var paused_velocity := Vector3.ZERO
-var paused_spin := Vector3.ZERO
-var was_paused := false
-var clock := 0.0
-var track_phase := 0.0
-var surface_check := 0.0
-var road := 0.5
-# Damage: hull integrity, a disabled running gear, a burning wreck.
-var integrity := 1.0
-var immobile := false
-var destroyed := false
 # Armour, hits, fire and the ammunition (VehicleDamage over VehicleArmor).
 var hull: VehicleDamage
-var engine_dead := false
 var burn := 0.0
 var smoke_clock := 0.0
-var ram_clock := 0.0
-var ram_query: PhysicsShapeQueryParameters3D
+
+# Keys the gunner's own error in judging a range (BmpGunner.shoot_pkt): the
+# order the vehicles were made in in this match, not the engine's object id.
+static var made := 0
+var judge_key := 0
 
 func setup(owner_game: Node3D, label: String="") -> void:
  game=owner_game
+ made+=1;judge_key=made
+ configure()
  callsign=label
  name="Bmp"+label
  mass=MASS
@@ -150,11 +100,7 @@ func setup(owner_game: Node3D, label: String="") -> void:
  for shape_data in [[Vector3(2.85,0.56,6.6),Vector3(0,0.71,0)],[Vector3(3.05,0.66,4.3),Vector3(0,1.30,1.15)],[Vector3(3.05,0.44,2.2),Vector3(0,1.13,-2.2)],[Vector3(1.7,0.68,1.75),Vector3(0,BmpArt.ROOF+0.34,-0.25)]]:
   var shape:=CollisionShape3D.new();var box:=BoxShape3D.new();box.size=shape_data[0]
   shape.shape=box;shape.position=shape_data[1];add_child(shape)
- for x in [-GAUGE*0.5,GAUGE*0.5]:
-  for z in BmpArt.WHEELS_Z:wheel_mounts.append(Vector3(x,RAY_TOP,z))
- compressions.resize(wheel_mounts.size());compressions.fill(FREE_LENGTH-(RAY_TOP))
- loads.resize(wheel_mounts.size());loads.fill(0.0)
- ray=PhysicsRayQueryParameters3D.create(Vector3.ZERO,Vector3.DOWN,1,[get_rid()])
+ mount_wheels(BmpArt.WHEELS_Z)
  seat_camera=Camera3D.new();seat_camera.name="SeatCamera";seat_camera.near=0.05;seat_camera.far=6000;seat_camera.fov=75
  seat_camera.cull_mask=1|OperatorBody.WORLD_BODY_LAYER
  add_child(seat_camera)
@@ -175,27 +121,16 @@ func cabin() -> BmpInterior:
   interior.setup(self)
  return interior
 
-func say(text: String, seconds: float=4.0) -> void:
- notice=text;notice_left=seconds
-
-func speed() -> float:return linear_velocity.dot(-global_basis.z)
-
-func rpm() -> float:return omega*60.0/TAU
-# The engine speed as heard and as the tachometer shows it: the crankshaft
-# locked to the tracks follows every bounce of the running gear, the real
-# flywheel and the sound of the exhaust do not.
-func steady_rpm() -> float:return heard_rpm
-
-func gear_ratio() -> float:return float(GEARS[gear])*FINAL
-
-func engine_torque(r: float) -> float:
- for i in range(TORQUE.size()-1):
-  if r<=TORQUE[i+1][0]:return lerpf(TORQUE[i][1],TORQUE[i+1][1],(r-TORQUE[i][0])/(TORQUE[i+1][0]-TORQUE[i][0]))
- return 0.0
-
-func clutch_engagement() -> float:return clampf((0.75-clutch_pedal)/0.5,0.0,1.0)
-
-func stationary() -> bool:return absf(speed())<0.4
+# The figures of the BMP-2 for TrackedVehicle.
+func configure() -> void:
+ hull_mass=MASS;idle_rpm=IDLE_RPM;governed_rpm=GOVERNED_RPM;stall_rpm=STALL_RPM
+ gears=GEARS;neutral=NEUTRAL;gear=NEUTRAL;final_drive=FINAL;sprocket=SPROCKET;efficiency=EFFICIENCY
+ engine_inertia=ENGINE_INERTIA;clutch_capacity=CLUTCH_CAPACITY;torque_curve=TORQUE
+ gauge=GAUGE;contact=CONTACT;yaw_inertia=YAW_INERTIA
+ wheel_spring=WHEEL_SPRING;wheel_damper=WHEEL_DAMPER;ray_top=RAY_TOP;free_length=FREE_LENGTH;travel=TRAVEL
+ frontal_area=6.5;recorded_rpm=RECORDED_RPM
+ crush_half=Vector2(1.55,3.3);ram_width=BmpArt.WIDTH+0.2;ram_half=BmpArt.HALF
+ wheel_radius=BmpArt.WHEEL_RADIUS;wheel_height=BmpArt.WHEEL_RADIUS+0.07;sprocket_radius=BmpArt.SPROCKET_RADIUS
 
 # Ratio of the inner track speed to the outer one for a yoke deflection:
 # the steering clutch slips, then the first stage holds, then the stopping
@@ -207,13 +142,13 @@ func inner_ratio() -> float:
  if s<0.8:return 1.0/STAGE
  return lerpf(1.0/STAGE,0.0,(s-0.8)/0.2)
 
+func steer_side() -> float:return signf(yoke)
+
 # Speed for a gear at an engine speed, m/s (straight ahead).
 static func gear_speed(index: int, engine_rpm: float) -> float:
  var ratio:=float(GEARS[index])*FINAL
  if ratio==0.0:return 0.0
  return engine_rpm*TAU/60.0/ratio*SPROCKET
-
-func usable() -> bool:return not destroyed
 
 # --- Driver's controls ---------------------------------------------------
 func toggle_master() -> void:
@@ -222,12 +157,6 @@ func toggle_master() -> void:
  if not master and running:running=false;say("Маса вимкнена · подачу палива перекрито, двигун зупинено")
  else:say("Вимикач батарей (МАСА) %s" % ("увімкнено" if master else "вимкнено"),2)
  game.sound("click",-14)
-
-func begin_crank() -> void:
- if starter:return
- starter=true
- crank_left=randf_range(0.8,1.6)
- if not master:say("Спершу вимикач батарей — МАСА (I)",2)
 
 func toggle_radio() -> void:
  game.sound("click",-14)
@@ -278,9 +207,6 @@ func shift(step: int) -> bool:
  game.sound("click",-18)
  say("Передача %s" % GEAR_NAMES[gear],1.5)
  return true
-
-func toggle_parking() -> void:
- parking=not parking;say("Гальма на защіпці (стоянкове) — %s" % ("ЗАТЯГНУТО" if parking else "відпущено"),2);game.sound("click",-12)
 
 func toggle_hatch() -> void:
  hatch_open=not hatch_open;game.sound("click",-10)
@@ -385,202 +311,8 @@ func steer_yoke(delta: float) -> void:
  if yoke_input!=0.0:yoke=clampf(yoke+yoke_input*1.6*delta,-1,1)
  else:yoke=move_toward(yoke,0,delta*3.0)
 
-func simulate_engine(delta: float) -> void:
- if starter and master and not running:crank_left-=delta
- var r:=rpm()
- var open:=0.0
- if running:
-  open=maxf(throttle,hand_throttle)
-  # All-speed governor: holds the idle and cuts the fuel above 2600 rpm.
-  open=maxf(open,clampf((IDLE_RPM+40.0-r)/300.0,0.0,0.4))
-  if r>GOVERNED_RPM:open*=clampf((GOVERNED_RPM+150.0-r)/150.0,0.0,1.0)
- var torque:=engine_torque(r)*open if running else 0.0
- torque-=(30.0+r*0.035) if omega>0.5 else 0.0
- if starter and master and not running:torque+=230.0 if r<220.0 else 0.0
- var ratio:=gear_ratio()
- var engagement:=clutch_engagement() if ratio!=0.0 else 0.0
- if immobile or destroyed:engagement=0.0
- var k:=inner_ratio()
- # The outer track runs at the gearbox speed; the inner one at k of it.
- var outer:=speed()*2.0/(1.0+k)
- var transmitted:=0.0
- if engagement>0.0:
-  var shaft:=outer/SPROCKET*ratio
-  var needed:=torque+ENGINE_INERTIA*(omega-shaft)/delta
-  var capacity:=CLUTCH_CAPACITY*engagement
-  if absf(needed)<=capacity:
-   transmitted=needed;omega=shaft
-  else:
-   transmitted=capacity*signf(needed)
-   omega+=(torque-transmitted)/ENGINE_INERTIA*delta
- else:
-  omega+=torque/ENGINE_INERTIA*delta
- omega=maxf(omega,0.0)
- drive_force=transmitted*ratio*EFFICIENCY/SPROCKET*2.0/(1.0+k)
- if catching>0.0:catching-=delta
- if starter and master and not running and rpm()>200.0 and crank_left<=0.0 and not destroyed and not engine_dead:
-  running=true;catching=1.2;say("Двигун запущено",2)
- if running and ((rpm()<STALL_RPM and catching<=0.0) or not master or destroyed or engine_dead):
-  running=false
-  if master and not destroyed:say("Двигун заглух",3)
- if (running or (starter and master)) and not engine_sound.playing:engine_sound.play()
- elif not running and not starter and engine_sound.playing and rpm()<80:engine_sound.stop()
- heard_rpm=lerpf(heard_rpm,rpm(),1.0-exp(-delta*5.0))
- # The UTD-20 of the recording runs at about 1190 rpm.
- engine_sound.pitch_scale=clampf(maxf(heard_rpm,160.0)/RECORDED_RPM,0.2,2.6)
- heard_open=lerpf(heard_open,clampf(open,0,1),1.0-exp(-delta*4.0))
- engine_sound.volume_db=linear_to_db(maxf(game.volume,0.0001))+lerpf(-6.0,4.0,heard_open)-(10.0 if not running else 0.0)+(4.0 if seat=="driver" and hatch_open else 0.0)
-
-func update_gauges(delta: float) -> void:
- var work:=heard_open*clampf(heard_rpm/GOVERNED_RPM,0.0,1.0)
- if running:
-  coolant=move_toward(coolant,78.0+16.0*work,delta*(0.18+0.5*work))
-  engine_hours+=delta/3600.0
- else:coolant=move_toward(coolant,18.0,delta*0.01)
- oil_temp=move_toward(oil_temp,coolant+4.0 if running else 18.0,delta*(0.12 if running else 0.008))
- var press:=0.0
- if running:press=lerpf(2.4,7.6,clampf((heard_rpm-IDLE_RPM)/(GOVERNED_RPM-IDLE_RPM),0.0,1.0))*(1.15-clampf((oil_temp-40.0)/300.0,0.0,0.25))
- elif starter and master:press=0.6
- oil_pressure=move_toward(oil_pressure,press,delta*6.0)
- var supply:=0.0
- if master:supply=19.5 if starter else (27.6 if running and heard_rpm>650.0 else 24.6)
- volts=move_toward(volts,supply,delta*20.0)
- odometer+=absf(speed())*delta/1000.0
-
-# Twelve road wheels on rays: each is a spring and a damper on its arm.
-func suspend(delta: float) -> void:
- var space:=get_world_3d().direct_space_state
- var up:=global_basis.y
- load_total=0.0
- for i in range(wheel_mounts.size()):
-  var from:=to_global(wheel_mounts[i])
-  ray.from=from;ray.to=from-up*(FREE_LENGTH+0.08)
-  var hit:=space.intersect_ray(ray)
-  var compression:=0.0
-  if not hit.is_empty():compression=FREE_LENGTH-from.distance_to(hit.position)
-  var rate:=(compression-compressions[i])/delta
-  compressions[i]=compression
-  loads[i]=0.0
-  if compression<=0.0:continue
-  var force:=WHEEL_SPRING*compression+WHEEL_DAMPER*rate
-  if compression>TRAVEL:force+=WHEEL_SPRING*10.0*(compression-TRAVEL)
-  force=maxf(force,0.0)
-  loads[i]=force
-  load_total+=force
-  apply_force(up*force,from-global_position)
-
-# Road surface under the tracks: 1 asphalt, 0.6 a dirt road, 0 a field.
-func surface() -> float:
- surface_check-=get_physics_process_delta_time()
- if surface_check>0:return road
- surface_check=0.5
- var c:=Color(0.5,0.5,0.5)
- var data:=AvdiivkaData.shared() if is_instance_valid(game.district.operation_area) else null
- if absf(global_position.x)<199 and absf(global_position.z)<199:
-  if game.district.terrain!=null and game.district.terrain.has_method("surface_color"):c=game.district.terrain.surface_color(Vector2(global_position.x,global_position.z))
-  road=1.0 if c.v<0.42 and c.s<0.25 else 0.0
- elif data!=null:road=road_at(data,Vector2(global_position.x,global_position.z))
- else:road=0.0
- return road
-
-# The roads of the operation area in 50 m cells, built on first use.
-const ROAD_CELL := 50.0
-static var road_cells: Dictionary={}
-static var road_source: AvdiivkaData
-
-static func road_at(data: AvdiivkaData, at: Vector2) -> float:
- if road_source!=data:
-  road_source=data;road_cells.clear()
-  for item in data.features.roads:
-   if item[0] in OperationArea.SKIP_ROADS:continue
-   var half:float=float(item[1])*0.5+0.6
-   var paved:=1.0 if int(item[2])==1 else 0.6
-   var line:=AvdiivkaData.pairs(item[3])
-   for i in range(line.size()-1):
-    var a:=line[i];var b:=line[i+1]
-    var low:=Vector2i(floori((minf(a.x,b.x)-half)/ROAD_CELL),floori((minf(a.y,b.y)-half)/ROAD_CELL))
-    var high:=Vector2i(floori((maxf(a.x,b.x)+half)/ROAD_CELL),floori((maxf(a.y,b.y)+half)/ROAD_CELL))
-    for cx in range(low.x,high.x+1):
-     for cz in range(low.y,high.y+1):
-      var key:=Vector2i(cx,cz)
-      if not road_cells.has(key):road_cells[key]=[]
-      road_cells[key].append([a,b,half,paved])
- var best:=0.0
- for item in road_cells.get(Vector2i(floori(at.x/ROAD_CELL),floori(at.y/ROAD_CELL)),[]):
-  var closest:=Geometry2D.get_closest_point_to_segment(at,item[0],item[1])
-  if closest.distance_to(at)<=float(item[2]):best=maxf(best,float(item[3]))
- return best
-
-func drive(delta: float) -> void:
- if load_total<=1000.0:return
- var up:=global_basis.y
- var forward:=-global_basis.z
- var side:=global_basis.x
- var v:=linear_velocity.dot(forward)
- var lateral:=linear_velocity.dot(side)
- var yaw:=angular_velocity.dot(up)
- var weight:=load_total
- var ground:=surface()
- var grip:=lerpf(0.72,0.9,ground)
- var k:=inner_ratio()
- # Skidding the tracks sideways in a turn (the empirical formula for the
- # turning resistance falls with the radius): it brakes the vehicle and
- # takes engine power, so sharp turns want a low gear.
- var loss:=0.0
- if k<0.999:
-  var radius:=GAUGE*0.5*(1.0+k)/maxf(1.0-k,0.0001)
-  var skid:=0.78/(0.925+0.15*radius/GAUGE)
-  loss=skid*weight*CONTACT*0.25*2.0*(1.0-k)/((1.0+k)*GAUGE)
- # Rolling resistance of tracks: about 0.035 on asphalt, 0.05 on a dirt
- # road, 0.07–0.08 on a field.
- var rolling:=lerpf(0.075,0.035,ground)*weight
- var resist:=rolling+loss+0.5*1.2*6.5*v*v
- var brakes:=brake_pedal*grip*weight
- if parking:brakes=maxf(brakes,grip*weight)
- if immobile or destroyed:brakes=maxf(brakes,0.6*weight)
- var push:=clampf(drive_force,-grip*weight,grip*weight)
- var hold:=resist+brakes
- var gravity_along:=MASS*get_gravity().dot(forward)
- var total:=push
- if absf(v)>0.3:total-=signf(v)*hold
- else:
-  # Nearly at rest: the resistances act as static friction, to their limit.
-  total-=clampf(push+gravity_along+MASS*v/delta*0.5,-hold,hold)
- # Track forces act at the ground: the hull squats and rises on them.
- apply_force(forward*total,global_basis*Vector3(0,0.15,0))
- # Tracks do not slide sideways until the ground lets go.
- var grip_side:=grip*weight
- apply_force(-side*clampf(lateral*MASS*6.0,-grip_side,grip_side),global_basis*Vector3(0,0.15,0))
- # Yaw: the tracks hold the hull on the kinematic rate of the steering
- # mechanism; braked tracks hold it straight.
- var wanted:=0.0
- if k<0.999:wanted=-signf(yoke)*v*2.0*(1.0-k)/((1.0+k)*GAUGE)
- var cap:=grip*weight*GAUGE*0.5
- apply_torque(up*clampf((wanted-yaw)*YAW_INERTIA*7.0,-cap,cap))
- track_phase+=v*delta
-
-func hold_parked(delta: float) -> void:
- if freeze:
-  if not parking or immobile:
-   if not was_paused:freeze=false;parked_time=0.0
-  return
- if parking and linear_velocity.length()<0.15 and angular_velocity.length()<0.06 and load_total>MASS*5.0:parked_time+=delta
- else:parked_time=0.0
- if parked_time>0.8:
-  freeze_mode=RigidBody3D.FREEZE_MODE_STATIC
-  freeze=true
-  linear_velocity=Vector3.ZERO;angular_velocity=Vector3.ZERO
-
-func is_parked() -> bool:return freeze and not was_paused
-
 func animate(delta: float) -> void:
- var wheels: Array=art.wheels
- for i in range(wheels.size()):
-  var wheel: MeshInstance3D=wheels[i]
-  var lift:=clampf(compressions[i]-(FREE_LENGTH-RAY_TOP),-0.12,TRAVEL)
-  wheel.position.y=BmpArt.WHEEL_RADIUS+0.07+lift
-  wheel.rotation.x=-track_phase/BmpArt.WHEEL_RADIUS
- for hub in art.drive:hub.rotation.x=-track_phase/BmpArt.SPROCKET_RADIUS
+ animate_running_gear()
  # The heavy doors (they are the fuel tanks) swing out and slow at the end.
  var want:=doors_wanted_now()
  if want!=doors_open:
@@ -596,56 +328,11 @@ func animate(delta: float) -> void:
  art.hatch.rotation.z=-hatch*1.75
  VehicleMarkings.flutter(self,art)
 
-# A hull moving over a soldier on foot: nobody survives under 14 t.
-func crush() -> void:
- var v:=linear_velocity.length()
- if v<1.2:return
- for actor in game.allies+game.bots+[game.player]:
-  if not is_instance_valid(actor):continue
-  if actor is Hostile and (actor.dead or actor.vehicle!=null):continue
-  if actor is Operator and (actor.health<=0 or game.player_vehicle()==self):continue
-  var local:=to_local(actor.global_position)
-  if absf(local.x)<1.55 and absf(local.z)<3.3 and local.y>-0.6 and local.y<1.4:
-   actor.receive_hit(400.0,"chest",linear_velocity.normalized(),actor.global_position+Vector3.UP)
-
 # A 30 mm round rocks the hull a little on its suspension.
 func gunner_recoil() -> void:
  if freeze:return
  var back:Vector3=-gunner.barrel()
  apply_impulse(back*900.0,art.gun.global_position-global_position)
-
-# Fences, posts, boards and sheds give way to 14 t: the bow (or the stern
-# in reverse) flattens light pieces of the yard it runs into. House walls
-# and masonry stop it; the heap of a fallen house it drives over.
-func ram() -> void:
- ram_clock-=get_physics_process_delta_time()
- var v:=speed()
- if ram_clock>0.0 or absf(v)<0.3 or destroyed:return
- # Fast, it looks every frame: the bow must not hit a fence before it falls.
- ram_clock=0.05 if absf(v)<3.0 else 0.0
- if ram_query==null:
-  ram_query=PhysicsShapeQueryParameters3D.new()
-  var box:=BoxShape3D.new();box.size=Vector3(BmpArt.WIDTH+0.2,1.5,1.4)
-  ram_query.shape=box;ram_query.collision_mask=1;ram_query.exclude=[get_rid()]
- var end:=-(BmpArt.HALF+0.3) if v>0.0 else BmpArt.HALF+0.3
- ram_query.transform=global_transform*Transform3D(Basis.IDENTITY,Vector3(0,1.05,end))
- for hit in get_world_3d().direct_space_state.intersect_shape(ram_query,12):
-  var body: Object=hit.collider
-  if body is DestructibleSurface and crushable(body):flatten(body,-global_basis.z*signf(v))
-
-static func crushable(body: DestructibleSurface) -> bool:
- if body.breaking:return false
- # Fence panels of the great assault and the broken corners of walls left
- # on a heap of rubble: a hull puts them over.
- if body.has_meta("crushable"):return true
- if body.has_meta("indestructible"):return false
- var shape_node:=body.get_child(0) as CollisionShape3D
- if shape_node==null or not shape_node.shape is BoxShape3D:return false
- var size: Vector3=shape_node.shape.size*body.global_basis.get_scale()
- var thin:=minf(size.x,minf(size.y,size.z))
- return size.x*size.y*size.z<0.5 or (thin<0.13 and size.y<2.6)
-
-func flatten(body: DestructibleSurface, direction: Vector3) -> void:Demolition.flatten(game,body,direction)
 
 # --- Damage -----------------------------------------------------------------
 # A round or a grenade strikes the hull (VehicleArmor works out the rest).

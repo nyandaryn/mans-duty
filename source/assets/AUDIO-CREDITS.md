@@ -74,15 +74,6 @@ Redistributed under the offered **CC0 1.0** license. Download: https://opengamea
 `pain_1/2.wav` use `3grunt1/2.wav`; `pain_3/4.wav` use `3yell3/4.wav`. Leading silence removed, high-pass 90 Hz, loudness normalized to -19 LUFS with -3 dBTP ceiling, mono PCM 44.1 kHz, maximum 1.9 seconds and tail fade.
 Temporary tinnitus is a low-level procedural two-tone loop, not a medical simulation.
 
-## Tactical callout
-
-`audio/cover.wav`: Ukrainian "Крию!", locally synthesized using eSpeak NG's
-Ukrainian voice (`espeak-ng -v uk -s 190 -p 38 -a 180`), high-pass/low-pass,
-compressed and loudness-normalized to mono 44.1 kHz PCM. Synthetic placeholder,
-not a recording of a soldier or an actor. No real person's voice was cloned.
-Generator: https://github.com/espeak-ng/espeak-ng (GPL-3.0 software; executable
-is not bundled). Generated speech output is supplied as a project audio asset.
-
 ## BM-21 «Grad» (0.21)
 
 Real recordings of BM-21 launchers. Two of the three sources are **CC BY 4.0**

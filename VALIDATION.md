@@ -1,3 +1,70 @@
+# 0.34.0 validation — 2026-11-24
+
+The TOS-1A commander's class: the player's BM-1 on the T-72A's drive, the
+crew of three in one, the 1D14 and the computer, the tablet, the observation
+post's drone, the counter-battery fire and the training course. The «Крию!»
+callout is gone, and seeded battles no longer move with nodes added to the
+game.
+
+- TrackedVehicle: the BMP-2's track physics moved out into a base class. The
+  BMP tests (test_bmp, test_bmp_training, test_bmp_bench, test_board_stuck)
+  print the same numbers as 0.33.0.
+- New test_tos_class (60 checks):
+  - Speeds at 2000 rpm: 7th 59.7 km/h, 1st 7.31, reverse 4.16 (the manual:
+    60 / 7.32 / 4.18). On the field 7th tops at 55 km/h; moving off in 2nd
+    13.9 km/h.
+  - The start: no starter without the battery switch, on a dry engine, or
+    with a gear in; МЗН brings the oil to 2 kgf/cm² in 5.7 s (the cards:
+    2–12 s); the V-84 idles at 819 rpm. The brake latch goes on in neutral
+    only and no gear goes in under it; no gear without the clutch pedal.
+  - BA-20 keeps 7→6 out at 55 km/h.
+  - Radii with a lever at its stop, about the hull's centre: 2nd 4.7 m,
+    3rd 11.9 m (the manual to the outer track 6.04 / 13.42, i.e. 4.6 / 12.0
+    to the centre); 1st brakes the lagging track (1.4 m); half a pull slips
+    the clutches (11.6 m); in neutral the levers do nothing.
+  - Shelter: the driver with his head out is not under armour; with the
+    hatch closed, and in the gunner's and commander's seats, he is.
+  - From the stop to the first rocket at 4.2 km: 44 s (the maker: 90). The
+    package lies 0.03° from the computer's solution; rolled 4° and pitched
+    2° the roll sensor keeps it true (0.00°).
+  - 1D14: no range under 400 m; 1825 m for 1823.5 m. ENTER lays on it.
+  - Twelve rockets in pairs within 3 s; the centre of the bursts 6 m from
+    OP-2 at 4.2 km; the observer reports them; counter-battery fire planned
+    for 2.5–4 min later; G sends the assault.
+  - The course: five chapters, 35 steps walked with F6, OP-2 down, the
+    player's own class back afterwards.
+- test_class_training and test_infantry_training: nine courses, five tabs
+  to a row. test_bot_awareness: no cover callout.
+- Seeded battles. test_assault_halt (seed 55) failed with the TOS-1A
+  commander's node in the game (WAIT 15/12/0.60, forward 8.82 m > 8.8)
+  while the global random numbers were the same at every stage. Bisected on
+  a copy: the node alone, without its HUD, did it. Defenders and allies are
+  children of the game, and two choices went by `get_index()`: who covers
+  in a pair (Game.coordinate_squad) and which side a defender probes a
+  flank on. One more child shifted every index by one. Both, and a man's
+  own range error (keyed on the engine's object id), now go by the order
+  the men were made in in this match (Hostile.judge_key), the BMP gunner's
+  by the order the vehicles were made in. With and without the node the
+  test prints the 0.33.0 numbers: WAIT 14/13/1.071, HALT 0.571, forward
+  7.42 m.
+- Renders (tests/render_tos_class.gd, 1280×720, in a window), looked at:
+  the start by the vehicle, the driver out of the hatch and behind the
+  TNPO-168V with the instruments, the commander with the check list, the
+  TKN-3A, the panel, the tablet with the target and the computer, the 1D14
+  with a range, the sight after a launch (the cloud covers it), the
+  observation post's drone over the village, the training card.
+  - A first render fired from the start in the tree line: the vehicle had
+    not moved to the firing position, and the rockets burst in the trees
+    1 m from the hull (track and sight gone). A body unfrozen and moved
+    right after frame_post_draw is put back by the next physics step
+    (Jolt); the game never moves it from there, the render now waits a
+    frame. Firing through trees close in front is left as it is.
+- Full suite from source at --fixed-fps 60: 79 scenarios (78 and
+  test_tos_class) pass with no script errors. Against the run before the
+  index fix, the BMP and battle tests print the same lines except
+  test_assault_halt (now the 0.33.0 numbers) and test_battle_live (another
+  fight: 25 / 68 alive, passes).
+
 # 0.33.0 validation — 2026-11-24
 
 The enemy's TOS-1A «Solntsepyok» in the great assault: the vehicle, the

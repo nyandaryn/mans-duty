@@ -385,6 +385,7 @@ func fly_rockets(list: Array[Dictionary], delta: float) -> void:
    if unseen:game.volume=0.0
    detonate(Vector3(hit.position)+Vector3(hit.normal)*0.1,String(shot.get("warhead","grad")))
    game.volume=loud
+   if tos and shot.get("player",false) and game.has_method("tos_impact"):game.tos_impact(Vector3(hit.position))
    continue
   if float(shot.age)>200.0 or to.y<-200.0:
    list.remove_at(index)

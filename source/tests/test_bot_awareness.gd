@@ -97,11 +97,8 @@ func run():
  game.elapsed+=6
  game.coordinate_squad()
  check(bot.squad_role!=role,"Cover and movement roles alternate")
- game.volume=0.5
- game.cover_voice(bot)
- var voice: AudioStreamPlayer3D=bot.get_node_or_null("CoverVoice")
- check(voice!=null and voice.max_distance==110 and voice.stream!=null,"Cover callout is real spatial audio with finite range")
- game.volume=0
+ # No «Крию!» callout since 0.34.0: the pair changes roles silently.
+ check(not game.has_method("cover_voice"),"No cover callout")
  bot.apply_wound(DamageModel.wound("plate","ak74",1,Vector2.ZERO,1),"plate",Vector3.FORWARD,bot.position)
  check(bot.collapse_time>=3,"Plate impact triggers a drop instead of just crouching")
  for i in range(30):bot._physics_process(1.0/60)

@@ -146,7 +146,7 @@ func start_battle(battle: BattleMode) -> void:
   if battle.prep=="":game.squad.tell("Ти ведеш колону: %d БМП за тобою · I — маса, X — стартер · польовою дорогою до траси й на північ, до села ~2 км" % (battle.mech.size()-1))
   else:game.squad.tell("Ти — механік-водій головної БМП: %d за тобою · I — маса, X — стартер · стоїмо, поки б'ють «Гради»" % (battle.mech.size()-1))
   return
- if game.player_class in ["mortarman","grad"] or battle.mech.is_empty():return
+ if game.player_class in ["mortarman","grad","tos"] or battle.mech.is_empty():return
  squad=battle.mech[0]
  vehicle=squad.vehicle
  # The rifleman and the sniper start on the field with the squad, dismounted

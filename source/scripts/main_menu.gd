@@ -220,9 +220,9 @@ func build_training() -> Control:
  var screen:=Control.new()
  game.place(screen,game.menu,0,0,1,1)
  UiKit.sheet(game,screen,0.78)
- UiKit.header(game,screen,"ГОЛОВНЕ МЕНЮ   /   НАВЧАННЯ","НАВЧАННЯ","ВІСІМ КУРСІВ · БЕЗ ПРОТИВНИКА · БУДЬ-ЯКИЙ РОЗДІЛ ОКРЕМО",back)
- # One tab per class, four to a row: the infantry above, the rest below.
- var tabs:=GridContainer.new();tabs.columns=4
+ UiKit.header(game,screen,"ГОЛОВНЕ МЕНЮ   /   НАВЧАННЯ","НАВЧАННЯ","ДЕВ’ЯТЬ КУРСІВ · БЕЗ ПРОТИВНИКА · БУДЬ-ЯКИЙ РОЗДІЛ ОКРЕМО",back)
+ # One tab per class, five to a row: the infantry above, the rest below.
+ var tabs:=GridContainer.new();tabs.columns=5
  tabs.add_theme_constant_override("h_separation",8);tabs.add_theme_constant_override("v_separation",6)
  game.place(tabs,screen,0.035,0.205,0.965,0.345)
  for id in game.COURSE_IDS:
@@ -401,6 +401,8 @@ func build_settings() -> Control:
  right.add_child(controls_grid([["W A S D","рух"],["SHIFT","біг"],["ЛКМ / ПКМ","вогонь / приціл"],["R","перезарядити"],["Q / E","нахил"],["Z / CTRL","лягти / присісти"],["H","аптечка"],["TAB","інвентар"],["M","карта"],["K","далекомір"]]))
  right.add_child(section("КЕРУВАННЯ · БМ-21 «ГРАД»"))
  right.add_child(controls_grid([["F","кабіна, приціл, роботи біля машини"],["I / X","запалювання / стартер"],["SHIFT + Q / E","передачі"],["SPACE","стоянкове гальмо · пуск"],["SHIFT + P","КВП"],["E","пульт (командир)"],["J","дрон СП"],["M / G","планшет / радіо"]]))
+ right.add_child(section("КЕРУВАННЯ · ТОС-1А"))
+ right.add_child(controls_grid([["F / C","люк / наступне місце в машині"],["I · P · X","маса · МЗН · стартер"],["A / D","важелі повороту"],["E","пульт командира"],["R / ENTER","далекомір 1Д14 / обчислювач"],["SPACE","гальма на защіпку · пуск"]]))
  return screen
 
 func section(title: String) -> Control:

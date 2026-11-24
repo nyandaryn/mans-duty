@@ -1,7 +1,7 @@
 extends SceneTree
 
 # «Навчання» for the machine gunner, the grenadier and the UAV operator: the
-# training screen has eight courses; each new course starts with its class's
+# training screen has nine courses; each new course starts with its class's
 # kit on the range, its steps pass on the real state (the PKM's bipod, sight
 # and bursts, the box and the belt; the RPG-7's draw, load and the PG-7VL's
 # flight onto a hulk, the RPG-22 armed; the FPV out of the pack, its take-off,
@@ -122,7 +122,7 @@ func run():
  game.set_player_class("machinegunner")
  game.main_menu.show_screen("training")
  var menu=game.main_menu
- check(game.COURSE_IDS.size()==8 and menu.course_tabs.size()==8,"Eight course tabs")
+ check(game.COURSE_IDS.size()==9 and menu.course_tabs.size()==9,"Nine course tabs")
  for id in PlayerClass.IDS:check(game.courses.has(id),"A course for the class "+id)
  check(menu.course_pick=="machinegunner","The screen opens on the machine gunner's course")
  for id in ["machinegunner","grenadier","uav"]:
@@ -133,7 +133,7 @@ func run():
  var tab_bottom: float=0.0
  for tab in menu.course_tabs:tab_bottom=maxf(tab_bottom,tab.get_global_rect().end.y)
  check(tab_bottom<=menu.chapter_cards[0].get_global_rect().position.y,"Chapter list starts under the tabs")
- check(menu.course_tabs[0].get_global_rect().position.y<menu.course_tabs[4].get_global_rect().position.y,"Four tabs to a row")
+ check(menu.course_tabs[0].get_global_rect().position.y==menu.course_tabs[4].get_global_rect().position.y and menu.course_tabs[0].get_global_rect().position.y<menu.course_tabs[5].get_global_rect().position.y,"Five tabs to a row, two rows")
  game.set_player_class("rifleman")
  game.loadout_bag.equipped=true
  game.loadout_bag.add("ammo_ak74")

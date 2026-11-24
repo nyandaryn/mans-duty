@@ -209,7 +209,7 @@ func check_salvo(tos: EnemyTos) -> void:
  var fired: bool=await run_until(firing,180.0)
  check(fired,"It drives out, comes into action and fires")
  if not fired:
-  print("TOS events: ",tos.events," state ",tos.state," at ",tos.vehicle.global_position," moving ",tos.vehicle.moving()," speed ",tos.vehicle.speed," jacks ",tos.vehicle.jacks," yaw ",tos.vehicle.platform_yaw,"/",tos.vehicle.want_yaw," elev ",tos.vehicle.elevation,"/",tos.vehicle.want_elevation)
+  print("TOS events: ",tos.events," state ",tos.state," at ",tos.vehicle.global_position," moving ",tos.vehicle.moving()," speed ",tos.vehicle.crawl," jacks ",tos.vehicle.jacks," yaw ",tos.vehicle.platform_yaw,"/",tos.vehicle.want_yaw," elev ",tos.vehicle.elevation,"/",tos.vehicle.want_elevation)
   return
  var launched_at: float=game.elapsed
  var laid_after: float=tos.salvo_started-tos.arrived_at

@@ -234,7 +234,7 @@ func shoot_pkt() -> void:
  var point:=aim_point()
  var distance:=origin.distance_to(point) if point!=Vector3.INF else 300.0
  var line:=barrel()
- if distance>FlightModel.direct_fire("svd"):distance*=1.0+(float(absi(hash([vehicle.get_instance_id(),int(distance/50.0)]))%2001)/1000.0-1.0)*0.10
+ if distance>FlightModel.direct_fire("svd"):distance*=1.0+(float(absi(hash([vehicle.judge_key,int(distance/50.0)]))%2001)/1000.0-1.0)*0.10
  if absf(line.y)<0.98:line=line.rotated(line.cross(Vector3.UP).normalized(),FlightModel.aim_angle("svd",distance))
  var direction:=(line+spread(0.0025)).normalized()
  game.ballistics.launch(origin,direction,"svd",95.0,vehicle)

@@ -160,9 +160,9 @@ func start() -> void:
  if barrage_class(game.player_class) and (not mech.is_empty() or game.player_class=="bmp"):prep="barrage"
  game.bmp.start_battle(self)
  if game.player_class=="mortarman":place_mortar_crew()
- if game.player_class in ["mortarman","grad"]:
+ if game.player_class in ["mortarman","grad","tos"]:
   set_halt(true);awaiting=true
-  game.squad.tell("Штурм очікує твоєї команди · G — %s" % ("радіо" if game.player_class=="grad" else "розрахунок"))
+  game.squad.tell("Штурм очікує твоєї команди · G — %s" % ("радіо" if game.player_class in ["grad","tos"] else "розрахунок"))
  column_go=not awaiting
  if prep!="":begin_field()
  mark_squad()
@@ -547,7 +547,7 @@ func arrive_all() -> void:
  if is_instance_valid(game.district.operation_area):game.district.operation_area.stream(game.player.global_position,60)
  match game.player_class:
   "bmp":game.squad.tell("Колона на рубежі спішування · 1 — «Десант»")
-  "mortarman","grad":game.squad.tell("Колона на рубежі спішування · групи висаджуються")
+  "mortarman","grad","tos":game.squad.tell("Колона на рубежі спішування · групи висаджуються")
   _:if game.bmp.seat=="troop":game.squad.tell("Колона на рубежі спішування · десант виходить")
 
 # One vehicle to the end of the column's road and on to a drop point, as
@@ -1134,6 +1134,9 @@ func player_fell() -> bool:
  if game.player_class=="grad":
   if is_instance_valid(game.grad):game.grad.leave()
   complete(false,"Командир БМ-21 вибув.");return true
+ if game.player_class=="tos":
+  if is_instance_valid(game.tos):game.tos.leave()
+  complete(false,"Екіпаж ТОС-1А вибув.");return true
  if successor()==null:return false
  respawn_left=TAKEOVER_TIME
  game.crew.player_fell(game.player.global_position)
@@ -1165,7 +1168,7 @@ func respawn_player() -> void:
  game.bmp.vacate()
  var next:=Operator.new();game.add_child(next);game.player=next;next.position=point;next.rotation.y=yaw;next.setup(game,game.primary,game.secondary);next.sensitivity=game.sensitivity
  old.queue_free();game.damage_flash=0;game.hearing.reset();game.squad.trail=PackedVector3Array([point])
- if own!=null and is_instance_valid(own.vehicle) and not own.vehicle.destroyed and not game.player_class in ["mortarman","grad","bmp"]:
+ if own!=null and is_instance_valid(own.vehicle) and not own.vehicle.destroyed and not game.player_class in ["mortarman","grad","tos","bmp"]:
   game.bmp.squad=own;game.bmp.vehicle=own.vehicle
   mark_squad()
   if ride==own.vehicle:
@@ -1182,7 +1185,7 @@ func _physics_process(delta: float) -> void:
  # A heavily concussed commander hands over to a soldier on the field.
  # With nobody left he stays where he lies: the assault never ends while the
  # commander is alive, only by his death or by the capture of all sectors.
- if game.player.concussion.incapacitated() and respawn_left<=0 and successor()!=null and game.player_class!="grad":player_fell()
+ if game.player.concussion.incapacitated() and respawn_left<=0 and successor()!=null and not game.player_class in ["grad","tos"]:player_fell()
  if respawn_left>0:
   respawn_left=maxf(0,respawn_left-delta)
   if respawn_left==0:respawn_player()
@@ -1203,7 +1206,7 @@ func status() -> String:
  var bearing:=wrapf(rad_to_deg(atan2(-offset.x,-offset.z)),0,360)
  if prep!="":return prep_status()
  if respawn_left>0:return "КОМАНДИР ВИБУВ · КОМАНДУВАННЯ ПРИЙМЕ НАЙБЛИЖЧИЙ БОЄЦЬ ЧЕРЕЗ %d с\nУ строю: %d · бій триває" % [ceili(respawn_left),living(true)]
- if awaiting:return "ШТУРМ ОЧІКУЄ КОМАНДИ ГРАВЦЯ · G — %s\nГрупи на вихідних рубежах · СИЛИ %d : %d" % ["РАДІО" if game.player_class=="grad" else "РОЗРАХУНОК",living(true),living(false)]
+ if awaiting:return "ШТУРМ ОЧІКУЄ КОМАНДИ ГРАВЦЯ · G — %s\nГрупи на вихідних рубежах · СИЛИ %d : %d" % ["РАДІО" if game.player_class in ["grad","tos"] else "РОЗРАХУНОК",living(true),living(false)]
  if halted:return "ШТУРМ ПРИЗУПИНЕНО · ГРУПИ ЗАКРІПЛЮЮТЬСЯ · G — ПРОДОВЖИТИ\n%s · СИЛИ %d : %d" % [objective_title(),living(true),living(false)]
  if sector<0:return "ЗАЧИСТКА СЕЛА · НАЙБЛИЖЧИЙ ПОСТ %d м / %03d°\nУСІ ОП ЗНИЩЕНО · ЗАЛИШИЛОСЬ ПРОТИВНИКІВ %d · СИЛИ %d : %d" % [offset.length(),bearing,living(false),living(true),living(false)]
  return "ШТУРМ · %s · %d м / %03d°\nОП ЗНИЩЕНО %d / 3 · СИЛИ %d : %d%s" % [objective_title(),offset.length(),bearing,cleared_count(),living(true),living(false)," · F6 — ДО ВИСАДКИ" if can_skip() else ""]

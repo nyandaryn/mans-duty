@@ -353,7 +353,6 @@ func coordinate() -> void:
   if game.allies.filter(func(a):return not a.dead).size()<2:continue
   var actor:Hostile=candidates[int(game.elapsed/4.5)%candidates.size()]
   actor.auto_cover=true
-  if actor.squad_role!="cover":game.cover_voice(actor)
 
 func commander_uses_cover() -> bool:
  var eye: Vector3=game.player.global_position+Vector3.UP*1.1
