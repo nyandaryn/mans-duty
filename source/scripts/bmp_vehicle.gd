@@ -655,6 +655,15 @@ func vehicle_hit(point: Vector3, direction: Vector3, round: String, pen_mm: floa
 # A burst near the vehicle: its fragments on the armour.
 func blast_hit(where: Vector3, kind: String) -> void:hull.blast(where,kind)
 
+# How much of a blast outside gets in to the men (VehicleDamage): the rear
+# doors open, the driver's head out of his hatch, the roof hatch up.
+func openings() -> float:
+ var open:=1.0
+ if doors>0.3:open+=0.5
+ if hatch_open and hatch>0.5:open+=0.15
+ if troop_hatch_open:open+=0.2
+ return open
+
 func turret_yaw() -> float:return art.turret.rotation.y
 
 func out_of_action() -> bool:return hull.out_of_action()

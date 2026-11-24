@@ -343,6 +343,14 @@ func tick_board(delta: float) -> void:
   vehicle.open_doors(false)
   set_state("wait")
 
+# The enemy's TOS has fired at the column (BattleMode.incoming_salvo): the
+# men standing by the vehicle climb in, a boarded vehicle shuts its doors.
+func incoming() -> void:
+ if player_led:return
+ match state:
+  "field":mount_up()
+  "wait":vehicle.open_doors(false)
+
 # The commander's order on the radio, heard by the player's own squad.
 func voice(id: String) -> void:
  if game.bmp.squad==self and not battle.skipping:game.radio_voice.say(id)

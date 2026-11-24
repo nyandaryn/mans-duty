@@ -52,7 +52,7 @@ func enemies() -> Array:
  var list:=[]
  list.append_array(game.bots if vehicle.friendly else game.allies+[game.player])
  for other in game.get_tree().get_nodes_in_group("vehicles"):
-  if other!=vehicle and other.friendly!=vehicle.friendly:list.append(other)
+  if other!=vehicle and other.friendly!=vehicle.friendly and not TosVehicle.out_of_sight(other,vehicle.global_position):list.append(other)
  return list
 
 # His own side: never under his fire.

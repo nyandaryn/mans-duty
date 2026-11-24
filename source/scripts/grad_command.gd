@@ -289,6 +289,14 @@ func mark_target() -> void:
  drone.notice="%s: %s · h %.0f м" % [name,data.coordinates_text(point),data.altitude(point.y)]
  game.sound("click",-10)
 
+# A target given from outside (radio intelligence's fix of the enemy's
+# TOS-1A): on the tablet's list under its own name.
+func enemy_target(title: String, point: Vector3) -> void:
+ if game.player_class!="grad" or data==null:return
+ var name:="%s (Ц-%d)" % [title,targets.size()+1]
+ targets.append({"name":name,"point":point,"enemy":title})
+ game.squad.tell("Нова ціль на планшеті: %s · %s" % [name,data.coordinates_text(point)])
+
 # --- Firing data the tablet shows (GPS position of the launcher) ----------
 func firing_data(point: Vector3) -> Dictionary:
  var origin:Vector3=vehicle.global_position

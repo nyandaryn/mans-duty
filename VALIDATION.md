@@ -1,3 +1,100 @@
+# 0.33.0 validation — 2026-11-24
+
+The enemy's TOS-1A «Solntsepyok» in the great assault: the vehicle, the
+MO.1.01.04M rocket, the thermobaric burst and its effects, the damage to men,
+vehicles and houses, the observer and the salvo cycle, the warning and the
+reply.
+
+- New test_tos (48 checks):
+  - The firing table covers 600–6000 m (max 5996 m), 19.6 s to 4.5 km, and
+    the computer allows for the target's height.
+  - Over 200 rockets, the 4σ ellipse is 312 × 145 m at 4.5 km and
+    328 × 200 m at 5.9 km.
+  - Monte Carlo over 200 bursts per distance:
+    - A BMP-2 2 m off is out of action every time and burns in 66 %. At
+      6 m, 47 % lose the track or burn and 81 % the sight. At 12 m the
+      vehicle keeps going and loses the sight in 34 %. At 20 m nothing
+      happens.
+    - A BM-21 10 m off: cab crushed, package alight in 33 %.
+    - The TOS's own T-72 hull 1.5 m off: out of action in 47 %, package in
+      13 %. At 6 m nothing happens.
+  - In a seeded great assault (mortarman, 18, seed 11):
+    - Where it stands: hidden 3.39 km north, a firing position 300 m
+      ahead. The column's start (5.1 km) is in reach; a strongpoint is
+      not, and neither is ground 380 m from one.
+    - The salvo: the observer reports the standing column (28 m from a
+      vehicle). The TOS lays no sooner than its readiness time and fires
+      12 in pairs in 2.6 s. The radio calls the launch. Squads board
+      within 20 s and the boarded ones shut their doors. The first burst
+      lands 22 s after the warning, the salvo 14 m off its aim.
+    - After the salvo: the TOS drives back into cover, and our radio
+      intelligence fixes it 76 m off.
+    - When it is hit, rockets cook off one by one (12 → 8) and then the
+      package goes up. A destroyed TOS fires no second salvo.
+  - Men: standing or lying 15 m off — killed; 27 m — wounded (55); 35 m —
+    hurt (86); indoors behind a wall the burst is outside — killed.
+- Balance (new tests/balance_tos.gd, not in the suite). The worst case for
+  us: the column boarded and waiting for the mortarman's order, found and
+  hit by one salvo of 12. Three seeds per size:
+  - Size 27, 3 BMPs: 1, 0 and 1 lost (one burning with its 9 men after a
+    burst 3.3 m off; one blown up, 2 dead). The closest bursts were
+    3.3 / 5.5 / 6.8 m.
+  - Size 54, 6 BMPs: none lost (closest bursts 27.6 / 7.4 / 6.3 m; sights
+    knocked out on 0 / 1 / 2).
+  - That is ≈0.7 BMP per salvo at 27 and 0 at 54. A column that moves off
+    within 3–5 min of being seen is not hit.
+- Seeded battles stay as they were until the TOS fires. A CPUParticles3D
+  draws on the global random numbers when it is made (Godot 4.5), so the
+  launch cloud is made at the first launch. test_assault_halt (seed 55)
+  failed (2.38 posture changes) until then; it now prints the same numbers
+  as 0.32.7 (WAIT 14/13/1.071, HALT 0.571). Our riflemen, grenadiers and BMP
+  gunners ignore the TOS beyond 800 m. Without that, the RPG ammunition order
+  and the drone's search turned toward a vehicle 3 km away.
+- Renders (tests/render_tos.gd, 1280×720, in a window), looked at frame by
+  frame:
+  - The vehicle on the march and on its jacks.
+  - The launch: flash at the breech, dust behind, the cloud round the
+    vehicle by 3–5 s, smoke trails.
+  - A burst at 120 m and at 60 m:
+    - flattened yellow-orange fireball, red by 1 s;
+    - rim-lit bubble;
+    - dust ring;
+    - grass fires;
+    - white heaps of cloud until 30 s and more.
+  - Twelve bursts from 650 m: a wall of cloud.
+  - The package going up.
+  - Fixed from the renders:
+    - The particle materials lacked billboard_keep_scale, so every fireball
+      and cloud drew at 1 m.
+    - Additive fire went white over the overcast; the fireball is now an
+      alpha-blended flame with a little glow.
+    - The bubble was a hard dome and is now rim-lit.
+  - Beyond ~1 km the overcast's fog (0.0016) takes most of a salvo.
+- Performance (tests/bench_battle.gd, 54, windowed 1280×720). The new
+  BENCH_TOS=1 bursts 12 rockets 5–11 s in, ≈130 m off the view, among
+  houses; a window line covers 5–20 s.
+  - Average fps 0.32.7 / 0.33.0 without a salvo / 0.33.0 with one:
+    | Seed | 0.32.7 | No salvo | Salvo |
+    |---|---|---|---|
+    | 11 | 11.4 | 11.7 | 12.9 |
+    | 22 | 11.8 | 11.7 | 12.5 |
+    | 33 | 11.3 | 10.2 | 11.4 |
+    Within the run-to-run spread; the salvo kills men, so the battle after
+    it is cheaper.
+  - The window: 10.8 / 13.0 / 11.1 fps with the salvo against 10.7 /
+    11.7 / 10.0 without.
+  - The first burst of a battle stalled 105–120 ms on compiling the
+    effects' shaders. TosEffects.warm_up now draws each material once,
+    a second into the battle, through the rendering camera (≈50 ms then).
+    The first burst on open ground now peaks at 14 ms.
+  - Worst frames of 340–350 ms remain in two of the three salvo runs. There
+    the rockets fall among the houses and the collapses follow a few frames
+    later. The game's TOS keeps 450 m from its own men, so it does not shell
+    the village.
+- Full suite from source at --fixed-fps 60: 78 scenarios (77 and
+  test_tos) pass with no script errors. The exported test pck smoke-runs
+  clean with `--quit-after 300`.
+
 # 0.32.7 validation — 2026-11-22
 
 The FPV goggles can be pushed up in flight and pulled down again.

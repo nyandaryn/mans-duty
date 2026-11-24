@@ -893,6 +893,10 @@ func choose_aim(on: Node3D) -> Vector3:
   # Engine deck (front right), rear doors, side over the track, turret ring
   # from behind, roof over the troop compartment.
   spots=[Vector3(0.5,1.3,-1.9),Vector3(0.45,1.2,3.25),Vector3(1.48,1.3,0.8),Vector3(-1.48,1.3,0.8),Vector3(0,1.75,0.55),Vector3(0,1.58,1.8)]
+ elif on is TosVehicle:
+  # TOS-1A: the package's sides and breech end, the engine deck at the
+  # rear, the platform roof by the sights.
+  spots=[Vector3(1.15,2.4,-0.6),Vector3(-1.15,2.4,-0.6),Vector3(0,2.3,1.3),Vector3(0,1.55,2.0),Vector3(-0.6,2.1,-0.7)]
  else:spots=[Vector3(0,1.2,0)]
  return spots[rng.randi()%spots.size()]
 

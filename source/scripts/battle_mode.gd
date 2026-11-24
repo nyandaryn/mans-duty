@@ -79,6 +79,8 @@ var held_said := false
 var drive_warned := false
 var battery: GradBattery
 var armour: EnemyArmour
+# The enemy's TOS-1A behind the village (EnemyTos).
+var tos: EnemyTos
 # The skipped start (F6 twice): the battery's fire, the boarding and the
 # column's ride fast-forwarded behind a black screen.
 const SKIP_WINDOW := 4.0
@@ -122,6 +124,8 @@ func reset() -> void:
  mech.clear()
  if is_instance_valid(armour):armour.clear();armour.queue_free()
  armour=null
+ if is_instance_valid(tos):tos.clear();tos.queue_free()
+ tos=null
  vehicle_grid=null
 
 func start() -> void:
@@ -141,6 +145,7 @@ func start() -> void:
  # beside it, counted in the defenders' strength.
  vehicle_grid=BmpRoutes.vehicle_grid(game.district)
  armour=EnemyArmour.new();armour.setup(game,self);armour.deploy()
+ if game.selected_map==BattleMap.ID:tos=EnemyTos.new();tos.setup(game,self);tos.deploy()
  var defenders:=defence_counts(maxi(0,enemies(game.battle_size)-game.bots.size()))
  for index in range(3):
   for i in range(defenders[index]):deploy(false,index)
@@ -244,6 +249,20 @@ func begin_mount() -> void:
   "bmp":game.squad.tell("«По машинах!» · стій, поки твій десант сідає: двері відчинені")
   "mortarman":game.squad.tell("«По машинах!» · десант сідає в БМП")
   _:game.squad.tell("«По машинах!» · БМП-1 — твоя машина · F біля кормових дверей")
+
+# A salvo of the enemy's TOS on its way to `aim` (EnemyTos.warn): the squads
+# by their vehicles near it board them or shut the doors, the men on foot
+# drop flat or into the nearest cover until it has come down.
+const INCOMING_REACH := 600.0
+func incoming_salvo(aim: Vector3, eta: float) -> void:
+ for squad in mech:
+  if is_instance_valid(squad) and is_instance_valid(squad.vehicle) and squad.vehicle.global_position.distance_to(aim)<INCOMING_REACH:squad.incoming()
+ for actor in game.allies:
+  if not is_instance_valid(actor) or actor.dead or actor.vehicle!=null:continue
+  if actor.global_position.distance_to(aim)>INCOMING_REACH:continue
+  actor.under_fire_time=maxf(actor.under_fire_time,eta+8.0)
+  actor.cover_timer=minf(actor.cover_timer,0.15)
+  Idle.stop(actor)
 
 # The player's squad keeps its doors open for him.
 func waiting_for_player(squad: MechSquad) -> bool:

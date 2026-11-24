@@ -43,7 +43,16 @@ const TRACK_FRAG := 8.0
 # fragment pierces at contact (mm), rays of fragments. OG-7V: 0.9 g steel
 # fragments: holes in a truck's sheet, nothing through a BMP's 6–7 mm.
 # TBG-7V outside the armour: its case breaks up the same way.
-const BLASTS := {"grad":[14.0,26.0,10],"mine":[6.0,9.0,6],"cannon":[2.5,4.0,3],"heat":[3.0,4.0,3],"rpo":[4.0,5.0,4],"fpv_frag":[5.0,8.0,5],"og7":[4.0,5.0,4],"tbg":[4.0,5.0,4],"cookoff":[20.0,30.0,12]}
+# TOS-1A MO.1.01.04M: a thin case round 90 kg of mixture, few heavy
+# fragments; its pressure is what tells on a vehicle (thermobaric_outside).
+const BLASTS := {"grad":[14.0,26.0,10],"mine":[6.0,9.0,6],"cannon":[2.5,4.0,3],"heat":[3.0,4.0,3],"rpo":[4.0,5.0,4],"fpv_frag":[5.0,8.0,5],"og7":[4.0,5.0,4],"tbg":[4.0,5.0,4],"cookoff":[20.0,30.0,12],"tos":[10.0,8.0,6],"cookoff_tos":[24.0,30.0,14]}
+# Thermobaric pressure on a vehicle (game values, VEHICLE-REFERENCES, «ТОС-1А»):
+# how far from the hull the close, the near and the far band reach for each
+# kind of vehicle. A light hull (BMP-2: 6–18 mm, hatches, vision blocks and
+# fuel in the rear doors) is wrecked only by a burst within a few metres; a
+# truck's cab is crushed further out; a tank hull loses little but its
+# optics and tracks.
+const PRESSURE := {"light":[3.0,8.0,15.0],"truck":[5.0,12.0,25.0],"heavy":[2.0,3.0,8.0]}
 # The sight heads and periscopes on the roof by the gun: a fragmentation or
 # thermobaric grenade bursting within reach of them cracks the glass (odds at
 # contact, falling off to nothing at the reach) and the gun cannot be laid.
@@ -115,8 +124,8 @@ func strike(point: Vector3, direction: Vector3, round: String, pen_mm: float=-1.
     elif randf()<(0.6 if line else 0.25):ignite(randf_range(15,45))
    "rockets":
     if vehicle.has_method("has_rockets") and not vehicle.has_rockets():continue
-    # The 9M22U motors and warheads in the tubes: a jet or a contact
-    # charge sets them off nearly always, a bullet rarely.
+    # The motors and warheads in the tubes (9M22U, MO.1.01.04M): a jet or
+    # a contact charge sets them off nearly always, a bullet rarely.
     var chance: float={"pg7vl":0.85,"rpg22":0.8,"ap30":0.6,"frag":0.5,"bullet":0.04}.get(round,0.3)
     if randf()<chance*(1.0 if line else 0.4):
      note("займання ракет у пакеті")
@@ -154,6 +163,61 @@ func thermobaric_inside(at: Vector3) -> void:
   note("займання після вибуху")
   ignite(randf_range(10,30))
 
+# A thermobaric rocket bursting outside (TOS-1A): no jet and few fragments,
+# but the pressure and the fireball. Close to a light hull it crushes the
+# hatches and vision blocks in, the men inside take the blast through them
+# and the fuel catches; further out it breaks the optics and the tracks and
+# shakes the men; a tank hull keeps them, a truck's cab does not. Open
+# doors and hatches let more of it in. `scale` 1.8 for a package going up.
+func thermobaric_outside(where: Vector3, scale: float=1.0) -> void:
+ var bands: Array=PRESSURE.get(armor.pressure,PRESSURE.light)
+ var local:=vehicle.global_transform.affine_inverse()*where
+ var box:=armor.frag_box
+ var distance:=VehicleArmor.box_distance(local,box.get_center(),box.size*0.5)/scale
+ if distance>float(bands[2]):return
+ var open: float=vehicle.openings() if vehicle.has_method("openings") else 1.0
+ var close:=distance<float(bands[0])
+ var near:=distance<float(bands[1])
+ var heavy:=armor.pressure=="heavy"
+ var truck:=armor.pressure=="truck"
+ note("термобаричний розрив за %.0f м" % distance)
+ for entry in occupants():
+  var place: Vector3=entry[1]
+  var amount:=0.0
+  if truck:amount=randf_range(300.0,600.0) if near else randf_range(40.0,120.0)
+  elif heavy:amount=randf_range(20.0,60.0) if close else (randf_range(5.0,15.0) if near else 0.0)
+  else:amount=randf_range(90.0,320.0) if close else (randf_range(30.0,70.0) if near else randf_range(10.0,25.0))
+  if amount<=0.0:continue
+  hurt(entry[0],amount*open,clampf(amount/200.0,0.2,1.0),local.direction_to(place) if not place.is_equal_approx(local) else Vector3.UP)
+ if destroyed:return
+ if truck:
+  if near:
+   immobilize("кабіну зім'ято вибухом")
+   if vehicle.has_method("has_rockets") and vehicle.has_rockets() and randf()<0.35:
+    note("займання ракет у пакеті");vehicle.cook_off_rockets();ignite(randf_range(6,14))
+   elif randf()<0.4:ignite(randf_range(20,60))
+  elif randf()<0.4:immobilize("пошкоджено колеса й кабіну")
+  elif vehicle.has_method("has_rockets") and vehicle.has_rockets() and randf()<0.15:
+   note("займання ракет у пакеті");vehicle.cook_off_rockets();ignite(randf_range(6,14))
+  return
+ var sight_odds:=0.0
+ var track_odds:=0.0
+ var fire_odds:=0.0
+ if heavy:
+  sight_odds=0.7 if close else (0.3 if near else 0.0)
+  track_odds=0.4 if close else 0.0
+  fire_odds=0.1 if close and vehicle.has_method("has_rockets") and vehicle.has_rockets() else 0.0
+ else:
+  sight_odds=1.0 if close else (0.8 if near else 0.3)
+  track_odds=1.0 if close else (0.35 if near else 0.0)
+  fire_odds=0.7 if close else (0.2 if near else 0.0)
+ if randf()<sight_odds and not weapon_out:
+  note("ударна хвиля розбила приціл");weapon_out=true
+ if randf()<track_odds:immobilize("перебита гусениця")
+ if randf()<fire_odds:
+  if heavy:note("займання ракет у пакеті");vehicle.cook_off_rockets();ignite(randf_range(6,14))
+  else:note("займання пального від вогняної кулі");ignite(randf_range(20,60))
+
 # The men inside: on the line of the jet (or slug) dead, near it hit by
 # spall; behind a HEAT penetration everyone takes the pressure and the
 # fumes. Distances in the vehicle frame.
@@ -186,6 +250,7 @@ func occupants() -> Array:
 
 # A man who dies inside stays inside: out of the seat lists, no ragdoll.
 func forget(actor: Hostile) -> void:
+ if vehicle.has_method("forget_occupant"):vehicle.forget_occupant(actor)
  if vehicle is BmpVehicle:
   vehicle.aboard.erase(actor);vehicle.crew.erase(actor)
   vehicle.troops.forget(actor)
@@ -273,6 +338,8 @@ func show_flames(on: bool) -> void:
 # box, each a strike with what the fragment still pierces at that range.
 func blast(where: Vector3, kind: String) -> void:
  if destroyed or invulnerable:return
+ if kind in ["tos","cookoff_tos"]:thermobaric_outside(where,1.8 if kind=="cookoff_tos" else 1.0)
+ if destroyed:return
  var spec: Array=BLASTS.get(kind,[0.0,0.0,0])
  var reach: float=spec[0]
  if reach<=0.0:return

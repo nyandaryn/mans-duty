@@ -43,7 +43,23 @@ const WARHEADS := {
  # fills with lethal pressure, 300) see room_blast(). Game units.
  "tbg":{"reach":16.0,"damage":250.0,"frag":false,"lift":0.0,"effect":1.0,"sound":"rpo_blast","db":2.0,"hearing":1.5,"sphere":3.0,"surfaces":8,"demolish":"rpo","room":300.0},
  "cookoff":{"reach":34.0,"damage":460.0,"frag":true,"lift":1.0,"effect":-1.0,"sound":"mine_blast","db":8.0,"hearing":3.0,"sphere":6.0,"surfaces":16,"demolish":"cookoff"},
+ # MO.1.01.04M of the TOS-1A: about 90 kg of thermobaric mixture in a thin
+ # case. The salvo of 24 is credited with "not less than 40 000 m²", about
+ # 1670 m² a rocket: a standing man in the open dies within about 20 m,
+ # a prone one within about 17 m, wounds to about 30 m; pinned down to
+ # 72 m (shell_burst). The wave hugs the ground and runs into trenches and
+ # behind walls (`pressure`: prone and crouching help little, cover lets
+ # through at least `floor` within half the reach); inside a house or a
+ # metre from its wall it fills the whole floor (room, m³). Game units.
+ "tos":{"reach":45.0,"damage":324.0,"frag":false,"lift":0.0,"effect":-2.0,"sound":"mine_blast","db":9.0,"hearing":3.5,"sphere":7.0,"surfaces":16,"demolish":"tos","room":1200.0,"pressure":true,"floor":0.45},
+ # The package of a TOS going up: the rockets left in it together.
+ "cookoff_tos":{"reach":60.0,"damage":420.0,"frag":false,"lift":1.0,"effect":-2.0,"sound":"mine_blast","db":10.0,"hearing":4.0,"sphere":8.0,"surfaces":16,"demolish":"tos","room":1200.0,"pressure":true,"floor":0.45},
 }
+# Bursts of a TOS salvo heard each from its own place: no more than this
+# many in TOS_SOUND_WINDOW seconds, the rest as the distant rumble (the
+# spatial pool has 24 voices and the salvo would take them all).
+const TOS_SOUNDS := 4
+const TOS_SOUND_WINDOW := 3.0
 # Grenades fired from the shoulder. "rpo": the RPO-A capsule (its own
 # simple drag, as before). PG-7VL: thrown out of the tube at 112 m/s by the
 # launch charge, the sustainer lit by a delay about 11 m out burns 0.4 s and
@@ -74,8 +90,18 @@ var game: Node3D
 var rockets: Array[Dictionary]=[]
 var mines: Array[Dictionary]=[]
 var grads: Array[Dictionary]=[]
+# MO.1.01.04M of the TOS-1A in flight: their own list, so the Grad battery's
+# count of its rockets in the air is not changed.
+var toses: Array[Dictionary]=[]
+var tos_sound_times: Array[float]=[]
+# Mortar rounds fired: [clock, muzzle] (EnemyTos finds a mortar that keeps
+# firing from one place); the clock runs with the game.
+var mine_log: Array=[]
+var clock := 0.0
 var detonations := 0
 var last_detonation := Vector3.INF
+# Where the TOS rockets burst this battle (the tests and the balance runs).
+var tos_bursts: Array[Vector3]=[]
 
 func _ready() -> void:BlastEffect.prepare_textures()
 
@@ -83,10 +109,14 @@ func clear() -> void:
  for rocket in rockets:free_grenade(rocket)
  rockets.clear()
  mines.clear()
- for grad in grads:
-  if is_instance_valid(grad.node):grad.node.queue_free()
- grads.clear()
+ for list in [grads,toses]:
+  for shot in list:
+   if is_instance_valid(shot.node):shot.node.queue_free()
+  list.clear()
+ tos_sound_times.clear()
+ mine_log.clear();clock=0.0
  last_detonation=Vector3.INF
+ tos_bursts.clear()
  for child in get_children():child.queue_free()
 
 func launch(origin: Vector3, direction: Vector3, shooter: Node3D, kind: String="rpo") -> void:
@@ -287,6 +317,8 @@ func launch_mine(origin: Vector3, velocity: Vector3, shooter: Node3D) -> void:
  if shooter is Hostile:
   for area in shooter.hitboxes:excluded.append(area.get_rid())
  mines.append({"position":origin,"velocity":velocity,"age":0.0,"excluded":excluded,"whistle":false})
+ mine_log.append([clock,origin])
+ if mine_log.size()>40:mine_log.pop_front()
 
 func launch_grad(shot: Dictionary, launcher: Node3D) -> void:
  var excluded: Array[RID]=[launcher.get_rid()]
@@ -300,22 +332,37 @@ func launch_grad(shot: Dictionary, launcher: Node3D) -> void:
  shot.origin=shot.position
  grads.append(shot)
 
-# 9M22U rockets: the same equations as the firing tables, a ray per step.
-# A rocket of the skipped start (`quiet`, GradBattery.rush) flies unseen and
-# bursts unheard: with the game's sounds off for the burst, or they would all
-# come at once, and the distant ones seconds later, in the village.
-func fly_grads(delta: float) -> void:
+# MO.1.01.04M of the TOS-1A (TosBallistics): the same flight as a 9M22U.
+func launch_tos(shot: Dictionary, launcher: Node3D) -> void:
+ var excluded: Array[RID]=[launcher.get_rid()]
+ shot.excluded=excluded
+ shot.node=TosEffects.rocket_node(game)
+ if shot.get("quiet",false):shot.node.visible=false
+ shot.origin=shot.position
+ toses.append(shot)
+
+func fly_grads(delta: float) -> void:fly_rockets(grads,delta)
+
+# 9M22U and MO.1.01.04M rockets: the same equations as the firing tables, a
+# ray per step. A rocket of the skipped start (`quiet`, GradBattery.rush)
+# flies unseen and bursts unheard: with the game's sounds off for the burst,
+# or they would all come at once, and the distant ones seconds later, in the
+# village.
+func fly_rockets(list: Array[Dictionary], delta: float) -> void:
+ var tos:=list==toses
  var effects:=GradEffects.shared(game)
- for index in range(grads.size()-1,-1,-1):
-  var shot: Dictionary=grads[index]
+ var burn: float=TosBallistics.BURN if tos else GradBallistics.BURN
+ for index in range(list.size()-1,-1,-1):
+  var shot: Dictionary=list[index]
   var unseen: bool=shot.get("quiet",false)
   var from: Vector3=shot.position
   var left:=delta
   while left>0.0:
    var t: float=shot.age
-   var dt:=minf(left,1.0/120.0 if t<GradBallistics.BURN+0.2 else 1.0/60.0)
-   if t<GradBallistics.BURN and t+dt>GradBallistics.BURN:dt=GradBallistics.BURN-t+0.00001
-   GradBallistics.advance(shot,dt)
+   var dt:=minf(left,1.0/120.0 if t<burn+0.2 else 1.0/60.0)
+   if t<burn and t+dt>burn:dt=burn-t+0.00001
+   if tos:TosBallistics.advance(shot,dt)
+   else:GradBallistics.advance(shot,dt)
    left-=dt
   var to: Vector3=shot.position
   var hit:={}
@@ -327,18 +374,20 @@ func fly_grads(delta: float) -> void:
    shot.excluded.append(hit.rid);hit={}
   var crown:=tree_strike(from,to,shot)
   if hit.is_empty() and crown!=Vector3.INF:hit={"position":crown,"normal":Vector3.UP}
-  if not unseen:effects.trail(from,to,float(shot.age))
+  if not unseen:
+   if tos:TosEffects.trail(game,from,to,float(shot.age))
+   else:effects.trail(from,to,float(shot.age))
   var node: Node3D=shot.node
   if not hit.is_empty():
-   grads.remove_at(index)
+   list.remove_at(index)
    if is_instance_valid(node):node.queue_free()
    var loud: float=game.volume
    if unseen:game.volume=0.0
-   detonate(Vector3(hit.position)+Vector3(hit.normal)*0.1,"grad")
+   detonate(Vector3(hit.position)+Vector3(hit.normal)*0.1,String(shot.get("warhead","grad")))
    game.volume=loud
    continue
   if float(shot.age)>200.0 or to.y<-200.0:
-   grads.remove_at(index)
+   list.remove_at(index)
    if is_instance_valid(node):node.queue_free()
    continue
   if unseen:
@@ -348,7 +397,7 @@ func fly_grads(delta: float) -> void:
    var velocity: Vector3=shot.velocity
    node.global_position=to
    if velocity.length()>1.0:node.look_at(to+velocity,Vector3.UP if absf(velocity.normalized().y)<0.99 else Vector3.RIGHT)
-   node.get_node("Flame").visible=float(shot.age)<GradBallistics.BURN
+   node.get_node("Flame").visible=float(shot.age)<burn
 
 # A rocket skimming a tree line in the first few hundred metres bursts in the
 # crowns: the firing position needs a clear line ahead.
@@ -399,7 +448,9 @@ func fly_mines(step: float) -> void:
 
 func _physics_process(delta: float) -> void:
  if not game.running or game.paused:return
+ clock+=delta
  if not grads.is_empty():fly_grads(minf(delta,0.1))
+ if not toses.is_empty():fly_rockets(toses,minf(delta,0.1))
  var remaining := minf(delta,0.25)
  while remaining>0:
   var step := minf(remaining,1.0/120);remaining-=step
@@ -493,6 +544,31 @@ func posture_factor(actor: Node3D) -> float:
  if actor is Operator:return 0.45 if actor.prone else (0.75 if actor.crouched else 1.0)
  return lerpf(lerpf(1.0,0.5,clampf(float(actor.stance),0,1)),0.4,clampf(float(actor.tactical_prone),0,1))
 
+# Lying down helps little against the pressure of a thermobaric burst: the
+# wave runs along the ground and into trenches.
+func pressure_posture(actor: Node3D) -> float:
+ if actor is Operator:return 0.8 if actor.prone else (0.9 if actor.crouched else 1.0)
+ return lerpf(lerpf(1.0,0.9,clampf(float(actor.stance),0,1)),0.8,clampf(float(actor.tactical_prone),0,1))
+
+# A TOS rocket at a house: a man indoors (roof over him, walls round him)
+# with the burst inside or within a few metres of his house takes nearly the
+# full blast on that floor, through the windows, doors and partitions.
+func tos_room(where: Vector3, actor: Node3D, volume: float) -> float:
+ var reach:=sqrt(volume/2.7)*0.6
+ var chest: Vector3=actor.global_position+Vector3.UP*1.0
+ var distance:=Vector2(chest.x-where.x,chest.z-where.z).length()
+ if distance>reach or absf(chest.y-where.y)>3.5:return 0.0
+ if not enclosed(actor.global_position+Vector3.UP*0.2):return 0.0
+ return clampf(1.05-0.5*distance/reach,0.0,1.0)
+
+# Whether this burst of a TOS salvo gets a voice of its own.
+func tos_voice() -> bool:
+ var now:=Time.get_ticks_msec()/1000.0
+ while not tos_sound_times.is_empty() and now-tos_sound_times[0]>TOS_SOUND_WINDOW:tos_sound_times.pop_front()
+ if tos_sound_times.size()>=TOS_SOUNDS:return false
+ tos_sound_times.append(now)
+ return true
+
 # Walls and a ceiling round a point: a burst inside a house (a roof within
 # 6 m above, walls within 9 m on most sides), not one against its outside.
 func enclosed(where: Vector3) -> bool:
@@ -533,17 +609,24 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
  detonations+=1
  last_detonation=where
  var spec: Dictionary=WARHEADS.get(kind,WARHEADS.rpo)
- var grad := kind=="grad" or kind=="cookoff"
+ var tos := kind=="tos" or kind=="cookoff_tos"
+ var grad := kind=="grad" or kind=="cookoff" or tos
  var frag: bool=spec.frag
- if float(spec.effect)<0.0:GradEffects.impact(game,where)
+ var pressure: bool=spec.get("pressure",false)
+ if tos:
+  if kind=="cookoff_tos":TosEffects.shared(game).cookoff(where)
+  else:TosEffects.shared(game).impact(where);tos_bursts.append(where)
+ elif float(spec.effect)<0.0:GradEffects.impact(game,where)
  else:
   var effect := BlastEffect.new();add_child(effect);effect.setup(game,where,float(spec.effect))
  var sound: String=spec.sound if game.sounds.has(spec.sound) else "mine_blast"
- game.spatial_shot(sound,where,float(spec.db))
+ var heard_here:=true
+ if tos:heard_here=tos_voice()
+ if heard_here:game.spatial_shot(sound,where,float(spec.db))
  if is_instance_valid(game.player):
   var distance: float=game.player.camera.global_position.distance_to(where)
   game.hearing.exposure=minf(1.6,game.hearing.exposure+float(spec.hearing)/pow(maxf(1,distance/9),1.2))
-  if grad and distance>250:game.distant_blast(where,distance)
+  if grad and (distance>250 or not heard_here):game.distant_blast(where,maxf(distance,250.0))
  if kind=="grad" and game.has_method("grad_impact"):game.grad_impact(where)
  var reach: float=spec.reach
  var damage: float=spec.damage
@@ -551,7 +634,10 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
  var source := where+Vector3.UP*float(spec.lift)
  # A thermobaric head gone off inside a house: the pressure fills it.
  var room := float(spec.get("room",0.0))
- if room>0.0 and not enclosed(where):room=0.0
+ # A TOS rocket fills a house it bursts in or right against: those inside
+ # it are found by their own walls and roof (tos_room).
+ if room>0.0 and not pressure and not enclosed(where):room=0.0
+ var floor_exposure: float=spec.get("floor",0.0)
  # Resolve exposure before cosmetic fractures, so one frame cannot make a
  # protective wall disappear retroactively for actors behind it.
  for actor in [game.player]+game.bots+game.allies:
@@ -561,11 +647,17 @@ func detonate(where: Vector3, kind: String="rpo") -> void:
   if (actor is Hostile and actor.vehicle!=null) or (actor is Operator and game.player_sheltered()):continue
   var distance: float=actor.global_position.distance_to(where)
   if distance>=reach:continue
-  var intensity := pow(maxf(0,1-distance/reach),2)*actor_exposure(source,actor)
+  var exposure:=actor_exposure(source,actor)
+  if pressure and distance<reach*0.5:exposure=maxf(exposure,floor_exposure)
+  var intensity := pow(maxf(0,1-distance/reach),2)*exposure
   if frag:intensity*=posture_factor(actor)
-  # Body armour takes part of the fragments (VestKind).
-  if actor.has_method("blast_protection"):intensity*=actor.blast_protection(where)
-  if room>0.0:intensity=maxf(intensity,room_blast(where,actor,room))
+  elif pressure:intensity*=pressure_posture(actor)
+  # Body armour takes part of the fragments (VestKind); against the
+  # pressure of a thermobaric burst it does little.
+  if actor.has_method("blast_protection"):intensity*=lerpf(actor.blast_protection(where),1.0,0.7) if pressure else actor.blast_protection(where)
+  if room>0.0:
+   if pressure:intensity=maxf(intensity,tos_room(where,actor,room))
+   else:intensity=maxf(intensity,room_blast(where,actor,room))
   if intensity<0.015:continue
   actor.receive_blast(damage*intensity,clampf(intensity*1.35,0,1),where.direction_to(actor.global_position))
  # Vehicles: the fragments on their armour (VehicleDamage).

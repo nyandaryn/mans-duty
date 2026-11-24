@@ -133,7 +133,7 @@ static func vehicle_alive(vehicle: Node3D) -> bool:
 func enemy_vehicles() -> Array:
  var list:=[]
  for vehicle in game.get_tree().get_nodes_in_group("vehicles"):
-  if vehicle.friendly!=bot.friendly and vehicle_alive(vehicle):list.append(vehicle)
+  if vehicle.friendly!=bot.friendly and vehicle_alive(vehicle) and not TosVehicle.out_of_sight(vehicle,bot.global_position):list.append(vehicle)
  return list
 
 func eye() -> Vector3:return bot.n_head.to_global(CharacterArt.EYE)

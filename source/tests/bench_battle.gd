@@ -2,6 +2,9 @@ extends SceneTree
 # Performance benchmark of the large assault (not part of the test suite).
 # BENCH_SIZE=54 (bots per side), BENCH_SECONDS=40. Run without --headless to
 # include rendering: godot --path source --script res://tests/bench_battle.gd
+# BENCH_TOS=1: twelve TOS rockets burst 5–11 s into the measurement, ≈130 m
+# off to the right of the view; the "window" line is 5–20 s with or without
+# them, to compare.
 class Stamp extends Node:
  # First and last node of the physics tick: the cost of all game scripts.
  var first := true
@@ -41,9 +44,20 @@ func run():
  var draws:=0.0;var prims:=0.0;var max_alive:=0
  var last:=Time.get_ticks_usec();var end_time:float=game.elapsed+seconds;var count:=0
  var physics_frames:=Engine.get_physics_frames()
+ var salvo:=OS.get_environment("BENCH_TOS")=="1"
+ var begin: float=game.elapsed
+ var bursts:=0
+ var spread:=RandomNumberGenerator.new();spread.seed=1207
+ var window:Array[float]=[]
  while game.running and game.elapsed<end_time:
   await process_frame
   var now:=Time.get_ticks_usec();frames.append(float(now-last)/1000.0);last=now
+  var t: float=game.elapsed-begin
+  if t>=5.0 and t<20.0:window.append(frames[-1])
+  if salvo and bursts<12 and t>=5.0+bursts*0.5:
+   var p:=Vector3(90.0+spread.randf_range(-60.0,60.0),0.0,30.0+spread.randf_range(-30.0,30.0))
+   p.y=game.district.ground_height(p)+0.2
+   game.blasts.detonate(p,"tos");bursts+=1
   gpu+=RenderingServer.viewport_get_measured_render_time_gpu(viewport_rid)
   cpu_render+=RenderingServer.viewport_get_measured_render_time_cpu(viewport_rid)
   draws+=Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
@@ -60,6 +74,12 @@ func run():
  print("BENCH size=",size," frames=",count," physics_ticks=",Engine.get_physics_frames()-physics_frames," max_alive=",max_alive," casualties=",game.killed)
  print("BENCH fps_avg=%.1f frame_avg=%.2fms p50=%.2f p95=%.2f p99=%.2f worst=%.2f" % [1000.0/avg,avg,sorted[int(sorted.size()*.5)],sorted[int(sorted.size()*.95)],sorted[int(sorted.size()*.99)],sorted[-1]])
  print("BENCH scripts_per_tick=%.2fms render_cpu=%.2fms render_gpu=%.2fms draws=%.0f prims=%.0f" % [float(Stamp.total)/1000.0/maxf(1,Stamp.ticks),cpu_render/maxf(1,count),gpu/maxf(1,count),draws/maxf(1,count),prims/maxf(1,count)])
+ if not window.is_empty():
+  var w_sorted:=window.duplicate();w_sorted.sort()
+  var w_avg:=0.0
+  for f in window:w_avg+=f
+  w_avg/=window.size()
+  print("BENCH window tos=%s fps_avg=%.1f p95=%.2f p99=%.2f worst=%.2f" % [str(salvo),1000.0/w_avg,w_sorted[int(w_sorted.size()*.95)],w_sorted[int(w_sorted.size()*.99)],w_sorted[-1]])
  if is_instance_valid(game.battle.crowd):print("BENCH crowd near=",game.battle.crowd.near_count," far=",game.battle.crowd.far_count)
  game.queue_free();await process_frame;await process_frame
  quit(0)

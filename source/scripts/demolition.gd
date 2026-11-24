@@ -18,6 +18,9 @@ const HITS := {
  "heat":{"direct":22.0,"near":6.0,"reach":1.5,"fences":1.5},
  # The ammunition of a vehicle going up beside a house.
  "cookoff":{"direct":90.0,"near":60.0,"reach":6.0,"fences":9.0},
+ # A TOS-1A rocket: 90 kg of thermobaric mixture. On the roof or against a
+ # wall it brings a private house down; within 10 m it shakes it badly.
+ "tos":{"direct":200.0,"near":120.0,"reach":10.0,"fences":14.0},
 }
 # The heap a house leaves: walls and roof slumped into a low mound of broken
 # brick, about a metre for a single storey, spilt a little past where the
@@ -28,6 +31,13 @@ const SPILL := 1.2
 const SLOPE := 14.0
 # The foot of the mound goes a little into the ground: no step at its edge.
 const BURY := 0.1
+# A salvo brings several houses down in the same second: one collapse in
+# three frames (each rebuilds meshes and the navigation grid), the others a
+# moment later.
+const COLLAPSE_FRAMES := 3
+const COLLAPSE_GAP := 0.06
+static var collapse_frame := -100
+static var collapse_pending := 0
 
 # The ground is one trimesh: each of its triangles would be a separate
 # result of a shape query and crowd out the walls and fences. Left out.
@@ -74,8 +84,25 @@ static func blast(game: Node3D, where: Vector3, kind: String) -> void:
   elif distance<reach:damage=float(hit.near)*(1.0-distance/reach)
   if damage<=0.0:continue
   house.hp=float(house.hp)-damage
-  if house.hp<=0.0:collapse(game,house,where)
+  if house.hp<=0.0:
+   if kind=="tos":queue_collapse(game,house,where)
+   else:collapse(game,house,where)
  knock_fences(game,where,float(hit.fences))
+
+static func queue_collapse(game: Node3D, house: Dictionary, where: Vector3) -> void:
+ var frame:=Engine.get_process_frames()
+ if frame-collapse_frame>=COLLAPSE_FRAMES and collapse_pending==0:
+  collapse_frame=frame
+  collapse(game,house,where)
+  return
+ # Marked down now: the next bursts leave it alone.
+ house.down=true
+ collapse_pending+=1
+ var district: Node3D=game.district
+ game.get_tree().create_timer(COLLAPSE_GAP*collapse_pending,false).timeout.connect(func():
+  collapse_pending=maxi(collapse_pending-1,0)
+  collapse_frame=Engine.get_process_frames()
+  if is_instance_valid(district) and game.district==district:collapse(game,house,where))
 
 # Fence panels near the burst go over, the nearest for certain.
 static func knock_fences(game: Node3D, where: Vector3, radius: float) -> void:

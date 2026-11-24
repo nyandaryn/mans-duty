@@ -21,6 +21,8 @@ const BMP_FLAG := Vector3(0.75,2.27,0.70)
 const GRAD_STAFF := Vector3(0.98,2.02,-0.60)
 const GRAD_STAFF_TOP := 3.62
 const GRAD_FLAG := Vector3(0.98,3.34,-0.60)
+# On the TOS-1A's aerial (platform frame), its top 2.55 m over the ring.
+const TOS_FLAG := Vector3(1.0,2.28,1.20)
 const HEM := Color("c9c6b6")
 static var cloths := {}
 static var cloth_material: ShaderMaterial
@@ -72,6 +74,7 @@ void fragment() {
 static func apply(vehicle: Node3D, friendly: bool) -> void:
  if vehicle is BmpVehicle:bmp(vehicle.art,friendly)
  elif vehicle is GradVehicle:grad(vehicle.art)
+ elif vehicle is TosVehicle:tos(vehicle.art,friendly)
 
 # A flag on its hoist at `at` (the middle of the hoist edge): one mesh per
 # flag kind and one material for all of them.
@@ -176,3 +179,14 @@ static func grad(art: Dictionary) -> void:
   staff.box(GradArt.at(Vector3(GRAD_STAFF.x,y,-0.635)),Vector3(0.05,0.05,0.07),GradArt.OLIVE_DARK)
  GradArt.node(art.root,"FlagStaff",staff)
  art["flag"]=flag_node(art.root,GRAD_FLAG,UKRAINE)
+
+# TOS-1A: the flag on the whip aerial at the rear right of the platform; on
+# the enemy's vehicle white Z on both sides of the package, between the
+# first and second ribs, clear of the cable trough.
+static func tos(art: Dictionary, friendly: bool) -> void:
+ art["flag"]=flag_node(art.platform,TOS_FLAG,UKRAINE if friendly else RUSSIA)
+ if friendly:return
+ var paint:=ColorMesh.new()
+ var half:=TosArt.COLUMNS*TosArt.PITCH*0.5+0.08
+ for s in [-1.0,1.0]:letter_z(paint,frame(Vector3(s*half,0.58,-2.4),Vector3(0,0,-s),Vector3.UP),0.42,WHITE)
+ BmpArt.node(art.cradle,"Markings",paint)

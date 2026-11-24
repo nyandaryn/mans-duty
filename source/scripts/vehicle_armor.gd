@@ -47,6 +47,9 @@ var turret_radius := 0.0
 # Where the fragments of a burst nearby are aimed (VehicleDamage.blast):
 # the hull of a BMP-2 by default.
 var frag_box := AABB(Vector3(-1.4,0.4,-3.0),Vector3(2.8,1.3,6.0))
+# How the hull takes a thermobaric burst outside (VehicleDamage.PRESSURE):
+# "light" (BMP-2), "truck" (BM-21), "heavy" (the T-72 hull of the TOS-1A).
+var pressure := "light"
 
 # A zero normal: thin sheet all round (a truck's cab, its bonnet), its
 # slope does not matter.
@@ -105,6 +108,50 @@ static func bmp2() -> VehicleArmor:
   for z in BmpArt.TROOP_Z:a.part("лава десанту","troop",Vector3(s*0.62,0.95,z),Vector3(0.25,0.45,0.30))
  return a
 
+# BM-1 of the TOS-1A on the T-72A hull. Upper glacis: 60 mm of steel, 105 mm
+# of glass-textolite and 50 mm of steel laid back at 68°, about 420–450 mm
+# against a shaped charge along the line of a level shot — taken here as
+# 165 mm nominal; lower glacis 85 mm; hull sides 80 mm behind the rubber
+# skirts; rear 40 mm; roof 20 mm. The platform and the package are armoured
+# against the 7.62 mm B-32 bullet from 620 m and fragments (the maker's
+# leaflet), about 10–15 mm. The driver in the nose between the bow fuel
+# tanks, the gunner (left) and the commander (right) under the platform, the
+# V-84MS and the transmission at the rear, twenty-four MO.1.01.04M (each
+# about 90 kg of thermobaric mixture) in the package. The package's own
+# elevation is left out: its plates and the rockets are counted level.
+static func t72_tos() -> VehicleArmor:
+ var a:=VehicleArmor.new()
+ a.pressure="heavy"
+ a.turret_pivot=TosArt.RING
+ a.turret_radius=1.15
+ var half:=TosArt.HALF
+ a.plate("верхній лобовий лист",Vector3(0,1.25,-2.75),Vector3(1.55,0.30,0.70),Vector3(0,0.927,-0.375),165.0)
+ a.plate("нижній лобовий лист",Vector3(0,0.72,-3.28),Vector3(1.10,0.28,0.16),Vector3(0,-0.5,-0.866),85.0)
+ for s in [-1.0,1.0]:
+  a.plate("борт корпусу",Vector3(s*1.62,1.30,0.10),Vector3(0.18,0.22,3.25),Vector3(s,0,0),80.0)
+  a.plate("ходова частина",Vector3(s*1.45,0.55,0.0),Vector3(0.40,0.55,3.40),Vector3(s,0,0),80.0,false,"tracks")
+ a.plate("корма",Vector3(0,0.95,half-0.04),Vector3(1.55,0.40,0.10),Vector3(0,0.2,0.98),40.0)
+ a.plate("дах корпусу",Vector3(0,1.50,0.0),Vector3(1.55,0.06,3.0),Vector3.UP,20.0)
+ # The platform and the package (relative to the ring centre, -Z forward).
+ a.plate("лоб платформи",Vector3(0,0.30,-1.10),Vector3(1.15,0.22,0.06),Vector3(0,0.2,-0.98),15.0,true)
+ for s in [-1.0,1.0]:a.plate("борт платформи",Vector3(s*1.18,0.30,0.10),Vector3(0.06,0.22,1.20),Vector3(s,0.2,0),15.0,true)
+ a.plate("дах платформи",Vector3(0,0.50,0.10),Vector3(1.10,0.04,1.20),Vector3.UP,15.0,true)
+ var p:=TosArt.TRUNNION
+ a.plate("торець пакета",Vector3(0,p.y+0.42,p.z-3.65),Vector3(1.10,0.45,0.05),Vector3(0,0,-1),10.0,true)
+ for s in [-1.0,1.0]:a.plate("борт пакета",Vector3(s*1.10,p.y+0.42,p.z-1.8),Vector3(0.04,0.45,1.86),Vector3(s,0,0),10.0,true)
+ a.plate("дах пакета",Vector3(0,p.y+0.88,p.z-1.8),Vector3(1.10,0.04,1.86),Vector3.UP,10.0,true)
+ a.plate("казенна частина пакета",Vector3(0,p.y+0.42,p.z+0.10),Vector3(1.10,0.45,0.05),Vector3(0,0,1),10.0,true)
+ a.frag_box=AABB(Vector3(-1.75,0.5,-half),Vector3(3.5,2.6,half*2.0))
+ a.part("механік-водій","driver",Vector3(0,0.95,-2.25),Vector3(0.30,0.40,0.40))
+ for s in [-1.0,1.0]:a.part("баки-стелажі","fuel",Vector3(s*0.80,0.95,-2.30),Vector3(0.40,0.40,0.45))
+ a.part("двигун В-84МС","engine",Vector3(0,0.95,1.75),Vector3(0.95,0.45,0.80))
+ a.part("трансмісія","drive",Vector3(0,0.85,2.95),Vector3(1.10,0.35,0.40))
+ a.part("навідник-оператор","gunner",Vector3(-0.62,-0.30,-0.40),Vector3(0.30,0.50,0.35),true)
+ a.part("командир","commander",Vector3(0.62,-0.30,-0.40),Vector3(0.30,0.50,0.35),true)
+ a.part("прицілювач-далекомір 1Д14 і СКВ","weapon",Vector3(-0.62,0.55,-0.80),Vector3(0.20,0.15,0.20),true)
+ a.part("ракети МО.1.01.04М у пакеті","rockets",Vector3(0,p.y+0.42,p.z-1.8),Vector3(1.05,0.42,1.86),true)
+ return a
+
 # BM-21 on the Ural-375D: no armour at all. The cab is pressed sheet steel
 # about 1.5 mm thick, the bonnet and the wings as thin; the frame rails and
 # the launch package are not protection either. Engine (ZIL-375 petrol V8)
@@ -112,6 +159,7 @@ static func bmp2() -> VehicleArmor:
 # 9M22U in the tubes of the package over the rear axles.
 static func bm21() -> VehicleArmor:
  var a:=VehicleArmor.new()
+ a.pressure="truck"
  a.plate("капот",Vector3(0,1.57,-2.85),Vector3(0.62,0.48,0.75),Vector3.ZERO,1.2)
  a.plate("кабіна",Vector3(0,1.95,-1.40),Vector3(1.17,0.75,0.80),Vector3.ZERO,1.5)
  a.plate("рама й баки",Vector3(0,1.15,1.35),Vector3(1.17,0.30,1.95),Vector3.ZERO,5.0)
